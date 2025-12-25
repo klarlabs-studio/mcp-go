@@ -22,7 +22,7 @@ A Go framework for building [Model Context Protocol (MCP)](https://modelcontextp
 go get github.com/felixgeelhaar/mcp-go
 ```
 
-Requires Go 1.21 or later.
+Requires Go 1.23 or later.
 
 ## Quick Start
 
@@ -67,6 +67,7 @@ func main() {
 
 - [API Reference](https://pkg.go.dev/github.com/felixgeelhaar/mcp-go)
 - [Examples](./examples/)
+- [Migration Guide](./docs/MIGRATION.md) - Migrating from modelcontextprotocol/go-sdk
 - [MCP Specification](https://spec.modelcontextprotocol.io/)
 
 ## Examples
@@ -164,6 +165,157 @@ mcp.ServeHTTP(ctx, srv, ":8080",
     mcp.WithReadTimeout(30*time.Second),
     mcp.WithWriteTimeout(30*time.Second),
 )
+```
+
+## Type Reference
+
+### ResourceContent
+
+Return type for resource handlers:
+
+```go
+&mcp.ResourceContent{
+    URI:      uri,           // The resource URI
+    MimeType: "application/json",
+    Text:     string(data),  // Text content
+    // OR for binary:
+    // Blob: base64EncodedData,
+}
+```
+
+### Tool Return Types
+
+Tools can return any JSON-serializable type:
+
+```go
+// Simple string
+func(input Input) (string, error)
+
+// Struct (auto-serialized to JSON)
+func(input Input) (MyResult, error)
+
+// Slice
+func(input Input) ([]Item, error)
+
+// Map
+func(input Input) (map[string]any, error)
+```
+
+### PromptResult
+
+Return type for prompt handlers:
+
+```go
+&mcp.PromptResult{
+    Description: "Optional description",
+    Messages: []mcp.PromptMessage{
+        {Role: "user", Content: mcp.TextContent{Type: "text", Text: "..."}},
+        {Role: "assistant", Content: mcp.TextContent{Type: "text", Text: "..."}},
+    },
+}
+```
+
+### Session (v1.1)
+
+Access bidirectional communication features:
+
+```go
+session := mcp.SessionFromContext(ctx)
+
+// Logging
+session.Info("logger", "message")
+session.Error("logger", map[string]any{"error": err.Error()})
+
+// Sampling (request LLM completion from client)
+result, err := session.CreateMessage(ctx, &mcp.CreateMessageRequest{
+    Messages: []mcp.SamplingMessage{{Role: mcp.RoleUser, Content: mcp.NewTextContent("...")}},
+    MaxTokens: 100,
+})
+
+// Roots (workspace awareness)
+roots, err := session.ListRoots(ctx)
+```
+
+## JSON Schema Tags
+
+Use struct tags to define JSON Schema for tool inputs:
+
+```go
+type SearchInput struct {
+    Query    string   `json:"query" jsonschema:"required,description=Search query"`
+    Limit    int      `json:"limit" jsonschema:"description=Max results,default=10"`
+    Tags     []string `json:"tags" jsonschema:"description=Filter by tags"`
+    MinScore float64  `json:"minScore" jsonschema:"minimum=0,maximum=1"`
+}
+```
+
+Supported tags:
+- `required` - Field is required
+- `description=...` - Field description
+- `default=...` - Default value
+- `minimum=N` / `maximum=N` - Numeric bounds
+- `minLength=N` / `maxLength=N` - String length bounds
+- `enum=a|b|c` - Allowed values
+
+## Common Patterns
+
+### Returning JSON from Resources
+
+```go
+srv.Resource("data://users").Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+    users := getUsers()
+    data, err := json.MarshalIndent(users, "", "  ")
+    if err != nil {
+        return nil, err
+    }
+    return &mcp.ResourceContent{
+        URI:      uri,
+        MimeType: "application/json",
+        Text:     string(data),
+    }, nil
+})
+```
+
+### Error Handling in Tools
+
+```go
+srv.Tool("fetch").Handler(func(ctx context.Context, input FetchInput) (Result, error) {
+    if input.URL == "" {
+        return Result{}, fmt.Errorf("URL is required")  // Becomes MCP error
+    }
+    // Errors are automatically formatted for MCP clients
+    return doFetch(input.URL)
+})
+```
+
+### Using Context for Cancellation
+
+```go
+srv.Tool("long-operation").Handler(func(ctx context.Context, input Input) (string, error) {
+    for i := 0; i < 100; i++ {
+        select {
+        case <-ctx.Done():
+            return "", ctx.Err()  // Request was cancelled
+        default:
+            doWork()
+        }
+    }
+    return "done", nil
+})
+```
+
+### Progress Reporting
+
+```go
+srv.Tool("process").Handler(func(ctx context.Context, input Input) (string, error) {
+    progress := mcp.ProgressFromContext(ctx)
+    total := 100.0
+    for i := 0; i < 100; i++ {
+        progress.Report(float64(i), &total)
+        doWork()
+    }
+    return "complete", nil
+})
 ```
 
 ## Benchmarks
