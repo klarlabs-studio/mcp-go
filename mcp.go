@@ -80,6 +80,87 @@ var (
 	Float = server.Float
 )
 
+// Sampling types for server-initiated LLM completions
+type SamplingMessage = server.SamplingMessage
+type Role = server.Role
+type Content = server.Content
+type CreateMessageRequest = server.CreateMessageRequest
+type CreateMessageResult = server.CreateMessageResult
+type ModelPreferences = server.ModelPreferences
+type ModelHint = server.ModelHint
+
+// Role constants
+const (
+	RoleUser      = server.RoleUser
+	RoleAssistant = server.RoleAssistant
+)
+
+// Content constructors
+var (
+	NewTextContent  = server.NewTextContent
+	NewImageContent = server.NewImageContent
+)
+
+// Roots types for workspace awareness
+type Root = server.Root
+type ListRootsResult = server.ListRootsResult
+
+// Logging types for MCP log messages
+type LogLevel = server.LogLevel
+type LoggingMessage = server.LoggingMessage
+type SetLevelRequest = server.SetLevelRequest
+
+// LogLevel constants
+const (
+	LogLevelDebug     = server.LogLevelDebug
+	LogLevelInfo      = server.LogLevelInfo
+	LogLevelNotice    = server.LogLevelNotice
+	LogLevelWarning   = server.LogLevelWarning
+	LogLevelError     = server.LogLevelError
+	LogLevelCritical  = server.LogLevelCritical
+	LogLevelAlert     = server.LogLevelAlert
+	LogLevelEmergency = server.LogLevelEmergency
+)
+
+// ShouldLog returns true if a message at the given level should be logged
+var ShouldLog = server.ShouldLog
+
+// Cancellation types
+type CancelledNotification = server.CancelledNotification
+type CancellationManager = server.CancellationManager
+
+var NewCancellationManager = server.NewCancellationManager
+
+// Context utilities for cancellation
+var (
+	ContextWithCancellationManager   = server.ContextWithCancellationManager
+	CancellationManagerFromContext   = server.CancellationManagerFromContext
+)
+
+// Subscription types for resource change notifications
+type SubscribeRequest = server.SubscribeRequest
+type UnsubscribeRequest = server.UnsubscribeRequest
+type ResourceUpdatedNotification = server.ResourceUpdatedNotification
+type SubscriptionManager = server.SubscriptionManager
+
+var NewSubscriptionManager = server.NewSubscriptionManager
+
+// Session types for bidirectional MCP communication
+type Session = server.Session
+type SessionOption = server.SessionOption
+type RequestSender = server.RequestSender
+type NotificationSender = server.NotificationSender
+type ClientCapabilities = server.ClientCapabilities
+type RootsCapability = server.RootsCapability
+
+var (
+	NewSession                 = server.NewSession
+	WithClientCapabilities     = server.WithClientCapabilities
+	WithRootsChangeCallback    = server.WithRootsChangeCallback
+	ContextWithSession         = server.ContextWithSession
+	SessionFromContext         = server.SessionFromContext
+)
+
 // ProgressFromContext returns the progress reporter from context.
 // Use this in tool handlers to report progress for long-running operations.
 //

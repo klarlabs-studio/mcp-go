@@ -18,5 +18,25 @@ const (
 
 // MCP notification methods.
 const (
-	MethodProgress = "notifications/progress"
+	MethodProgress            = "notifications/progress"
+	MethodCancelled           = "notifications/cancelled"
+	MethodLoggingMessage      = "notifications/message"
+	MethodResourceUpdated     = "notifications/resources/updated"
+	MethodResourceListChanged = "notifications/resources/list_changed"
+	MethodToolListChanged     = "notifications/tools/list_changed"
+	MethodPromptListChanged   = "notifications/prompts/list_changed"
+	MethodRootsListChanged    = "notifications/roots/list_changed"
+)
+
+// Client feature methods (server requests these from client).
+const (
+	MethodSamplingCreateMessage = "sampling/createMessage"
+	MethodRootsList             = "roots/list"
+	MethodLoggingSetLevel       = "logging/setLevel"
+)
+
+// Resource subscription methods.
+const (
+	MethodResourcesSubscribe   = "resources/subscribe"
+	MethodResourcesUnsubscribe = "resources/unsubscribe"
 )
