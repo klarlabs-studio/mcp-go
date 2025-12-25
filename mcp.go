@@ -161,6 +161,27 @@ var (
 	SessionFromContext      = server.SessionFromContext
 )
 
+// ExtractParams extracts URI template parameters into a typed struct.
+// Use this in resource handlers for type-safe parameter extraction.
+//
+// Example:
+//
+//	type UserParams struct {
+//	    ID   string `uri:"id"`
+//	    Page int    `uri:"page"`
+//	}
+//
+//	srv.Resource("users://{id}/page/{page}").Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+//	    p, err := mcp.ExtractParams[UserParams](params)
+//	    if err != nil {
+//	        return nil, err
+//	    }
+//	    // Use p.ID (string) and p.Page (int)
+//	})
+func ExtractParams[T any](params map[string]string) (T, error) {
+	return server.ExtractParams[T](params)
+}
+
 // ProgressFromContext returns the progress reporter from context.
 // Use this in tool handlers to report progress for long-running operations.
 //
