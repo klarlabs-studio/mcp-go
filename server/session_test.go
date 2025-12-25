@@ -289,8 +289,8 @@ func TestSessionLoggingFiltering(t *testing.T) {
 	session := NewSession("session-1", sender, notifier)
 	session.SetLogLevel(LogLevelWarning) // Only warning and above
 
-	session.Debug("app", "debug message")  // Should be filtered
-	session.Info("app", "info message")    // Should be filtered
+	session.Debug("app", "debug message") // Should be filtered
+	session.Info("app", "info message")   // Should be filtered
 	session.Warning("app", "warning message")
 	session.Error("app", "error message")
 

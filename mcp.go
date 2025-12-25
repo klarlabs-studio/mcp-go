@@ -133,8 +133,8 @@ var NewCancellationManager = server.NewCancellationManager
 
 // Context utilities for cancellation
 var (
-	ContextWithCancellationManager   = server.ContextWithCancellationManager
-	CancellationManagerFromContext   = server.CancellationManagerFromContext
+	ContextWithCancellationManager = server.ContextWithCancellationManager
+	CancellationManagerFromContext = server.CancellationManagerFromContext
 )
 
 // Subscription types for resource change notifications
@@ -154,11 +154,11 @@ type ClientCapabilities = server.ClientCapabilities
 type RootsCapability = server.RootsCapability
 
 var (
-	NewSession                 = server.NewSession
-	WithClientCapabilities     = server.WithClientCapabilities
-	WithRootsChangeCallback    = server.WithRootsChangeCallback
-	ContextWithSession         = server.ContextWithSession
-	SessionFromContext         = server.SessionFromContext
+	NewSession              = server.NewSession
+	WithClientCapabilities  = server.WithClientCapabilities
+	WithRootsChangeCallback = server.WithRootsChangeCallback
+	ContextWithSession      = server.ContextWithSession
+	SessionFromContext      = server.SessionFromContext
 )
 
 // ProgressFromContext returns the progress reporter from context.

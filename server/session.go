@@ -35,7 +35,7 @@ type Session struct {
 
 // ClientCapabilities describes what features the client supports.
 type ClientCapabilities struct {
-	Sampling bool            `json:"sampling,omitempty"`
+	Sampling bool             `json:"sampling,omitempty"`
 	Roots    *RootsCapability `json:"roots,omitempty"`
 }
 

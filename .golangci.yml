@@ -32,6 +32,9 @@ linters:
 
     misspell:
       locale: US
+      ignore-rules:
+        - cancelled   # MCP protocol uses British spelling
+        - cancelling  # Related to cancelled
 
     gocritic:
       enabled-tags:

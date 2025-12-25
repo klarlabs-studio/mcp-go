@@ -92,6 +92,3 @@ func logLevelPriority(level LogLevel) int {
 func ShouldLog(messageLevel, minLevel LogLevel) bool {
 	return logLevelPriority(messageLevel) >= logLevelPriority(minLevel)
 }
-
-// logSenderKey is the context key for the log sender.
-type logSenderKey struct{}

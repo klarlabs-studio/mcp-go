@@ -77,6 +77,3 @@ type SamplingClient interface {
 	// CreateMessage sends a sampling request to get an LLM completion.
 	CreateMessage(req *CreateMessageRequest) (*CreateMessageResult, error)
 }
-
-// samplingClientKey is the context key for the sampling client.
-type samplingClientKey struct{}

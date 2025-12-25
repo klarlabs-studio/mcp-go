@@ -116,6 +116,3 @@ func (m *SubscriptionManager) SubscriptionCount() int {
 	}
 	return count
 }
-
-// subscriptionManagerKey is the context key for the subscription manager.
-type subscriptionManagerKey struct{}

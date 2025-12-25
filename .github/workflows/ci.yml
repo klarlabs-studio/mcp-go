@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.23']  # fortify dependency requires Go 1.23+
 
     steps:
       - uses: actions/checkout@v6
