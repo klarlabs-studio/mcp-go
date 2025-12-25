@@ -62,6 +62,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    continue-on-error: true  # Don't fail CI if badge generation fails
     steps:
       - uses: actions/checkout@v6
         with:
