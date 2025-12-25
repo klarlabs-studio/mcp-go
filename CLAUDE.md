@@ -54,7 +54,13 @@ mcp-go/
 │   ├── resource.go     # Resource and ResourceBuilder
 │   ├── prompt.go       # Prompt and PromptBuilder
 │   ├── annotations.go  # Tool/Resource/Prompt annotations
-│   └── progress.go     # Progress reporting for streaming
+│   ├── progress.go     # Progress reporting for streaming
+│   ├── session.go      # Bidirectional session management
+│   ├── sampling.go     # Sampling types (LLM completion requests)
+│   ├── roots.go        # Roots types (workspace awareness)
+│   ├── logging.go      # Logging types (server→client logs)
+│   ├── cancellation.go # Request cancellation management
+│   └── subscriptions.go # Resource subscription management
 │
 ├── schema/             # JSON Schema generation
 │   └── schema.go       # Struct to JSON Schema with validation
@@ -150,7 +156,7 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 
 | Package | Current | Target |
 |---------|---------|--------|
-| server | 86.4% | 80%+ |
+| server | 88.6% | 80%+ |
 | schema | 84.4% | 80%+ |
 | client | 81.6% | 80%+ |
 | transport | 75.3% | 75%+ |
@@ -160,15 +166,32 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 
 ## MCP Methods Implemented
 
+**Server Methods (Client → Server):**
 - `initialize` - Server initialization handshake
 - `tools/list` - List available tools
 - `tools/call` - Execute a tool
 - `resources/list` - List available resources
 - `resources/read` - Read resource content
+- `resources/subscribe` - Subscribe to resource updates
+- `resources/unsubscribe` - Unsubscribe from resource updates
 - `prompts/list` - List available prompts
 - `prompts/get` - Get prompt with arguments
+- `logging/setLevel` - Set minimum log level
 - `ping` - Health check
-- `notifications/progress` - Progress reporting for long-running tools
+
+**Client Methods (Server → Client):**
+- `sampling/createMessage` - Server requests LLM completion
+- `roots/list` - Server requests workspace roots
+
+**Notifications:**
+- `notifications/progress` - Progress for long-running tools
+- `notifications/cancelled` - Request cancellation
+- `notifications/message` - Log messages (server → client)
+- `notifications/resources/updated` - Resource change notification
+- `notifications/resources/list_changed` - Resource list changed
+- `notifications/tools/list_changed` - Tool list changed
+- `notifications/prompts/list_changed` - Prompt list changed
+- `notifications/roots/list_changed` - Roots changed (client → server)
 
 ## v1.0 Features (Complete)
 
@@ -205,12 +228,13 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 **Testing:**
 - [x] testutil package for testing MCP servers
 
-## Future Enhancements (Optional)
+## v1.1 Features (Complete)
 
-These are advanced MCP features for specific use cases:
-
-- [ ] Sampling - Server requests LLM completions from client
-- [ ] Roots - Workspace awareness (`roots/list`)
-- [ ] Logging notifications - Server-to-client log messages
-- [ ] Cancellation - Cancel in-progress requests
-- [ ] Resource subscriptions - Subscribe to resource changes
+**Bidirectional Communication:**
+- [x] Session management for server-to-client requests
+- [x] Sampling - Server requests LLM completions from client
+- [x] Roots - Workspace awareness (`roots/list`)
+- [x] Logging notifications - Server-to-client log messages
+- [x] Cancellation - Cancel in-progress requests
+- [x] Resource subscriptions - Subscribe to resource changes
+- [x] List change notifications for tools, resources, prompts
