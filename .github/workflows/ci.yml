@@ -90,7 +90,7 @@ jobs:
           go-version: '1.23'
 
       - name: Install coverctl
-        run: go install github.com/felixgeelhaar/coverctl@latest
+        run: go install github.com/felixgeelhaar/coverctl@v1.6.1
 
       - name: Generate badge
         run: |
