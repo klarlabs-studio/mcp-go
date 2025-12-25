@@ -1,0 +1,33 @@
+version: 1
+policy:
+  default:
+    min: 70
+  domains:
+    - name: server
+      match:
+        - ./server/...
+      min: 80
+    - name: schema
+      match:
+        - ./schema/...
+      min: 80
+    - name: transport
+      match:
+        - ./transport/...
+      min: 75
+    - name: middleware
+      match:
+        - ./middleware/...
+      min: 70
+    - name: protocol
+      match:
+        - ./protocol/...
+      min: 45
+    - name: client
+      match:
+        - ./client/...
+      min: 80
+    - name: testutil
+      match:
+        - ./testutil/...
+      min: 70
