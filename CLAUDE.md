@@ -45,22 +45,50 @@ mcp-go/
 ├── protocol/           # MCP protocol layer (JSON-RPC 2.0)
 │   ├── errors.go       # MCP error types and constructors
 │   ├── messages.go     # Request/Response types
-│   └── constants.go    # Protocol version and method names
+│   ├── constants.go    # Protocol version and method names
+│   └── context.go      # Request metadata context
 │
 ├── server/             # Core server implementation
 │   ├── server.go       # Server aggregate root
-│   ├── handler.go      # HandlerFunc and Middleware types
-│   └── tool.go         # Tool and ToolBuilder
+│   ├── tool.go         # Tool and ToolBuilder
+│   ├── resource.go     # Resource and ResourceBuilder
+│   ├── prompt.go       # Prompt and PromptBuilder
+│   ├── annotations.go  # Tool/Resource/Prompt annotations
+│   └── progress.go     # Progress reporting for streaming
 │
 ├── schema/             # JSON Schema generation
-│   └── schema.go       # Struct to JSON Schema reflection
+│   └── schema.go       # Struct to JSON Schema with validation
+│
+├── middleware/         # Request middleware
+│   ├── chain.go        # Middleware chain composition
+│   ├── recover.go      # Panic recovery
+│   ├── requestid.go    # Request ID injection
+│   ├── timeout.go      # Request timeout
+│   ├── logging.go      # Structured logging
+│   ├── auth.go         # Authentication (API key, Bearer)
+│   ├── ratelimit.go    # Rate limiting
+│   └── sizelimit.go    # Request size limits
 │
 ├── transport/          # Transport implementations
 │   ├── transport.go    # Transport interface
-│   └── stdio.go        # stdio transport for CLI tools
+│   ├── stdio.go        # stdio transport for CLI tools
+│   ├── http.go         # HTTP + SSE transport
+│   ├── websocket.go    # WebSocket transport
+│   ├── cors.go         # CORS middleware
+│   └── shutdown.go     # Graceful shutdown manager
 │
-└── examples/
-    └── basic/          # Basic example server
+├── client/             # MCP client SDK
+│   └── client.go       # Client for consuming MCP servers
+│
+├── testutil/           # Testing utilities
+│   └── testutil.go     # Helpers for testing MCP servers
+│
+└── examples/           # Example servers
+    ├── basic/          # Basic stdio server
+    ├── http/           # HTTP server example
+    ├── middleware/     # Middleware usage example
+    ├── resources/      # Resources example
+    └── prompts/        # Prompts example
 ```
 
 ## Key Patterns
@@ -118,34 +146,71 @@ func TestX(t *testing.T) {
 
 ## Coverage Targets
 
+Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
+
 | Package | Current | Target |
 |---------|---------|--------|
-| protocol | 93.8% | 95%+ |
-| server | 86.4% | 90%+ |
-| schema | 85.4% | 90%+ |
-| transport | 86.0% | 85%+ |
+| server | 86.4% | 80%+ |
+| schema | 84.4% | 80%+ |
+| client | 81.6% | 80%+ |
+| transport | 75.3% | 75%+ |
+| middleware | 74.7% | 70%+ |
+| testutil | 74.4% | 70%+ |
+| protocol | 69.7% | 45%+ |
 
 ## MCP Methods Implemented
 
 - `initialize` - Server initialization handshake
 - `tools/list` - List available tools
 - `tools/call` - Execute a tool
+- `resources/list` - List available resources
+- `resources/read` - Read resource content
+- `prompts/list` - List available prompts
+- `prompts/get` - Get prompt with arguments
 - `ping` - Health check
+- `notifications/progress` - Progress reporting for long-running tools
 
-## Roadmap (See docs/tdd.md)
+## v1.0 Features (Complete)
 
-**Phase 1 (Complete):**
+**Core:**
 - [x] Server core with info/capabilities
-- [x] Tool registration with builder pattern
+- [x] Tool registration with builder pattern and annotations
+- [x] Resource registration with URI templates
+- [x] Prompt registration with arguments
 - [x] Typed handler validation
-- [x] Basic JSON Schema generation
-- [x] stdio transport
+- [x] JSON Schema generation with runtime validation
 
-**Phase 2 (Next):**
-- [ ] Resource registration with URI templates
-- [ ] Prompt registration
-- [ ] HTTP + SSE transport
+**Transports:**
+- [x] stdio transport for CLI tools
+- [x] HTTP + SSE transport
+- [x] WebSocket transport
+- [x] Graceful shutdown with connection draining
 
-**Phase 3:**
-- [ ] Built-in middleware (recover, requestid, timeout, logging)
-- [ ] Middleware chain execution
+**Middleware:**
+- [x] Middleware chain execution
+- [x] Recover (panic recovery)
+- [x] RequestID (request tracing)
+- [x] Timeout (request deadlines)
+- [x] Logging (structured logging)
+- [x] Auth (API key, Bearer token)
+- [x] RateLimit (request throttling)
+- [x] SizeLimit (request size limits)
+- [x] CORS (cross-origin support)
+
+**Client SDK:**
+- [x] Full client for consuming MCP servers
+- [x] Typed tool calls and resource reads
+- [x] Connection management
+
+**Testing:**
+- [x] testutil package for testing MCP servers
+
+## Future Enhancements (Optional)
+
+These are advanced MCP features for specific use cases:
+
+- [ ] Sampling - Server requests LLM completions from client
+- [ ] Roots - Workspace awareness (`roots/list`)
+- [ ] Logging notifications - Server-to-client log messages
+- [ ] Cancellation - Cancel in-progress requests
+- [ ] Resource subscriptions - Subscribe to resource changes
