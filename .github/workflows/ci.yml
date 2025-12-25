@@ -95,8 +95,7 @@ jobs:
       - name: Generate badge
         run: |
           mkdir -p badges/.badges/main
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          coverctl badge --output badges/.badges/main/coverage.svg --percentage "$COVERAGE"
+          coverctl badge --profile coverage.out --output badges/.badges/main/coverage.svg
 
       - name: Push badge
         run: |
