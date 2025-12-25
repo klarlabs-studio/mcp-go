@@ -131,7 +131,9 @@ func TestHTTP_SSE(t *testing.T) {
 	httpHandler := transport.createHandler(handler)
 
 	t.Run("establishes SSE connection", func(t *testing.T) {
-		httpReq := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+		// Use a cancelable context so we can stop the SSE handler
+		ctx, cancel := context.WithCancel(context.Background())
+		httpReq := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
 
 		// Run in goroutine since SSE blocks
@@ -141,18 +143,21 @@ func TestHTTP_SSE(t *testing.T) {
 			close(done)
 		}()
 
-		// Give it time to set headers
-		time.Sleep(10 * time.Millisecond)
+		// Give it time to set headers and start the SSE loop
+		time.Sleep(20 * time.Millisecond)
 
 		// Cancel the request context to stop SSE
-		// In a real test we'd use a cancelable context
+		cancel()
+
+		// Wait for the goroutine to complete before checking headers
 		select {
 		case <-done:
-		case <-time.After(100 * time.Millisecond):
-			// Expected - SSE keeps connection open
+			// SSE handler returned - safe to check headers now
+		case <-time.After(time.Second):
+			t.Fatal("SSE handler did not exit after context cancellation")
 		}
 
-		// Check headers (may not be flushed in test)
+		// Check headers - now safe since goroutine has exited
 		contentType := rec.Header().Get("Content-Type")
 		if contentType != "" && !strings.Contains(contentType, "text/event-stream") {
 			t.Errorf("Content-Type = %q, want text/event-stream", contentType)
