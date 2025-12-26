@@ -238,3 +238,21 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 - [x] Cancellation - Cancel in-progress requests
 - [x] Resource subscriptions - Subscribe to resource changes
 - [x] List change notifications for tools, resources, prompts
+
+## v1.2 Features (Complete)
+
+**Completion Support:**
+- [x] `completion/complete` method for autocomplete
+- [x] Prompt completion handlers with fluent API
+- [x] Resource completion handlers with fluent API
+- [x] Max 100 values enforced per MCP spec
+
+**Resource Templates:**
+- [x] `resources/templates/list` method
+- [x] ResourceTemplateInfo type for template metadata
+
+**Observability:**
+- [x] OpenTelemetry middleware for tracing and metrics
+- [x] Request spans with method and service attributes
+- [x] Request count, duration, and error metrics
+- [x] Helper functions: SpanFromContext, AddSpanEvent, SetSpanAttribute
