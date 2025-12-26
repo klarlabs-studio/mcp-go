@@ -175,4 +175,24 @@ srv.Use(middleware.Auth(func(ctx context.Context, req *protocol.Request) (*Princ
     margin-bottom: var(--space-4);
     color: var(--color-text-primary);
   }
+
+  @media (max-width: 768px) {
+    .docs {
+      padding-top: var(--space-4);
+      padding-bottom: var(--space-8);
+    }
+
+    .docs h1 {
+      margin-bottom: var(--space-6);
+    }
+
+    .faq-item {
+      margin-bottom: var(--space-6);
+      padding-bottom: var(--space-6);
+    }
+
+    .faq-item h2 {
+      font-size: var(--text-lg);
+    }
+  }
 </style>

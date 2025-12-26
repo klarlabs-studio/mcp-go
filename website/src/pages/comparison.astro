@@ -325,6 +325,7 @@ handler = withLogging(logger, handler)`}</code></pre>
   .stack-name {
     font-family: var(--font-mono);
     font-weight: 500;
+    font-size: var(--text-sm);
   }
 
   .stack-desc {
@@ -351,6 +352,13 @@ handler = withLogging(logger, handler)`}</code></pre>
 
   .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 0 var(--space-4);
+  }
+
+  .table-wrapper table {
+    min-width: 500px;
   }
 
   .yes {
@@ -398,5 +406,39 @@ handler = withLogging(logger, handler)`}</code></pre>
   .choice-card-accent {
     border-color: var(--color-accent);
     background-color: rgba(79, 124, 255, 0.05);
+  }
+
+  @media (max-width: 768px) {
+    .docs {
+      padding-top: var(--space-4);
+      padding-bottom: var(--space-8);
+    }
+
+    .intro {
+      font-size: var(--text-base);
+    }
+
+    .docs section {
+      margin-bottom: var(--space-8);
+    }
+
+    .stack-layer {
+      padding: var(--space-3);
+    }
+
+    .choice-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .choice-card {
+      padding: var(--space-4);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .table-wrapper {
+      margin: 0 calc(-1 * var(--space-3));
+      padding: 0 var(--space-3);
+    }
   }
 </style>

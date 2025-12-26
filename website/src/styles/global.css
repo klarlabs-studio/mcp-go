@@ -19,6 +19,7 @@ body {
   color: var(--color-text-primary);
   background-color: var(--color-bg-root);
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 a {
@@ -74,6 +75,7 @@ code {
   background-color: var(--color-bg-code);
   padding: 0.15em 0.4em;
   border-radius: var(--radius-sm);
+  word-break: break-word;
 }
 
 pre {
@@ -86,12 +88,14 @@ pre {
   padding: var(--space-4);
   overflow-x: auto;
   margin-bottom: var(--space-6);
+  -webkit-overflow-scrolling: touch;
 }
 
 pre code {
   background: none;
   padding: 0;
   font-size: inherit;
+  word-break: normal;
 }
 
 table {
@@ -111,6 +115,7 @@ th {
   font-weight: 600;
   color: var(--color-text-primary);
   background-color: var(--color-bg-surface);
+  white-space: nowrap;
 }
 
 td {
@@ -130,6 +135,7 @@ tr:hover td {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-6);
   font-size: var(--text-base);
@@ -139,6 +145,7 @@ tr:hover td {
   transition: all 0.15s ease;
   text-decoration: none;
   border: none;
+  white-space: nowrap;
 }
 
 .btn-primary {
@@ -188,3 +195,71 @@ tr:hover td {
 .mb-4 { margin-bottom: var(--space-4); }
 .mb-6 { margin-bottom: var(--space-6); }
 .mb-8 { margin-bottom: var(--space-8); }
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  html {
+    font-size: 15px;
+  }
+
+  .container {
+    padding: 0 var(--space-4);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    margin-top: var(--space-8);
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    margin-top: var(--space-6);
+  }
+
+  .section {
+    padding: var(--space-8) 0;
+  }
+
+  pre {
+    font-size: 0.8rem;
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+  }
+
+  table {
+    font-size: 0.8rem;
+  }
+
+  th, td {
+    padding: var(--space-2) var(--space-3);
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 14px;
+  }
+
+  .container {
+    padding: 0 var(--space-3);
+  }
+
+  pre {
+    font-size: 0.75rem;
+    padding: var(--space-2);
+    margin-left: calc(-1 * var(--space-3));
+    margin-right: calc(-1 * var(--space-3));
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .btn {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+  }
+}

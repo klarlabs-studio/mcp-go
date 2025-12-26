@@ -149,7 +149,7 @@ func main() {
   }
 
   .hero-title {
-    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-size: clamp(1.75rem, 5vw, 3.5rem);
     margin-bottom: var(--space-6);
     background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-accent) 100%);
     -webkit-background-clip: text;
@@ -206,11 +206,40 @@ func main() {
 
   .ecosystem {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 768px) {
     .hero {
       padding: var(--space-8) 0;
+    }
+
+    .hero-subtitle {
+      font-size: var(--text-base);
+    }
+
+    .section-intro {
+      font-size: var(--text-base);
+    }
+
+    .features {
+      grid-template-columns: 1fr;
+      gap: var(--space-4);
+    }
+
+    .feature {
+      padding: var(--space-4);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hero-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .hero-actions .btn {
+      width: 100%;
     }
   }
 </style>

@@ -231,4 +231,23 @@ mcp.ServeHTTP(ctx, srv, ":8080",
   .docs h2 {
     margin-top: var(--space-8);
   }
+
+  @media (max-width: 768px) {
+    .docs {
+      padding-top: var(--space-4);
+      padding-bottom: var(--space-8);
+    }
+
+    .docs h1 {
+      margin-bottom: var(--space-6);
+    }
+
+    .docs section {
+      margin-bottom: var(--space-6);
+    }
+
+    .docs h2 {
+      margin-top: var(--space-6);
+    }
+  }
 </style>
