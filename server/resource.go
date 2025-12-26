@@ -41,6 +41,15 @@ type ResourceInfo struct {
 	Annotations *ResourceAnnotations
 }
 
+// ResourceTemplateInfo represents metadata about a resource template.
+type ResourceTemplateInfo struct {
+	URITemplate string
+	Name        string
+	Description string
+	MimeType    string
+	Annotations *ResourceAnnotations
+}
+
 // ResourceBuilder provides a fluent API for building resources.
 type ResourceBuilder struct {
 	resource *Resource

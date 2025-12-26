@@ -145,6 +145,15 @@ type SubscriptionManager = server.SubscriptionManager
 
 var NewSubscriptionManager = server.NewSubscriptionManager
 
+// Completion types for autocomplete support
+type CompletionRef = server.CompletionRef
+type CompletionArgument = server.CompletionArgument
+type CompletionResult = server.CompletionResult
+type CompletionHandler = server.CompletionHandler
+
+// Resource template types
+type ResourceTemplateInfo = server.ResourceTemplateInfo
+
 // Session types for bidirectional MCP communication
 type Session = server.Session
 type SessionOption = server.SessionOption
@@ -410,6 +419,20 @@ func DefaultMiddlewareWithTimeout(logger Logger, timeout time.Duration) []Middle
 func LogF(key string, value any) LogField {
 	return middleware.F(key, value)
 }
+
+// OpenTelemetry re-exports for convenience.
+type OTelOption = middleware.OTelOption
+
+var (
+	OTel                  = middleware.OTel
+	WithTracerProvider    = middleware.WithTracerProvider
+	WithMeterProvider     = middleware.WithMeterProvider
+	WithOTelServiceName   = middleware.WithOTelServiceName
+	WithOTelSkipMethods   = middleware.WithOTelSkipMethods
+	SpanFromContext       = middleware.SpanFromContext
+	AddSpanEvent          = middleware.AddSpanEvent
+	SetSpanAttribute      = middleware.SetSpanAttribute
+)
 
 // requestHandler adapts Server to transport.Handler
 type requestHandler struct {

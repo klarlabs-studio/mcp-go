@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"sync"
 
 	"github.com/felixgeelhaar/mcp-go/protocol"
@@ -16,9 +17,10 @@ type Info struct {
 
 // Capabilities declares what features the server supports.
 type Capabilities struct {
-	Tools     bool
-	Resources bool
-	Prompts   bool
+	Tools       bool
+	Resources   bool
+	Prompts     bool
+	Completions bool
 }
 
 // Manifest represents the server manifest returned to clients.
@@ -44,11 +46,12 @@ type Option func(*Server)
 type Server struct {
 	mu sync.RWMutex
 
-	info       Info
-	tools      map[string]*Tool
-	resources  map[string]*Resource
-	prompts    map[string]*Prompt
-	middleware []Middleware
+	info        Info
+	tools       map[string]*Tool
+	resources   map[string]*Resource
+	prompts     map[string]*Prompt
+	middleware  []Middleware
+	completions *completionRegistry
 }
 
 // New creates a new MCP server with the given info and options.
@@ -247,4 +250,68 @@ func (s *Server) getPrompt(name string) (*Prompt, bool) {
 // GetPrompt retrieves a prompt by name (public).
 func (s *Server) GetPrompt(name string) (*Prompt, bool) {
 	return s.getPrompt(name)
+}
+
+// PromptCompletion starts building a completion handler for a prompt.
+func (s *Server) PromptCompletion(name string) *PromptCompletionBuilder {
+	return &PromptCompletionBuilder{
+		name:   name,
+		server: s,
+	}
+}
+
+// ResourceCompletion starts building a completion handler for a resource.
+func (s *Server) ResourceCompletion(uriTemplate string) *ResourceCompletionBuilder {
+	return &ResourceCompletionBuilder{
+		uriTemplate: uriTemplate,
+		server:      s,
+	}
+}
+
+// HandleCompletion processes a completion request.
+func (s *Server) HandleCompletion(ctx context.Context, ref CompletionRef, arg CompletionArgument) (*CompletionResult, error) {
+	s.mu.RLock()
+	completions := s.completions
+	s.mu.RUnlock()
+
+	if completions == nil {
+		return &CompletionResult{
+			Values:  []string{},
+			Total:   0,
+			HasMore: false,
+		}, nil
+	}
+
+	return completions.Handle(ctx, ref, arg)
+}
+
+// ResourceTemplates returns info about all registered resource templates.
+func (s *Server) ResourceTemplates() []ResourceTemplateInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]ResourceTemplateInfo, 0, len(s.resources))
+	for _, r := range s.resources {
+		// Only include resources with URI templates (containing {})
+		if isTemplate(r.uriTemplate) {
+			result = append(result, ResourceTemplateInfo{
+				URITemplate: r.uriTemplate,
+				Name:        r.name,
+				Description: r.description,
+				MimeType:    r.mimeType,
+				Annotations: r.annotations,
+			})
+		}
+	}
+	return result
+}
+
+// isTemplate checks if a URI contains template parameters.
+func isTemplate(uri string) bool {
+	for i := 0; i < len(uri); i++ {
+		if uri[i] == '{' {
+			return true
+		}
+	}
+	return false
 }
