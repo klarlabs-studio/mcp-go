@@ -76,9 +76,8 @@ jobs:
           if [ ! -d "badges" ]; then
             mkdir badges
             cd badges
-            git init
+            git init -b badges
             git remote add origin https://github.com/${{ github.repository }}.git
-            git checkout -b badges
           fi
 
       - name: Download coverage
