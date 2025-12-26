@@ -9,7 +9,7 @@ type CompletionHandler func(ctx context.Context, ref CompletionRef, argument Com
 
 // CompletionRef represents a reference to a prompt or resource for completion.
 type CompletionRef struct {
-	Type string `json:"type"` // "ref/prompt" or "ref/resource"
+	Type string `json:"type"`           // "ref/prompt" or "ref/resource"
 	Name string `json:"name,omitempty"` // For prompt references
 	URI  string `json:"uri,omitempty"`  // For resource references
 }
@@ -22,8 +22,8 @@ type CompletionArgument struct {
 
 // CompletionResult contains completion suggestions.
 type CompletionResult struct {
-	Values  []string `json:"values"`           // Suggested completions (max 100)
-	Total   int      `json:"total,omitempty"`  // Total available matches
+	Values  []string `json:"values"`            // Suggested completions (max 100)
+	Total   int      `json:"total,omitempty"`   // Total available matches
 	HasMore bool     `json:"hasMore,omitempty"` // Whether more results exist
 }
 

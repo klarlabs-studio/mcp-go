@@ -143,7 +143,8 @@ func OTel(opts ...OTelOption) Middleware {
 			requestDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
 
 			// Record result
-			if err != nil {
+			switch {
+			case err != nil:
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 
@@ -156,13 +157,13 @@ func OTel(opts ...OTelOption) Middleware {
 				} else {
 					errorCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 				}
-			} else if resp != nil && resp.Error != nil {
+			case resp != nil && resp.Error != nil:
 				span.SetStatus(codes.Error, resp.Error.Message)
 				span.SetAttributes(attribute.Int("mcp.error_code", resp.Error.Code))
 				errorCounter.Add(ctx, 1, metric.WithAttributes(
 					append(attrs, attribute.Int("mcp.error_code", resp.Error.Code))...,
 				))
-			} else {
+			default:
 				span.SetStatus(codes.Ok, "")
 			}
 

@@ -6,25 +6,31 @@
 ![Coverage](https://raw.githubusercontent.com/felixgeelhaar/mcp-go/badges/.badges/main/coverage.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Go framework for building [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers. mcp-go aims to be the "Gin framework" for MCP servers, providing a simple, intuitive API with production-ready defaults.
+**A Go framework for building Model Context Protocol (MCP) servers — like Gin, but for MCP.**
 
-## Features
+mcp-go is an opinionated, production-ready framework for building MCP servers in Go with typed handlers, automatic schema generation, middleware, and multiple transports.
 
-- **Typed Handlers** - Define tool inputs as Go structs with automatic JSON Schema generation
-- **Fluent API** - Gin-style builder pattern for tools, resources, and prompts
-- **Middleware Chain** - Composable middleware for logging, recovery, timeouts, and more
-- **Multiple Transports** - Stdio for CLI tools, HTTP+SSE for web services
-- **Production Ready** - Built-in panic recovery, request IDs, and structured logging
+> If the MCP SDK gives you protocol correctness,
+> and mark3labs/mcp-go gives you SDK convenience,
+> **mcp-go gives you application structure and production defaults.**
 
-## Installation
+---
 
-```bash
-go get github.com/felixgeelhaar/mcp-go
-```
+## Why mcp-go?
 
-Requires Go 1.23 or later.
+Building an MCP server directly on top of SDKs means repeatedly solving the same problems:
 
-## Quick Start
+- input decoding & validation
+- schema generation
+- error handling
+- middleware (auth, timeouts, logging)
+- transport wiring (stdio vs HTTP)
+
+**mcp-go solves these once — idiomatically, safely, and with great DX.**
+
+---
+
+## Quickstart (5 minutes)
 
 ```go
 package main
@@ -36,39 +42,173 @@ import (
     "github.com/felixgeelhaar/mcp-go"
 )
 
-type SearchInput struct {
-    Query string `json:"query" jsonschema:"required,description=Search query"`
-    Limit int    `json:"limit" jsonschema:"description=Max results to return"`
-}
-
 func main() {
     srv := mcp.NewServer(mcp.ServerInfo{
-        Name:    "my-server",
-        Version: "1.0.0",
-        Capabilities: mcp.Capabilities{
-            Tools: true,
-        },
+        Name:    "example",
+        Version: "0.1.0",
     })
 
-    srv.Tool("search").
-        Description("Search for items").
-        Handler(func(ctx context.Context, input SearchInput) ([]string, error) {
-            // Your search logic here
-            return []string{"result1", "result2"}, nil
+    srv.Tool("hello").
+        Description("Say hello").
+        Handler(func(ctx context.Context, in struct{ Name string `json:"name"` }) (string, error) {
+            return "Hello " + in.Name, nil
         })
 
-    if err := mcp.ServeStdio(context.Background(), srv); err != nil {
-        log.Fatal(err)
-    }
+    log.Fatal(mcp.ServeStdio(context.Background(), srv))
 }
 ```
+
+**That's it:**
+
+- Typed input
+- Automatic JSON Schema
+- MCP-compliant responses
+- No manual routing or validation
+
+---
+
+## Core Features
+
+### Typed MCP tools
+
+Define tools using strongly-typed Go structs. Invalid input never reaches your business logic.
+
+```go
+type SearchInput struct {
+    Query string `json:"query" jsonschema:"required"`
+    Limit int    `json:"limit"`
+}
+
+srv.Tool("search").
+    Description("Search for items").
+    Handler(func(ctx context.Context, input SearchInput) ([]string, error) {
+        // Your search logic here
+        return []string{"result1", "result2"}, nil
+    })
+```
+
+### Automatic JSON Schema
+
+Schemas are derived from Go structs and:
+
+- validated automatically
+- exposed via MCP introspection
+- kept in sync with code
+
+No manual schema maintenance.
+
+---
+
+### Gin-style middleware
+
+Apply cross-cutting concerns consistently:
+
+```go
+srv.Use(
+    middleware.Recover(),
+    middleware.Timeout(5*time.Second),
+    middleware.RequestID(),
+    middleware.Logging(logger),
+)
+```
+
+**Use cases:**
+
+- auth / principals
+- rate limiting
+- tracing
+- metrics
+- panic recovery
+
+---
+
+### Multiple transports
+
+Run the same server over:
+
+- **stdio** (CLI / agent use)
+- **HTTP + SSE** (service deployments)
+- **WebSocket** (bidirectional communication)
+
+```go
+// Stdio for CLI tools
+mcp.ServeStdio(ctx, srv)
+
+// HTTP for web services
+mcp.ServeHTTP(ctx, srv, ":8080")
+```
+
+### Production-ready defaults
+
+- strict JSON decoding
+- safe error mapping
+- graceful shutdown
+- context propagation everywhere
+
+You can opt out — but safety is the default.
+
+---
+
+## How this fits into the MCP ecosystem
+
+| Project | What it is |
+|---------|------------|
+| MCP Go SDK | Low-level protocol implementation |
+| mark3labs/mcp-go | Community SDK / helpers |
+| **mcp-go** | Full Go framework for MCP servers |
+
+**Think:**
+
+- MCP SDK → `net/http`
+- mcp-go → **Gin**
+
+We build on top of the MCP spec — not instead of it.
+
+---
+
+## When should you use mcp-go?
+
+**Use mcp-go if you:**
+
+- are building real MCP services, not just experiments
+- want typed APIs and validation
+- need auth, limits, observability
+- deploy MCP servers in production
+
+If you want raw protocol access only, an SDK may be a better fit.
+
+---
+
+## Used by
+
+- **Obvia** (incident automation & AIOps tooling)
+- Internal MCP services and experiments
+- OSS projects building on MCP
+
+Want to add your project? Open a PR!
+
+---
+
+## Installation
+
+```bash
+go get github.com/felixgeelhaar/mcp-go
+```
+
+Requires Go 1.23 or later.
+
+---
 
 ## Documentation
 
 - [API Reference](https://pkg.go.dev/github.com/felixgeelhaar/mcp-go)
+- [Getting Started](./docs/GETTING_STARTED.md)
+- [Migration from mark3labs/mcp-go](./docs/MIGRATION.md)
+- [Comparison: MCP SDK vs mark3labs vs mcp-go](./docs/COMPARISON.md)
 - [Examples](./examples/)
-- [Migration Guide](./docs/MIGRATION.md) - Migrating from modelcontextprotocol/go-sdk
 - [MCP Specification](https://spec.modelcontextprotocol.io/)
+
+---
 
 ## Examples
 
@@ -151,10 +291,14 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(middleware...))
 ```
 
 Built-in middleware:
+
 - `Recover()` - Catch panics and convert to errors
 - `RequestID()` - Inject unique request IDs
 - `Timeout(d)` - Enforce request deadlines
 - `Logging(logger)` - Structured request logging
+- `Auth()` - API key and Bearer token authentication
+- `RateLimit()` - Request throttling
+- `SizeLimit()` - Request size limits
 
 ### HTTP Transport
 
@@ -167,74 +311,7 @@ mcp.ServeHTTP(ctx, srv, ":8080",
 )
 ```
 
-## Type Reference
-
-### ResourceContent
-
-Return type for resource handlers:
-
-```go
-&mcp.ResourceContent{
-    URI:      uri,           // The resource URI
-    MimeType: "application/json",
-    Text:     string(data),  // Text content
-    // OR for binary:
-    // Blob: base64EncodedData,
-}
-```
-
-### Tool Return Types
-
-Tools can return any JSON-serializable type:
-
-```go
-// Simple string
-func(input Input) (string, error)
-
-// Struct (auto-serialized to JSON)
-func(input Input) (MyResult, error)
-
-// Slice
-func(input Input) ([]Item, error)
-
-// Map
-func(input Input) (map[string]any, error)
-```
-
-### PromptResult
-
-Return type for prompt handlers:
-
-```go
-&mcp.PromptResult{
-    Description: "Optional description",
-    Messages: []mcp.PromptMessage{
-        {Role: "user", Content: mcp.TextContent{Type: "text", Text: "..."}},
-        {Role: "assistant", Content: mcp.TextContent{Type: "text", Text: "..."}},
-    },
-}
-```
-
-### Session (v1.1)
-
-Access bidirectional communication features:
-
-```go
-session := mcp.SessionFromContext(ctx)
-
-// Logging
-session.Info("logger", "message")
-session.Error("logger", map[string]any{"error": err.Error()})
-
-// Sampling (request LLM completion from client)
-result, err := session.CreateMessage(ctx, &mcp.CreateMessageRequest{
-    Messages: []mcp.SamplingMessage{{Role: mcp.RoleUser, Content: mcp.NewTextContent("...")}},
-    MaxTokens: 100,
-})
-
-// Roots (workspace awareness)
-roots, err := session.ListRoots(ctx)
-```
+---
 
 ## JSON Schema Tags
 
@@ -250,6 +327,7 @@ type SearchInput struct {
 ```
 
 Supported tags:
+
 - `required` - Field is required
 - `description=...` - Field description
 - `default=...` - Default value
@@ -257,74 +335,17 @@ Supported tags:
 - `minLength=N` / `maxLength=N` - String length bounds
 - `enum=a|b|c` - Allowed values
 
-## Common Patterns
+---
 
-### Returning JSON from Resources
+## Philosophy
 
-```go
-srv.Resource("data://users").Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
-    users := getUsers()
-    data, err := json.MarshalIndent(users, "", "  ")
-    if err != nil {
-        return nil, err
-    }
-    return &mcp.ResourceContent{
-        URI:      uri,
-        MimeType: "application/json",
-        Text:     string(data),
-    }, nil
-})
-```
+- **Typed > dynamic**
+- **Safe defaults > flexibility**
+- **Frameworks create ecosystems**
 
-### Error Handling in Tools
+mcp-go aims to be the default Go framework for MCP — boring, predictable, and a joy to use.
 
-```go
-srv.Tool("fetch").Handler(func(ctx context.Context, input FetchInput) (Result, error) {
-    if input.URL == "" {
-        return Result{}, fmt.Errorf("URL is required")  // Becomes MCP error
-    }
-    // Errors are automatically formatted for MCP clients
-    return doFetch(input.URL)
-})
-```
-
-### Using Context for Cancellation
-
-```go
-srv.Tool("long-operation").Handler(func(ctx context.Context, input Input) (string, error) {
-    for i := 0; i < 100; i++ {
-        select {
-        case <-ctx.Done():
-            return "", ctx.Err()  // Request was cancelled
-        default:
-            doWork()
-        }
-    }
-    return "done", nil
-})
-```
-
-### Progress Reporting
-
-```go
-srv.Tool("process").Handler(func(ctx context.Context, input Input) (string, error) {
-    progress := mcp.ProgressFromContext(ctx)
-    total := 100.0
-    for i := 0; i < 100; i++ {
-        progress.Report(float64(i), &total)
-        doWork()
-    }
-    return "complete", nil
-})
-```
-
-## Benchmarks
-
-```
-BenchmarkToolExecution-8           1913233    987.6 ns/op    328 B/op     9 allocs/op
-BenchmarkMiddlewareChain-8         1411394    892.3 ns/op    721 B/op    10 allocs/op
-BenchmarkJSONParsing-8              967858   1193 ns/op      424 B/op    11 allocs/op
-```
+---
 
 ## Contributing
 

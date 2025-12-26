@@ -424,14 +424,14 @@ func LogF(key string, value any) LogField {
 type OTelOption = middleware.OTelOption
 
 var (
-	OTel                  = middleware.OTel
-	WithTracerProvider    = middleware.WithTracerProvider
-	WithMeterProvider     = middleware.WithMeterProvider
-	WithOTelServiceName   = middleware.WithOTelServiceName
-	WithOTelSkipMethods   = middleware.WithOTelSkipMethods
-	SpanFromContext       = middleware.SpanFromContext
-	AddSpanEvent          = middleware.AddSpanEvent
-	SetSpanAttribute      = middleware.SetSpanAttribute
+	OTel                = middleware.OTel
+	WithTracerProvider  = middleware.WithTracerProvider
+	WithMeterProvider   = middleware.WithMeterProvider
+	WithOTelServiceName = middleware.WithOTelServiceName
+	WithOTelSkipMethods = middleware.WithOTelSkipMethods
+	SpanFromContext     = middleware.SpanFromContext
+	AddSpanEvent        = middleware.AddSpanEvent
+	SetSpanAttribute    = middleware.SetSpanAttribute
 )
 
 // requestHandler adapts Server to transport.Handler
