@@ -27,3 +27,9 @@ Thumbs.db
 /dist/
 .claude/
 .relicta/
+
+# Website
+website/node_modules/
+website/dist/
+website/.astro/
+website/package-lock.json

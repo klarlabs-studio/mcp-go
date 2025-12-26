@@ -1,0 +1,98 @@
+<!DOCTYPE html><html lang="en" data-astro-cid-37fxchfa> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="Compare mcp-go with MCP Go SDK and mark3labs/mcp-go."><link rel="icon" type="image/svg+xml" href="/mcp-gofavicon.svg"><title>Comparison | mcp-go</title><style>.docs[data-astro-cid-dzmbrdcm]{max-width:900px;padding-top:var(--space-8);padding-bottom:var(--space-16)}.intro[data-astro-cid-dzmbrdcm]{font-size:var(--text-lg);color:var(--color-text-secondary);margin-bottom:var(--space-8)}.docs[data-astro-cid-dzmbrdcm] section[data-astro-cid-dzmbrdcm]{margin-bottom:var(--space-12)}.stack-diagram[data-astro-cid-dzmbrdcm]{display:flex;flex-direction:column;gap:2px;margin-bottom:var(--space-6);max-width:400px}.stack-layer[data-astro-cid-dzmbrdcm]{display:flex;justify-content:space-between;padding:var(--space-4);border-radius:var(--radius-sm)}.stack-name[data-astro-cid-dzmbrdcm]{font-family:var(--font-mono);font-weight:500}.stack-desc[data-astro-cid-dzmbrdcm]{color:var(--color-text-muted);font-size:var(--text-sm)}.stack-framework[data-astro-cid-dzmbrdcm]{background-color:var(--color-accent);color:#fff}.stack-framework[data-astro-cid-dzmbrdcm] .stack-desc[data-astro-cid-dzmbrdcm]{color:#fffc}.stack-sdk[data-astro-cid-dzmbrdcm]{background-color:var(--color-bg-muted)}.stack-protocol[data-astro-cid-dzmbrdcm]{background-color:var(--color-bg-surface)}.table-wrapper[data-astro-cid-dzmbrdcm]{overflow-x:auto}.yes[data-astro-cid-dzmbrdcm]{color:#22c55e;font-weight:500}.no[data-astro-cid-dzmbrdcm]{color:var(--color-text-muted)}.choice-grid[data-astro-cid-dzmbrdcm]{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--space-4)}.choice-card[data-astro-cid-dzmbrdcm]{padding:var(--space-6);background-color:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-md)}.choice-card[data-astro-cid-dzmbrdcm] h3[data-astro-cid-dzmbrdcm]{margin-bottom:var(--space-3);font-size:var(--text-lg)}.choice-card[data-astro-cid-dzmbrdcm] p[data-astro-cid-dzmbrdcm]{font-size:var(--text-sm);margin-bottom:var(--space-3)}.choice-card[data-astro-cid-dzmbrdcm] ul[data-astro-cid-dzmbrdcm]{margin:0;padding-left:var(--space-4)}.choice-card[data-astro-cid-dzmbrdcm] li[data-astro-cid-dzmbrdcm]{font-size:var(--text-sm);margin-bottom:var(--space-1)}.choice-card-accent[data-astro-cid-dzmbrdcm]{border-color:var(--color-accent);background-color:#4f7cff0d}
+</style>
+<link rel="stylesheet" href="/mcp-go/_assets/comparison.DXianX64.css"></head> <body data-astro-cid-37fxchfa> <header class="header" data-astro-cid-3ef6ksr2> <div class="container header-inner" data-astro-cid-3ef6ksr2> <a href="/mcp-go/" class="logo" data-astro-cid-3ef6ksr2> <svg width="28" height="28" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-icon" aria-hidden="true"> <rect x="24" y="24" width="208" height="208" rx="32" stroke="currentColor" stroke-width="16" fill="none"></rect> <line x1="128" y1="44" x2="128" y2="76" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="128" y1="180" x2="128" y2="212" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="44" y1="128" x2="76" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="180" y1="128" x2="212" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <circle cx="128" cy="128" r="28" fill="currentColor"></circle> </svg> <span class="logo-text" data-astro-cid-3ef6ksr2>mcp-go</span> </a> <nav class="nav" data-astro-cid-3ef6ksr2> <a href="/mcp-go/" class="nav-link" data-astro-cid-3ef6ksr2>Home</a><a href="/mcp-go/getting-started" class="nav-link" data-astro-cid-3ef6ksr2>Getting Started</a><a href="/mcp-go/concepts" class="nav-link" data-astro-cid-3ef6ksr2>Concepts</a><a href="/mcp-go/comparison" class="nav-link" data-astro-cid-3ef6ksr2>Comparison</a><a href="/mcp-go/faq" class="nav-link" data-astro-cid-3ef6ksr2>FAQ</a> <a href="https://github.com/felixgeelhaar/mcp-go" class="nav-link nav-github" target="_blank" rel="noopener" data-astro-cid-3ef6ksr2>
+GitHub
+</a> </nav> </div> </header>  <main data-astro-cid-37fxchfa>  <article class="container docs" data-astro-cid-dzmbrdcm> <h1 data-astro-cid-dzmbrdcm>Comparison</h1> <p class="intro" data-astro-cid-dzmbrdcm>
+This page compares the three main ways to build MCP servers in Go. Each project serves a different purpose
+      and operates at a different abstraction level.
+</p> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Mental model</h2> <div class="stack-diagram" data-astro-cid-dzmbrdcm> <div class="stack-layer stack-framework" data-astro-cid-dzmbrdcm> <span class="stack-name" data-astro-cid-dzmbrdcm>mcp-go</span> <span class="stack-desc" data-astro-cid-dzmbrdcm>Framework</span> </div> <div class="stack-layer stack-sdk" data-astro-cid-dzmbrdcm> <span class="stack-name" data-astro-cid-dzmbrdcm>mark3labs/mcp-go</span> <span class="stack-desc" data-astro-cid-dzmbrdcm>Community SDK</span> </div> <div class="stack-layer stack-protocol" data-astro-cid-dzmbrdcm> <span class="stack-name" data-astro-cid-dzmbrdcm>MCP Go SDK</span> <span class="stack-desc" data-astro-cid-dzmbrdcm>Protocol</span> </div> </div> <p data-astro-cid-dzmbrdcm>
+These are complementary, not mutually exclusive. Think of it like HTTP in Go:
+</p> <ul data-astro-cid-dzmbrdcm> <li data-astro-cid-dzmbrdcm><strong data-astro-cid-dzmbrdcm>MCP Go SDK</strong> → <code data-astro-cid-dzmbrdcm>net/http</code> (protocol implementation)</li> <li data-astro-cid-dzmbrdcm><strong data-astro-cid-dzmbrdcm>mark3labs/mcp-go</strong> → HTTP client/server helpers</li> <li data-astro-cid-dzmbrdcm><strong data-astro-cid-dzmbrdcm>mcp-go</strong> → <strong data-astro-cid-dzmbrdcm>Gin</strong> (application framework)</li> </ul> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Feature comparison</h2> <div class="table-wrapper" data-astro-cid-dzmbrdcm> <table data-astro-cid-dzmbrdcm> <thead data-astro-cid-dzmbrdcm> <tr data-astro-cid-dzmbrdcm> <th data-astro-cid-dzmbrdcm>Capability</th> <th data-astro-cid-dzmbrdcm>MCP Go SDK</th> <th data-astro-cid-dzmbrdcm>mark3labs/mcp-go</th> <th data-astro-cid-dzmbrdcm>mcp-go</th> </tr> </thead> <tbody data-astro-cid-dzmbrdcm> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Abstraction level</td> <td data-astro-cid-dzmbrdcm>Protocol</td> <td data-astro-cid-dzmbrdcm>SDK</td> <td data-astro-cid-dzmbrdcm>Framework</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Typed handlers</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="yes" data-astro-cid-dzmbrdcm>✓</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Auto JSON Schema</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="yes" data-astro-cid-dzmbrdcm>✓</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Input validation</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td data-astro-cid-dzmbrdcm>Manual</td> <td class="yes" data-astro-cid-dzmbrdcm>Automatic</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Middleware</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="yes" data-astro-cid-dzmbrdcm>✓</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>URI templates</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="yes" data-astro-cid-dzmbrdcm>✓</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Production defaults</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="no" data-astro-cid-dzmbrdcm>—</td> <td class="yes" data-astro-cid-dzmbrdcm>✓</td> </tr> <tr data-astro-cid-dzmbrdcm> <td data-astro-cid-dzmbrdcm>Best for</td> <td data-astro-cid-dzmbrdcm>SDK authors</td> <td data-astro-cid-dzmbrdcm>Prototypes</td> <td data-astro-cid-dzmbrdcm>Production</td> </tr> </tbody> </table> </div> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Tool registration</h2> <h3 data-astro-cid-dzmbrdcm>MCP Go SDK</h3> <p data-astro-cid-dzmbrdcm>Manual dispatch and decoding:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>// Protocol SDK style (manual dispatch)
+for {
+    raw := readMessage()
+    msg := mcp.Decode(raw)
+
+    switch msg.Type {
+    case &quot;tools/call&quot;:
+        name := msg.Params[&quot;name&quot;].(string)
+        args := msg.Params[&quot;arguments&quot;].(map[string]any)
+        // manually decode, call handler, encode response
+    }
+}</code></pre> <h3 data-astro-cid-dzmbrdcm>mark3labs/mcp-go</h3> <p data-astro-cid-dzmbrdcm>Server object with untyped handlers:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv := server.NewMCPServer(&quot;my-server&quot;, &quot;1.0.0&quot;)
+
+srv.AddTool(mcp.Tool{
+    Name:        &quot;search&quot;,
+    Description: &quot;Search for items&quot;,
+    InputSchema: mcp.ToolInputSchema{
+        Type: &quot;object&quot;,
+        Properties: map[string]any{
+            &quot;query&quot;: map[string]any{&quot;type&quot;: &quot;string&quot;},
+        },
+    },
+}, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    query, _ := req.Params.Arguments[&quot;query&quot;].(string)
+    return mcp.NewToolResultText(results), nil
+})</code></pre> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>Typed handlers with automatic schema:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv := mcp.NewServer(mcp.ServerInfo{Name: &quot;my-server&quot;, Version: &quot;1.0.0&quot;})
+
+type SearchInput struct {
+    Query string `json:&quot;query&quot; jsonschema:&quot;required&quot;`
+}
+
+srv.Tool(&quot;search&quot;).
+    Description(&quot;Search for items&quot;).
+    Handler(func(ctx context.Context, in SearchInput) ([]string, error) {
+        return search(in.Query), nil
+    })</code></pre> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Input validation</h2> <h3 data-astro-cid-dzmbrdcm>MCP Go SDK / mark3labs</h3> <p data-astro-cid-dzmbrdcm>Manual type assertions and validation:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>func handler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    query, ok := req.Params.Arguments[&quot;query&quot;].(string)
+    if !ok || query == &quot;&quot; {
+        return nil, errors.New(&quot;query is required&quot;)
+    }
+    limit, _ := req.Params.Arguments[&quot;limit&quot;].(float64)
+    if limit &lt; 1 || limit &gt; 100 {
+        return nil, errors.New(&quot;limit must be 1-100&quot;)
+    }
+    // ...
+}</code></pre> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>Declarative validation via struct tags:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>type SearchInput struct {
+    Query string `json:&quot;query&quot; jsonschema:&quot;required,minLength=1&quot;`
+    Limit int    `json:&quot;limit&quot; jsonschema:&quot;minimum=1,maximum=100&quot;`
+}
+
+srv.Tool(&quot;search&quot;).Handler(func(ctx context.Context, in SearchInput) ([]string, error) {
+    // in.Query and in.Limit are already validated
+    return search(in.Query, in.Limit), nil
+})</code></pre> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Middleware</h2> <h3 data-astro-cid-dzmbrdcm>MCP Go SDK / mark3labs</h3> <p data-astro-cid-dzmbrdcm>No built-in middleware. You wrap handlers manually:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>handler := func(ctx context.Context, req Request) (Response, error) { ... }
+
+handler = withTimeout(5*time.Second, handler)
+handler = withAuth(authz, handler)
+handler = withLogging(logger, handler)</code></pre> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>First-class middleware chain:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv.Use(
+    middleware.Recover(),
+    middleware.RequestID(),
+    middleware.Timeout(5*time.Second),
+    middleware.Logging(logger),
+    middleware.Auth(authValidator),
+)</code></pre> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Resources with URI templates</h2> <h3 data-astro-cid-dzmbrdcm>MCP Go SDK / mark3labs</h3> <p data-astro-cid-dzmbrdcm>Manual URI parsing:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv.AddResource(mcp.Resource{
+    URI:  &quot;incidents://&quot;,
+    Name: &quot;Incidents&quot;,
+}, func(ctx context.Context, req mcp.ReadResourceRequest) (string, error) {
+    uri := req.Params.URI
+    id := strings.TrimPrefix(uri, &quot;incidents://&quot;)
+    // ...
+})</code></pre> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>Built-in URI templates with parameter extraction:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv.Resource(&quot;incidents://{id}&quot;).
+    Name(&quot;Incident&quot;).
+    MimeType(&quot;application/json&quot;).
+    Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+        id := params[&quot;id&quot;]  // extracted automatically
+        // ...
+    })</code></pre> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>Prompts</h2> <h3 data-astro-cid-dzmbrdcm>mark3labs/mcp-go</h3> <p data-astro-cid-dzmbrdcm>Untyped arguments:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv.AddPrompt(mcp.Prompt{
+    Name:        &quot;summarize&quot;,
+    Description: &quot;Summarize content&quot;,
+}, func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+    topic, _ := req.Params.Arguments[&quot;topic&quot;].(string)
+    // ...
+})</code></pre> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>Declared arguments with validation:</p> <pre data-astro-cid-dzmbrdcm><code data-astro-cid-dzmbrdcm>srv.Prompt(&quot;summarize&quot;).
+    Description(&quot;Summarize content&quot;).
+    Argument(&quot;topic&quot;, &quot;Topic to summarize&quot;, true).
+    Handler(func(ctx context.Context, args map[string]string) (*mcp.PromptResult, error) {
+        topic := args[&quot;topic&quot;]  // guaranteed present
+        // ...
+    })</code></pre> </section> <section data-astro-cid-dzmbrdcm> <h2 data-astro-cid-dzmbrdcm>When to choose what</h2> <div class="choice-grid" data-astro-cid-dzmbrdcm> <div class="choice-card" data-astro-cid-dzmbrdcm> <h3 data-astro-cid-dzmbrdcm>MCP Go SDK</h3> <p data-astro-cid-dzmbrdcm>Choose if you:</p> <ul data-astro-cid-dzmbrdcm> <li data-astro-cid-dzmbrdcm>Need maximum control over the protocol</li> <li data-astro-cid-dzmbrdcm>Are building another SDK or client</li> <li data-astro-cid-dzmbrdcm>Want to stay closest to the spec</li> </ul> </div> <div class="choice-card" data-astro-cid-dzmbrdcm> <h3 data-astro-cid-dzmbrdcm>mark3labs/mcp-go</h3> <p data-astro-cid-dzmbrdcm>Choose if you:</p> <ul data-astro-cid-dzmbrdcm> <li data-astro-cid-dzmbrdcm>Want a popular community SDK</li> <li data-astro-cid-dzmbrdcm>Are experimenting or prototyping</li> <li data-astro-cid-dzmbrdcm>Prefer "bring your own architecture"</li> </ul> </div> <div class="choice-card choice-card-accent" data-astro-cid-dzmbrdcm> <h3 data-astro-cid-dzmbrdcm>mcp-go</h3> <p data-astro-cid-dzmbrdcm>Choose if you:</p> <ul data-astro-cid-dzmbrdcm> <li data-astro-cid-dzmbrdcm>Want typed handlers and validation</li> <li data-astro-cid-dzmbrdcm>Need middleware and production defaults</li> <li data-astro-cid-dzmbrdcm>Deploy MCP servers as real services</li> </ul> </div> </div> </section> </article>  </main> <footer class="footer" data-astro-cid-sz7xmlte> <div class="container footer-inner" data-astro-cid-sz7xmlte> <div class="footer-left" data-astro-cid-sz7xmlte> <div class="footer-brand" data-astro-cid-sz7xmlte> <svg width="20" height="20" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" class="footer-logo" aria-hidden="true"> <rect x="24" y="24" width="208" height="208" rx="32" stroke="currentColor" stroke-width="16" fill="none"></rect> <line x1="128" y1="44" x2="128" y2="76" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="128" y1="180" x2="128" y2="212" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="44" y1="128" x2="76" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="180" y1="128" x2="212" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <circle cx="128" cy="128" r="28" fill="currentColor"></circle> </svg> <span class="footer-name" data-astro-cid-sz7xmlte>mcp-go</span> </div> <span class="footer-text" data-astro-cid-sz7xmlte>A Go framework for MCP servers</span> </div> <div class="footer-right" data-astro-cid-sz7xmlte> <a href="https://github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>GitHub</a> <a href="https://pkg.go.dev/github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>Go Docs</a> <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>MCP Spec</a> </div> </div> <div class="container footer-bottom" data-astro-cid-sz7xmlte> <span class="footer-copyright" data-astro-cid-sz7xmlte>© 2025 mcp-go contributors. MIT License.</span> </div> </footer>  </body></html> 

@@ -1,0 +1,132 @@
+<!DOCTYPE html><html lang="en" data-astro-cid-37fxchfa> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="description" content="Learn about tools, resources, prompts, middleware, and transports in mcp-go."><link rel="icon" type="image/svg+xml" href="/mcp-gofavicon.svg"><title>Concepts | mcp-go</title><style>.docs[data-astro-cid-dlqx7rnz]{max-width:800px;padding-top:var(--space-8);padding-bottom:var(--space-16)}.intro[data-astro-cid-dlqx7rnz]{font-size:var(--text-lg);color:var(--color-text-secondary);margin-bottom:var(--space-8)}.docs[data-astro-cid-dlqx7rnz] section[data-astro-cid-dlqx7rnz]{margin-bottom:var(--space-12);padding-bottom:var(--space-12);border-bottom:1px solid var(--color-border-default)}.docs[data-astro-cid-dlqx7rnz] section[data-astro-cid-dlqx7rnz]:last-child{border-bottom:none}.docs[data-astro-cid-dlqx7rnz] h3[data-astro-cid-dlqx7rnz]{margin-top:var(--space-6)}
+</style>
+<link rel="stylesheet" href="/mcp-go/_assets/comparison.DXianX64.css"></head> <body data-astro-cid-37fxchfa> <header class="header" data-astro-cid-3ef6ksr2> <div class="container header-inner" data-astro-cid-3ef6ksr2> <a href="/mcp-go/" class="logo" data-astro-cid-3ef6ksr2> <svg width="28" height="28" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-icon" aria-hidden="true"> <rect x="24" y="24" width="208" height="208" rx="32" stroke="currentColor" stroke-width="16" fill="none"></rect> <line x1="128" y1="44" x2="128" y2="76" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="128" y1="180" x2="128" y2="212" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="44" y1="128" x2="76" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="180" y1="128" x2="212" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <circle cx="128" cy="128" r="28" fill="currentColor"></circle> </svg> <span class="logo-text" data-astro-cid-3ef6ksr2>mcp-go</span> </a> <nav class="nav" data-astro-cid-3ef6ksr2> <a href="/mcp-go/" class="nav-link" data-astro-cid-3ef6ksr2>Home</a><a href="/mcp-go/getting-started" class="nav-link" data-astro-cid-3ef6ksr2>Getting Started</a><a href="/mcp-go/concepts" class="nav-link" data-astro-cid-3ef6ksr2>Concepts</a><a href="/mcp-go/comparison" class="nav-link" data-astro-cid-3ef6ksr2>Comparison</a><a href="/mcp-go/faq" class="nav-link" data-astro-cid-3ef6ksr2>FAQ</a> <a href="https://github.com/felixgeelhaar/mcp-go" class="nav-link nav-github" target="_blank" rel="noopener" data-astro-cid-3ef6ksr2>
+GitHub
+</a> </nav> </div> </header>  <main data-astro-cid-37fxchfa>  <article class="container docs" data-astro-cid-dlqx7rnz> <h1 data-astro-cid-dlqx7rnz>Concepts</h1> <p class="intro" data-astro-cid-dlqx7rnz>
+MCP servers expose three types of capabilities: tools, resources, and prompts.
+      mcp-go provides a consistent API for all three, with typed handlers and automatic schema generation.
+</p> <section data-astro-cid-dlqx7rnz> <h2 data-astro-cid-dlqx7rnz>Tools</h2> <p data-astro-cid-dlqx7rnz>
+Tools are functions that can be called by an AI model to perform actions.
+        They accept typed input, execute logic, and return results.
+</p> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use tools for:</strong> API calls, calculations, file operations, database queries—anything the model needs to <em data-astro-cid-dlqx7rnz>do</em>.</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>// import &quot;context&quot;
+// import &quot;fmt&quot;
+
+type CalculateInput struct {
+    Operation string  `json:&quot;operation&quot; jsonschema:&quot;required,enum=add|subtract|multiply|divide&quot;`
+    A         float64 `json:&quot;a&quot; jsonschema:&quot;required&quot;`
+    B         float64 `json:&quot;b&quot; jsonschema:&quot;required&quot;`
+}
+
+srv.Tool(&quot;calculate&quot;).
+    Description(&quot;Perform arithmetic operations&quot;).
+    Handler(func(ctx context.Context, in CalculateInput) (float64, error) {
+        switch in.Operation {
+        case &quot;add&quot;:
+            return in.A + in.B, nil
+        case &quot;subtract&quot;:
+            return in.A - in.B, nil
+        case &quot;multiply&quot;:
+            return in.A * in.B, nil
+        case &quot;divide&quot;:
+            if in.B == 0 {
+                return 0, fmt.Errorf(&quot;division by zero&quot;)
+            }
+            return in.A / in.B, nil
+        default:
+            return 0, fmt.Errorf(&quot;unknown operation: %s&quot;, in.Operation)
+        }
+    })</code></pre> <p data-astro-cid-dlqx7rnz>
+The struct tags define the JSON Schema that MCP clients use for validation and documentation.
+        Invalid input is rejected before your handler runs.
+</p> </section> <section data-astro-cid-dlqx7rnz> <h2 data-astro-cid-dlqx7rnz>Resources</h2> <p data-astro-cid-dlqx7rnz>
+Resources expose data via URI templates. They're read-only and represent
+        something the model can <em data-astro-cid-dlqx7rnz>read</em>—files, database records, API responses.
+</p> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use resources for:</strong> Configuration, user data, documents, status information.</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>// import &quot;context&quot;
+// import &quot;encoding/json&quot;
+
+srv.Resource(&quot;users://{id}&quot;).
+    Name(&quot;User&quot;).
+    Description(&quot;Get user by ID&quot;).
+    MimeType(&quot;application/json&quot;).
+    Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+        id := params[&quot;id&quot;]  // extracted from URI template
+
+        user, err := db.GetUser(ctx, id)
+        if err != nil {
+            return nil, err
+        }
+
+        data, _ := json.Marshal(user)
+        return &amp;mcp.ResourceContent{
+            URI:      uri,
+            MimeType: &quot;application/json&quot;,
+            Text:     string(data),
+        }, nil
+    })</code></pre> <p data-astro-cid-dlqx7rnz>
+URI templates like <code data-astro-cid-dlqx7rnz>users://{id}</code> define path parameters.
+        Parameters are extracted automatically and passed to your handler.
+</p> </section> <section data-astro-cid-dlqx7rnz> <h2 data-astro-cid-dlqx7rnz>Prompts</h2> <p data-astro-cid-dlqx7rnz>
+Prompts are parameterized message templates. They help structure conversations
+        and provide reusable patterns for common tasks.
+</p> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use prompts for:</strong> Code review templates, summarization tasks, structured queries.</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>// import &quot;context&quot;
+// import &quot;fmt&quot;
+
+srv.Prompt(&quot;code-review&quot;).
+    Description(&quot;Generate a code review prompt&quot;).
+    Argument(&quot;language&quot;, &quot;Programming language&quot;, true).
+    Argument(&quot;focus&quot;, &quot;Review focus: security, performance, or style&quot;, false).
+    Handler(func(ctx context.Context, args map[string]string) (*mcp.PromptResult, error) {
+        language := args[&quot;language&quot;]
+        focus := args[&quot;focus&quot;]
+        if focus == &quot;&quot; {
+            focus = &quot;general&quot;
+        }
+
+        return &amp;mcp.PromptResult{
+            Description: fmt.Sprintf(&quot;Code review for %s&quot;, language),
+            Messages: []mcp.PromptMessage{
+                {
+                    Role: &quot;user&quot;,
+                    Content: mcp.TextContent{
+                        Type: &quot;text&quot;,
+                        Text: fmt.Sprintf(&quot;Review this %s code with focus on %s.&quot;, language, focus),
+                    },
+                },
+            },
+        }, nil
+    })</code></pre> <p data-astro-cid-dlqx7rnz>
+Arguments are declared with <code data-astro-cid-dlqx7rnz>.Argument(name, description, required)</code>.
+        Required arguments are validated before your handler runs.
+</p> </section> <section data-astro-cid-dlqx7rnz> <h2 data-astro-cid-dlqx7rnz>Middleware</h2> <p data-astro-cid-dlqx7rnz>
+Middleware wraps request handlers to add cross-cutting concerns.
+        mcp-go uses a Gin-style middleware chain.
+</p> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use middleware for:</strong> Logging, authentication, rate limiting, timeouts, panic recovery.</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>// Apply middleware globally
+srv.Use(
+    middleware.Recover(),           // Catch panics
+    middleware.RequestID(),         // Inject request IDs
+    middleware.Timeout(30*time.Second),
+    middleware.Logging(logger),
+)
+
+// Or use the default production stack
+stack := mcp.DefaultMiddlewareWithTimeout(logger, 30*time.Second)
+mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))</code></pre> <h3 data-astro-cid-dlqx7rnz>Built-in middleware</h3> <ul data-astro-cid-dlqx7rnz> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>Recover()</code> — Catch panics and convert to errors</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>RequestID()</code> — Inject unique request IDs for tracing</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>Timeout(d)</code> — Enforce request deadlines</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>Logging(logger)</code> — Structured request logging</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>Auth(validator)</code> — API key and Bearer token authentication</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>RateLimit(rps)</code> — Request throttling</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>SizeLimit(bytes)</code> — Request size limits</li> </ul> </section> <section data-astro-cid-dlqx7rnz> <h2 data-astro-cid-dlqx7rnz>Transports</h2> <p data-astro-cid-dlqx7rnz>
+Transports define how clients connect to your server.
+        mcp-go supports multiple transports with the same server instance.
+</p> <h3 data-astro-cid-dlqx7rnz>stdio</h3> <p data-astro-cid-dlqx7rnz>
+The standard transport for CLI tools and AI agents.
+        Reads JSON-RPC from stdin, writes to stdout.
+</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>mcp.ServeStdio(ctx, srv)</code></pre> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use stdio for:</strong> CLI tools, Claude Desktop, local development.</p> <h3 data-astro-cid-dlqx7rnz>HTTP + SSE</h3> <p data-astro-cid-dlqx7rnz>
+Web-friendly transport with Server-Sent Events for streaming.
+        Exposes REST-like endpoints.
+</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>mcp.ServeHTTP(ctx, srv, &quot;:8080&quot;,
+    mcp.WithReadTimeout(30*time.Second),
+    mcp.WithWriteTimeout(30*time.Second),
+)</code></pre> <p data-astro-cid-dlqx7rnz>Endpoints:</p> <ul data-astro-cid-dlqx7rnz> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>POST /mcp</code> — JSON-RPC requests</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>GET /sse</code> — Server-Sent Events stream</li> <li data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>GET /health</code> — Health check</li> </ul> <p data-astro-cid-dlqx7rnz><strong data-astro-cid-dlqx7rnz>Use HTTP for:</strong> Web deployments, service-to-service, load balancing.</p> <h3 data-astro-cid-dlqx7rnz>Same server, different transports</h3> <p data-astro-cid-dlqx7rnz>
+Your tools, resources, and prompts work identically regardless of transport.
+        You can even run both simultaneously:
+</p> <pre data-astro-cid-dlqx7rnz><code data-astro-cid-dlqx7rnz>// Run HTTP in background
+go mcp.ServeHTTP(ctx, srv, &quot;:8080&quot;)
+
+// Run stdio in foreground
+mcp.ServeStdio(ctx, srv)</code></pre> </section> </article>  </main> <footer class="footer" data-astro-cid-sz7xmlte> <div class="container footer-inner" data-astro-cid-sz7xmlte> <div class="footer-left" data-astro-cid-sz7xmlte> <div class="footer-brand" data-astro-cid-sz7xmlte> <svg width="20" height="20" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg" class="footer-logo" aria-hidden="true"> <rect x="24" y="24" width="208" height="208" rx="32" stroke="currentColor" stroke-width="16" fill="none"></rect> <line x1="128" y1="44" x2="128" y2="76" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="128" y1="180" x2="128" y2="212" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="44" y1="128" x2="76" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <line x1="180" y1="128" x2="212" y2="128" stroke="currentColor" stroke-width="16" stroke-linecap="round"></line> <circle cx="128" cy="128" r="28" fill="currentColor"></circle> </svg> <span class="footer-name" data-astro-cid-sz7xmlte>mcp-go</span> </div> <span class="footer-text" data-astro-cid-sz7xmlte>A Go framework for MCP servers</span> </div> <div class="footer-right" data-astro-cid-sz7xmlte> <a href="https://github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>GitHub</a> <a href="https://pkg.go.dev/github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>Go Docs</a> <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener" data-astro-cid-sz7xmlte>MCP Spec</a> </div> </div> <div class="container footer-bottom" data-astro-cid-sz7xmlte> <span class="footer-copyright" data-astro-cid-sz7xmlte>© 2025 mcp-go contributors. MIT License.</span> </div> </footer>  </body></html> 

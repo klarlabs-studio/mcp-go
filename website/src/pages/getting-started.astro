@@ -1,0 +1,234 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Getting Started" description="Build your first MCP server with mcp-go in under 5 minutes.">
+  <article class="container docs">
+    <h1>Getting Started</h1>
+
+    <section>
+      <h2>What is mcp-go?</h2>
+      <p>
+        mcp-go is a Go framework for building <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol (MCP)</a> servers.
+        It is not an SDK—it's a higher-level framework that provides typed handlers, automatic JSON Schema generation,
+        input validation, middleware, and multiple transports.
+      </p>
+      <p>
+        Think of it as "Gin for MCP": just as Gin builds on top of <code>net/http</code> to provide structure and convenience,
+        mcp-go builds on top of the MCP protocol to give you a production-ready application framework.
+      </p>
+    </section>
+
+    <section>
+      <h2>Prerequisites</h2>
+      <ul>
+        <li><strong>Go 1.24</strong> or later</li>
+        <li>Basic Go knowledge (packages, structs, functions)</li>
+        <li>No prior MCP knowledge required</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Installation</h2>
+      <pre><code>go get github.com/felixgeelhaar/mcp-go</code></pre>
+    </section>
+
+    <section>
+      <h2>Your first MCP server</h2>
+      <p>Create a file called <code>main.go</code>:</p>
+      <pre><code>{`package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/felixgeelhaar/mcp-go"
+)
+
+// GreetInput defines the typed input for our tool.
+// Struct tags control JSON serialization and schema generation.
+type GreetInput struct {
+    Name string \`json:"name" jsonschema:"required,description=Name to greet"\`
+}
+
+func main() {
+    // Create a new MCP server with metadata.
+    srv := mcp.NewServer(mcp.ServerInfo{
+        Name:    "hello-server",
+        Version: "0.1.0",
+    })
+
+    // Register a tool with a typed handler.
+    // The input struct is automatically converted to JSON Schema
+    // and validated before your handler is called.
+    srv.Tool("greet").
+        Description("Generate a greeting message").
+        Handler(func(ctx context.Context, input GreetInput) (string, error) {
+            return "Hello, " + input.Name + "!", nil
+        })
+
+    // Start the server using stdio transport.
+    if err := mcp.ServeStdio(context.Background(), srv); err != nil {
+        log.Fatal(err)
+    }
+}`}</code></pre>
+    </section>
+
+    <section>
+      <h2>Running the server</h2>
+      <p>Build and run:</p>
+      <pre><code>{`go build -o hello-server
+./hello-server`}</code></pre>
+      <p>
+        The server communicates over <strong>stdio transport</strong>—it reads JSON-RPC messages from stdin
+        and writes responses to stdout. This is the standard transport for MCP servers used by CLI tools
+        and AI agents like Claude Desktop.
+      </p>
+      <p>
+        In practice, an MCP client (like an AI agent) handles this communication for you.
+      </p>
+    </section>
+
+    <section>
+      <h2>What you get for free</h2>
+      <p>By defining a typed handler, mcp-go automatically provides:</p>
+      <ul>
+        <li><strong>Typed input</strong> — Your handler receives a strongly-typed Go struct, not <code>map[string]any</code></li>
+        <li><strong>Automatic JSON Schema</strong> — Generated from your struct and exposed via MCP introspection</li>
+        <li><strong>Input validation</strong> — Invalid input is rejected before your handler runs</li>
+        <li><strong>MCP-compliant errors</strong> — Errors are formatted according to the MCP specification</li>
+        <li><strong>Context propagation</strong> — Cancellation and deadlines work out of the box</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Adding middleware</h2>
+      <p>Use the built-in middleware stack for production defaults:</p>
+      <pre><code>{`package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/felixgeelhaar/mcp-go"
+)
+
+type GreetInput struct {
+    Name string \`json:"name" jsonschema:"required"\`
+}
+
+// simpleLogger implements mcp.Logger for demonstration.
+type simpleLogger struct{}
+
+func (l *simpleLogger) Info(msg string, fields ...mcp.LogField) {
+    fmt.Printf("[INFO] %s %v\\n", msg, formatFields(fields))
+}
+
+func (l *simpleLogger) Error(msg string, fields ...mcp.LogField) {
+    fmt.Printf("[ERROR] %s %v\\n", msg, formatFields(fields))
+}
+
+func (l *simpleLogger) Debug(msg string, fields ...mcp.LogField) {
+    fmt.Printf("[DEBUG] %s %v\\n", msg, formatFields(fields))
+}
+
+func (l *simpleLogger) Warn(msg string, fields ...mcp.LogField) {
+    fmt.Printf("[WARN] %s %v\\n", msg, formatFields(fields))
+}
+
+func formatFields(fields []mcp.LogField) string {
+    if len(fields) == 0 {
+        return ""
+    }
+    result := "{"
+    for i, f := range fields {
+        if i > 0 {
+            result += ", "
+        }
+        result += fmt.Sprintf("%s=%v", f.Key, f.Value)
+    }
+    return result + "}"
+}
+
+func main() {
+    srv := mcp.NewServer(mcp.ServerInfo{
+        Name:    "hello-server",
+        Version: "0.1.0",
+    })
+
+    srv.Tool("greet").
+        Description("Generate a greeting message").
+        Handler(func(ctx context.Context, input GreetInput) (string, error) {
+            return "Hello, " + input.Name + "!", nil
+        })
+
+    // DefaultMiddlewareWithTimeout provides:
+    // - Panic recovery
+    // - Request ID injection
+    // - Timeout enforcement
+    // - Structured logging
+    logger := &simpleLogger{}
+    middleware := mcp.DefaultMiddlewareWithTimeout(logger, 30*time.Second)
+
+    if err := mcp.ServeStdio(context.Background(), srv, mcp.WithMiddleware(middleware...)); err != nil {
+        log.Fatal(err)
+    }
+}`}</code></pre>
+    </section>
+
+    <section>
+      <h2>Running over HTTP</h2>
+      <p>The same server can run over HTTP with Server-Sent Events. Just change the transport:</p>
+      <pre><code>{`// Instead of:
+mcp.ServeStdio(ctx, srv)
+
+// Use:
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithReadTimeout(30*time.Second),
+    mcp.WithWriteTimeout(30*time.Second),
+)`}</code></pre>
+      <p>This exposes:</p>
+      <ul>
+        <li><code>POST /mcp</code> — JSON-RPC endpoint</li>
+        <li><code>GET /sse</code> — Server-Sent Events for streaming</li>
+        <li><code>GET /health</code> — Health check endpoint</li>
+      </ul>
+      <p>
+        The key point: <strong>same server, different transport</strong>. Your tools, resources, and prompts
+        work identically regardless of how clients connect.
+      </p>
+    </section>
+
+    <section>
+      <h2>Next steps</h2>
+      <ul>
+        <li><a href="/mcp-go/concepts">Concepts</a> — Learn about tools, resources, prompts, and middleware</li>
+        <li><a href="/mcp-go/comparison">Comparison</a> — See how mcp-go differs from other MCP libraries</li>
+        <li><a href="https://github.com/felixgeelhaar/mcp-go/tree/main/examples" target="_blank" rel="noopener">Examples</a> — Browse complete example servers</li>
+        <li><a href="https://pkg.go.dev/github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener">API Reference</a> — Full Go documentation</li>
+      </ul>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .docs {
+    max-width: 800px;
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+  }
+
+  .docs h1 {
+    margin-bottom: var(--space-8);
+  }
+
+  .docs section {
+    margin-bottom: var(--space-8);
+  }
+
+  .docs h2 {
+    margin-top: var(--space-8);
+  }
+</style>

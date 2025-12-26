@@ -1,0 +1,236 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Concepts" description="Learn about tools, resources, prompts, middleware, and transports in mcp-go.">
+  <article class="container docs">
+    <h1>Concepts</h1>
+
+    <p class="intro">
+      MCP servers expose three types of capabilities: tools, resources, and prompts.
+      mcp-go provides a consistent API for all three, with typed handlers and automatic schema generation.
+    </p>
+
+    <section>
+      <h2>Tools</h2>
+      <p>
+        Tools are functions that can be called by an AI model to perform actions.
+        They accept typed input, execute logic, and return results.
+      </p>
+      <p><strong>Use tools for:</strong> API calls, calculations, file operations, database queries—anything the model needs to <em>do</em>.</p>
+      <pre><code>{`// import "context"
+// import "fmt"
+
+type CalculateInput struct {
+    Operation string  \`json:"operation" jsonschema:"required,enum=add|subtract|multiply|divide"\`
+    A         float64 \`json:"a" jsonschema:"required"\`
+    B         float64 \`json:"b" jsonschema:"required"\`
+}
+
+srv.Tool("calculate").
+    Description("Perform arithmetic operations").
+    Handler(func(ctx context.Context, in CalculateInput) (float64, error) {
+        switch in.Operation {
+        case "add":
+            return in.A + in.B, nil
+        case "subtract":
+            return in.A - in.B, nil
+        case "multiply":
+            return in.A * in.B, nil
+        case "divide":
+            if in.B == 0 {
+                return 0, fmt.Errorf("division by zero")
+            }
+            return in.A / in.B, nil
+        default:
+            return 0, fmt.Errorf("unknown operation: %s", in.Operation)
+        }
+    })`}</code></pre>
+      <p>
+        The struct tags define the JSON Schema that MCP clients use for validation and documentation.
+        Invalid input is rejected before your handler runs.
+      </p>
+    </section>
+
+    <section>
+      <h2>Resources</h2>
+      <p>
+        Resources expose data via URI templates. They're read-only and represent
+        something the model can <em>read</em>—files, database records, API responses.
+      </p>
+      <p><strong>Use resources for:</strong> Configuration, user data, documents, status information.</p>
+      <pre><code>{`// import "context"
+// import "encoding/json"
+
+srv.Resource("users://{id}").
+    Name("User").
+    Description("Get user by ID").
+    MimeType("application/json").
+    Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+        id := params["id"]  // extracted from URI template
+
+        user, err := db.GetUser(ctx, id)
+        if err != nil {
+            return nil, err
+        }
+
+        data, err := json.Marshal(user)
+        if err != nil {
+            return nil, err
+        }
+        return &mcp.ResourceContent{
+            URI:      uri,
+            MimeType: "application/json",
+            Text:     string(data),
+        }, nil
+    })`}</code></pre>
+      <p>
+        URI templates like <code>users://{`{id}`}</code> define path parameters.
+        Parameters are extracted automatically and passed to your handler.
+      </p>
+    </section>
+
+    <section>
+      <h2>Prompts</h2>
+      <p>
+        Prompts are parameterized message templates. They help structure conversations
+        and provide reusable patterns for common tasks.
+      </p>
+      <p><strong>Use prompts for:</strong> Code review templates, summarization tasks, structured queries.</p>
+      <pre><code>{`// import "context"
+// import "fmt"
+
+srv.Prompt("code-review").
+    Description("Generate a code review prompt").
+    Argument("language", "Programming language", true).
+    Argument("focus", "Review focus: security, performance, or style", false).
+    Handler(func(ctx context.Context, args map[string]string) (*mcp.PromptResult, error) {
+        language := args["language"]
+        focus := args["focus"]
+        if focus == "" {
+            focus = "general"
+        }
+
+        return &mcp.PromptResult{
+            Description: fmt.Sprintf("Code review for %s", language),
+            Messages: []mcp.PromptMessage{
+                {
+                    Role: "user",
+                    Content: mcp.TextContent{
+                        Type: "text",
+                        Text: fmt.Sprintf("Review this %s code with focus on %s.", language, focus),
+                    },
+                },
+            },
+        }, nil
+    })`}</code></pre>
+      <p>
+        Arguments are declared with <code>.Argument(name, description, required)</code>.
+        Required arguments are validated before your handler runs.
+      </p>
+    </section>
+
+    <section>
+      <h2>Middleware</h2>
+      <p>
+        Middleware wraps request handlers to add cross-cutting concerns.
+        mcp-go uses a Gin-style middleware chain.
+      </p>
+      <p><strong>Use middleware for:</strong> Logging, authentication, rate limiting, timeouts, panic recovery.</p>
+      <pre><code>{`// Apply middleware globally
+srv.Use(
+    middleware.Recover(),           // Catch panics
+    middleware.RequestID(),         // Inject request IDs
+    middleware.Timeout(30*time.Second),
+    middleware.Logging(logger),
+)
+
+// Or use the default production stack
+stack := mcp.DefaultMiddlewareWithTimeout(logger, 30*time.Second)
+mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
+
+      <h3>Built-in middleware</h3>
+      <ul>
+        <li><code>Recover()</code> — Catch panics and convert to errors</li>
+        <li><code>RequestID()</code> — Inject unique request IDs for tracing</li>
+        <li><code>Timeout(d)</code> — Enforce request deadlines</li>
+        <li><code>Logging(logger)</code> — Structured request logging</li>
+        <li><code>Auth(validator)</code> — API key and Bearer token authentication</li>
+        <li><code>RateLimit(rps)</code> — Request throttling</li>
+        <li><code>SizeLimit(bytes)</code> — Request size limits</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Transports</h2>
+      <p>
+        Transports define how clients connect to your server.
+        mcp-go supports multiple transports with the same server instance.
+      </p>
+
+      <h3>stdio</h3>
+      <p>
+        The standard transport for CLI tools and AI agents.
+        Reads JSON-RPC from stdin, writes to stdout.
+      </p>
+      <pre><code>{`mcp.ServeStdio(ctx, srv)`}</code></pre>
+      <p><strong>Use stdio for:</strong> CLI tools, Claude Desktop, local development.</p>
+
+      <h3>HTTP + SSE</h3>
+      <p>
+        Web-friendly transport with Server-Sent Events for streaming.
+        Exposes REST-like endpoints.
+      </p>
+      <pre><code>{`mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithReadTimeout(30*time.Second),
+    mcp.WithWriteTimeout(30*time.Second),
+)`}</code></pre>
+      <p>Endpoints:</p>
+      <ul>
+        <li><code>POST /mcp</code> — JSON-RPC requests</li>
+        <li><code>GET /sse</code> — Server-Sent Events stream</li>
+        <li><code>GET /health</code> — Health check</li>
+      </ul>
+      <p><strong>Use HTTP for:</strong> Web deployments, service-to-service, load balancing.</p>
+
+      <h3>Same server, different transports</h3>
+      <p>
+        Your tools, resources, and prompts work identically regardless of transport.
+        You can even run both simultaneously:
+      </p>
+      <pre><code>{`// Run HTTP in background
+go mcp.ServeHTTP(ctx, srv, ":8080")
+
+// Run stdio in foreground
+mcp.ServeStdio(ctx, srv)`}</code></pre>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .docs {
+    max-width: 800px;
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+  }
+
+  .intro {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-8);
+  }
+
+  .docs section {
+    margin-bottom: var(--space-12);
+    padding-bottom: var(--space-12);
+    border-bottom: 1px solid var(--color-border-default);
+  }
+
+  .docs section:last-child {
+    border-bottom: none;
+  }
+
+  .docs h3 {
+    margin-top: var(--space-6);
+  }
+</style>

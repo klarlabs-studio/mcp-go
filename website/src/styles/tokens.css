@@ -1,0 +1,49 @@
+:root {
+  /* Accent */
+  --color-accent: #4f7cff;
+  --color-accent-hover: #3b67e6;
+
+  /* Backgrounds */
+  --color-bg-root: #0b0e14;
+  --color-bg-surface: #111827;
+  --color-bg-muted: #161e2e;
+  --color-bg-code: #0f172a;
+
+  /* Text */
+  --color-text-primary: #e5e7eb;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+
+  /* Borders */
+  --color-border-default: #1f2937;
+  --color-border-accent: #4f7cff;
+
+  /* Fonts */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Font sizes */
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* Layout */
+  --container-max: 72rem;
+}

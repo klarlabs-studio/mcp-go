@@ -1,0 +1,104 @@
+---
+import Logo from './Logo.astro';
+
+const currentYear = new Date().getFullYear();
+---
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-left">
+      <div class="footer-brand">
+        <Logo size={20} class="footer-logo" />
+        <span class="footer-name">mcp-go</span>
+      </div>
+      <span class="footer-text">A Go framework for MCP servers</span>
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://pkg.go.dev/github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener">Go Docs</a>
+      <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP Spec</a>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span class="footer-copyright">© {currentYear} mcp-go contributors. MIT License.</span>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    border-top: 1px solid var(--color-border-default);
+    padding: var(--space-8) 0 var(--space-6);
+    margin-top: var(--space-16);
+  }
+
+  .footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-6);
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .footer-logo {
+    color: var(--color-accent);
+  }
+
+  .footer-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .footer-text {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .footer-right {
+    display: flex;
+    gap: var(--space-6);
+  }
+
+  .footer-right a {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .footer-right a:hover {
+    color: var(--color-accent);
+  }
+
+  .footer-bottom {
+    padding-top: var(--space-6);
+    border-top: 1px solid var(--color-border-default);
+  }
+
+  .footer-copyright {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  @media (max-width: 768px) {
+    .footer-inner {
+      flex-direction: column;
+      gap: var(--space-4);
+      text-align: center;
+    }
+
+    .footer-left {
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+  }
+</style>

@@ -1,0 +1,216 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="mcp-go" description="A Go framework for building Model Context Protocol (MCP) servers. Like Gin, but for MCP.">
+  <section class="hero">
+    <div class="container">
+      <h1 class="hero-title">Gin for MCP servers in Go</h1>
+      <p class="hero-subtitle">
+        mcp-go is a framework for building Model Context Protocol servers.
+        It provides typed handlers, automatic schema generation, middleware, and production-ready defaults.
+      </p>
+      <div class="hero-actions">
+        <a href="/mcp-go/getting-started" class="btn btn-primary">Get Started</a>
+        <a href="https://github.com/felixgeelhaar/mcp-go" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <pre><code>{`package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/felixgeelhaar/mcp-go"
+)
+
+type SearchInput struct {
+    Query string \`json:"query" jsonschema:"required"\`
+    Limit int    \`json:"limit" jsonschema:"maximum=100"\`
+}
+
+func main() {
+    srv := mcp.NewServer(mcp.ServerInfo{
+        Name:    "search-server",
+        Version: "1.0.0",
+    })
+
+    srv.Tool("search").
+        Description("Search for documents").
+        Handler(func(ctx context.Context, in SearchInput) ([]string, error) {
+            // search is your custom search function
+            return search(in.Query, in.Limit), nil
+        })
+
+    log.Fatal(mcp.ServeStdio(context.Background(), srv))
+}`}</code></pre>
+    </div>
+  </section>
+
+  <section class="section section-muted">
+    <div class="container">
+      <h2>Why mcp-go?</h2>
+      <p class="section-intro">
+        Building MCP servers directly on SDKs means solving the same problems repeatedly.
+        mcp-go solves them once—idiomatically and safely.
+      </p>
+      <div class="features">
+        <div class="feature">
+          <h3>Typed Handlers</h3>
+          <p>Define inputs as Go structs. Invalid data never reaches your handler.</p>
+        </div>
+        <div class="feature">
+          <h3>Automatic JSON Schema</h3>
+          <p>Schemas are derived from struct tags and exposed via MCP introspection.</p>
+        </div>
+        <div class="feature">
+          <h3>Middleware</h3>
+          <p>Gin-style middleware for auth, timeouts, logging, and rate limiting.</p>
+        </div>
+        <div class="feature">
+          <h3>Multiple Transports</h3>
+          <p>Same server runs over stdio or HTTP+SSE. Switch with one line.</p>
+        </div>
+        <div class="feature">
+          <h3>Production Defaults</h3>
+          <p>Panic recovery, request IDs, graceful shutdown. Safe by default.</p>
+        </div>
+        <div class="feature">
+          <h3>MCP Compliant</h3>
+          <p>Implements the full MCP spec including tools, resources, and prompts.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>How it fits into the MCP ecosystem</h2>
+      <p class="section-intro">
+        mcp-go is a framework, not an SDK. It builds on the MCP specification to provide application structure.
+      </p>
+      <div class="ecosystem">
+        <table>
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>What it is</th>
+              <th>Analogy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>MCP Go SDK</td>
+              <td>Low-level protocol implementation</td>
+              <td><code>net/http</code></td>
+            </tr>
+            <tr>
+              <td>mark3labs/mcp-go</td>
+              <td>Community SDK with helpers</td>
+              <td>HTTP client library</td>
+            </tr>
+            <tr>
+              <td><strong>mcp-go</strong></td>
+              <td>Full application framework</td>
+              <td><strong>Gin</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-secondary mt-6">
+        We build on top of the MCP spec—not instead of it.
+        If you need raw protocol access, use an SDK. If you're building real services, use mcp-go.
+      </p>
+    </div>
+  </section>
+
+  <section class="section section-muted">
+    <div class="container text-center">
+      <h2>Ready to get started?</h2>
+      <p class="section-intro">
+        Build your first MCP server in under 5 minutes.
+      </p>
+      <div class="hero-actions mt-6">
+        <a href="/mcp-go/getting-started" class="btn btn-primary">Read the Guide</a>
+        <a href="/mcp-go/comparison" class="btn btn-secondary">See the Comparison</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    padding: var(--space-16) 0;
+    text-align: center;
+  }
+
+  .hero-title {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    margin-bottom: var(--space-6);
+    background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-subtitle {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    max-width: 640px;
+    margin: 0 auto var(--space-8);
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: var(--space-4);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .section-intro {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    max-width: 640px;
+    margin-bottom: var(--space-8);
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-6);
+  }
+
+  .feature {
+    padding: var(--space-6);
+    background-color: var(--color-bg-muted);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-default);
+  }
+
+  .feature h3 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-2);
+    color: var(--color-text-primary);
+  }
+
+  .feature p {
+    color: var(--color-text-secondary);
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+
+  .ecosystem {
+    overflow-x: auto;
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      padding: var(--space-8) 0;
+    }
+  }
+</style>

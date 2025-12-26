@@ -1,0 +1,101 @@
+---
+import Logo from './Logo.astro';
+
+const navItems = [
+  { href: '/mcp-go/', label: 'Home' },
+  { href: '/mcp-go/getting-started', label: 'Getting Started' },
+  { href: '/mcp-go/concepts', label: 'Concepts' },
+  { href: '/mcp-go/comparison', label: 'Comparison' },
+  { href: '/mcp-go/faq', label: 'FAQ' },
+];
+---
+
+<header class="header">
+  <div class="container header-inner">
+    <a href="/mcp-go/" class="logo">
+      <Logo size={28} class="logo-icon" />
+      <span class="logo-text">mcp-go</span>
+    </a>
+    <nav class="nav">
+      {navItems.map((item) => (
+        <a href={item.href} class="nav-link">{item.label}</a>
+      ))}
+      <a href="https://github.com/felixgeelhaar/mcp-go" class="nav-link nav-github" target="_blank" rel="noopener">
+        GitHub
+      </a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: var(--color-bg-root);
+    border-bottom: 1px solid var(--color-border-default);
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    text-decoration: none;
+  }
+
+  .logo-icon {
+    color: var(--color-accent);
+  }
+
+  .logo-text {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .nav-link {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--color-text-primary);
+  }
+
+  .nav-github {
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+  }
+
+  .nav-github:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  @media (max-width: 768px) {
+    .nav {
+      gap: var(--space-4);
+    }
+
+    .nav-link {
+      font-size: var(--text-sm);
+    }
+  }
+</style>

@@ -1,0 +1,178 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="FAQ" description="Frequently asked questions about mcp-go.">
+  <article class="container docs">
+    <h1>Frequently Asked Questions</h1>
+
+    <section class="faq-item">
+      <h2>Why not just use an MCP SDK?</h2>
+      <p>
+        SDKs give you protocol correctness. They handle JSON-RPC encoding, message routing, and spec compliance.
+        But they don't give you application structure.
+      </p>
+      <p>
+        Building on an SDK means solving the same problems repeatedly: input validation, schema generation,
+        error handling, middleware, transport wiring. mcp-go solves these once—idiomatically and safely.
+      </p>
+      <p>
+        If you're building a one-off experiment, an SDK is fine. If you're building production services, mcp-go
+        provides the structure you'd end up building anyway.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>Is this compatible with Claude / IDE MCP clients?</h2>
+      <p>
+        Yes. mcp-go implements the full <a href="https://spec.modelcontextprotocol.io" target="_blank" rel="noopener">MCP specification</a>.
+        Servers built with mcp-go work with any MCP-compliant client, including:
+      </p>
+      <ul>
+        <li>Claude Desktop</li>
+        <li>VS Code extensions</li>
+        <li>Custom MCP clients</li>
+        <li>Other AI agents implementing MCP</li>
+      </ul>
+      <p>
+        The framework handles protocol details so you can focus on your tools and resources.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>Can I run the same server over stdio and HTTP?</h2>
+      <p>
+        Yes. Your server definition is transport-agnostic. The same tools, resources, and prompts work over any transport:
+      </p>
+      <pre><code>{`srv := mcp.NewServer(mcp.ServerInfo{Name: "my-server", Version: "1.0.0"})
+
+// Register tools, resources, prompts...
+srv.Tool("search").Handler(searchHandler)
+
+// Option 1: stdio for CLI tools
+mcp.ServeStdio(ctx, srv)
+
+// Option 2: HTTP for web deployments
+mcp.ServeHTTP(ctx, srv, ":8080")
+
+// Option 3: Run both simultaneously
+go mcp.ServeHTTP(ctx, srv, ":8080")
+mcp.ServeStdio(ctx, srv)`}</code></pre>
+    </section>
+
+    <section class="faq-item">
+      <h2>Does it support authentication?</h2>
+      <p>
+        Yes. mcp-go includes built-in authentication middleware:
+      </p>
+      <pre><code>{`// API key authentication
+srv.Use(middleware.APIKey("X-API-Key", validKeys))
+
+// Bearer token authentication
+srv.Use(middleware.BearerToken(tokenValidator))
+
+// Custom authentication
+srv.Use(middleware.Auth(func(ctx context.Context, req *protocol.Request) (*Principal, error) {
+    // Your auth logic here
+    return &Principal{ID: "user-123"}, nil
+}))`}</code></pre>
+      <p>
+        For HTTP transport, you can also use standard HTTP middleware for OAuth, JWT, or other auth schemes.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>How stable is the API?</h2>
+      <p>
+        mcp-go follows <a href="https://semver.org" target="_blank" rel="noopener">semantic versioning</a>.
+        The current API is stable for production use.
+      </p>
+      <ul>
+        <li><strong>v1.x</strong> — Stable API. No breaking changes within minor versions.</li>
+        <li><strong>Deprecations</strong> — Announced in advance with migration paths.</li>
+        <li><strong>MCP spec updates</strong> — New MCP features are added as non-breaking extensions.</li>
+      </ul>
+      <p>
+        The goal is "boring stability"—you should be able to upgrade without surprises.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>What Go version is required?</h2>
+      <p>
+        Go 1.24 or later. This is required for certain language features and dependency compatibility.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>How do I handle long-running operations?</h2>
+      <p>
+        Use context for cancellation and the progress API for status updates:
+      </p>
+      <pre><code>{`srv.Tool("process").Handler(func(ctx context.Context, in ProcessInput) (string, error) {
+    progress := mcp.ProgressFromContext(ctx)
+    total := float64(100)
+
+    for i := 0; i < 100; i++ {
+        select {
+        case <-ctx.Done():
+            return "", ctx.Err()  // Handle cancellation
+        default:
+            progress.Report(float64(i), &total)
+            doWork()
+        }
+    }
+    return "complete", nil
+})`}</code></pre>
+    </section>
+
+    <section class="faq-item">
+      <h2>Can I use this for non-AI applications?</h2>
+      <p>
+        MCP is designed for AI model integration, but there's nothing stopping you from using it as a general
+        RPC framework. However, if you don't need MCP specifically, you might be better served by gRPC, Connect, or similar.
+      </p>
+    </section>
+
+    <section class="faq-item">
+      <h2>How do I contribute?</h2>
+      <p>
+        Contributions are welcome. See the <a href="https://github.com/felixgeelhaar/mcp-go/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">contributing guide</a> for details.
+      </p>
+      <ul>
+        <li>Report bugs via <a href="https://github.com/felixgeelhaar/mcp-go/issues" target="_blank" rel="noopener">GitHub Issues</a></li>
+        <li>Propose features via discussions</li>
+        <li>Submit PRs with tests</li>
+      </ul>
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .docs {
+    max-width: 800px;
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+  }
+
+  .docs h1 {
+    margin-bottom: var(--space-8);
+  }
+
+  .faq-item {
+    margin-bottom: var(--space-8);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--color-border-default);
+  }
+
+  .faq-item:last-child {
+    border-bottom: none;
+  }
+
+  .faq-item h2 {
+    font-size: var(--text-xl);
+    margin-top: 0;
+    margin-bottom: var(--space-4);
+    color: var(--color-text-primary);
+  }
+</style>
