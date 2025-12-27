@@ -50,7 +50,7 @@ const navItems = [
     ].join(',');
     focusableElements = Array.from(nav.querySelectorAll(selectors))
       .filter(el => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
-    
+
     // Include the menu toggle button in the focus trap so keyboard users
     // can discover and reach the close control via Tab/Shift+Tab.
     if (
@@ -60,7 +60,7 @@ const navItems = [
     ) {
       focusableElements.push(toggle);
     }
-    
+
     firstFocusable = focusableElements[0] || null;
     lastFocusable = focusableElements[focusableElements.length - 1] || null;
   }

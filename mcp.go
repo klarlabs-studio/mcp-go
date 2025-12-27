@@ -1,29 +1,30 @@
 // Package mcp provides a framework for building MCP (Model Context Protocol) servers.
 //
-// mcp-go aims to be the "Gin framework" for MCP servers, providing:
-//   - Typed handlers with automatic JSON Schema generation
-//   - Gin-style middleware chains
-//   - Pluggable transports (stdio, HTTP+SSE)
-//   - Production-ready defaults
+// mcp-go aims to be the "Gin framework" for MCP servers, providing typed handlers
+// with automatic JSON Schema generation, Gin-style middleware chains, pluggable
+// transports (stdio, HTTP+SSE, WebSocket), and production-ready defaults.
 //
-// Basic usage:
+// # Handler Signatures
 //
-//	srv := mcp.NewServer(mcp.ServerInfo{
-//	    Name:    "my-server",
-//	    Version: "1.0.0",
-//	})
+// Tool handlers: func(input T) (R, error) or func(ctx, input T) (R, error)
 //
-//	type SearchInput struct {
-//	    Query string `json:"query" jsonschema:"required"`
-//	}
+// Resource handlers receive URI and template params (e.g., "users://{id}"):
 //
-//	srv.Tool("search").
-//	    Description("Search for items").
-//	    Handler(func(ctx context.Context, input SearchInput) ([]string, error) {
-//	        return []string{"result1", "result2"}, nil
-//	    })
+//	func(ctx, uri string, params map[string]string) (*ResourceContent, error)
 //
-//	mcp.ServeStdio(ctx, srv)
+// Prompt handlers: func(ctx, args map[string]string) (*PromptResult, error)
+//
+// # Progress Reporting
+//
+// Use ProgressFromContext in long-running handlers. Report is thread-safe.
+// Errors are non-fatal and typically ignored.
+//
+// # Error Handling
+//
+// Return errors from handlers. Use protocol.NewInvalidParams, protocol.NewNotFound,
+// etc. for specific MCP error codes.
+//
+// See examples/basic for a complete working example with tools, resources, and prompts.
 package mcp
 
 import (
@@ -307,6 +308,10 @@ func NewServer(info ServerInfo, opts ...Option) *Server {
 	return server.New(info, opts...)
 }
 
+// WithInstructions sets the server instructions that provide context to AI models
+// about how to use this server effectively.
+var WithInstructions = server.WithInstructions
+
 // ServeStdio runs the server using stdio transport.
 // This blocks until the context is canceled or an error occurs.
 func ServeStdio(ctx context.Context, srv *Server, opts ...ServeOption) error {
@@ -511,6 +516,11 @@ func (h *requestHandler) handleInitialize(req *protocol.Request) (*protocol.Resp
 			"version": manifest.Version,
 		},
 		"capabilities": capabilities,
+	}
+
+	// Include instructions if set
+	if instructions := h.srv.Instructions(); instructions != "" {
+		result["instructions"] = instructions
 	}
 
 	return protocol.NewResponse(req.ID, result), nil

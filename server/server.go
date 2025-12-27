@@ -46,12 +46,13 @@ type Option func(*Server)
 type Server struct {
 	mu sync.RWMutex
 
-	info        Info
-	tools       map[string]*Tool
-	resources   map[string]*Resource
-	prompts     map[string]*Prompt
-	middleware  []Middleware
-	completions *completionRegistry
+	info         Info
+	instructions string
+	tools        map[string]*Tool
+	resources    map[string]*Resource
+	prompts      map[string]*Prompt
+	middleware   []Middleware
+	completions  *completionRegistry
 }
 
 // New creates a new MCP server with the given info and options.
@@ -68,6 +69,21 @@ func New(info Info, opts ...Option) *Server {
 	}
 
 	return s
+}
+
+// WithInstructions sets the server instructions that provide context to AI models
+// about how to use this server effectively.
+func WithInstructions(instructions string) Option {
+	return func(s *Server) {
+		s.instructions = instructions
+	}
+}
+
+// Instructions returns the server instructions.
+func (s *Server) Instructions() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.instructions
 }
 
 // Info returns the server info.

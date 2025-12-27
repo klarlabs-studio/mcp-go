@@ -152,3 +152,25 @@ func TestServer_Manifest(t *testing.T) {
 		t.Error("expected Tools capability to be true")
 	}
 }
+
+func TestServer_WithInstructions(t *testing.T) {
+	t.Run("sets instructions via option", func(t *testing.T) {
+		instructions := "Use the search tool to find documents. Always validate results."
+		srv := New(
+			Info{Name: "test", Version: "1.0.0"},
+			WithInstructions(instructions),
+		)
+
+		if srv.Instructions() != instructions {
+			t.Errorf("Instructions() = %q, want %q", srv.Instructions(), instructions)
+		}
+	})
+
+	t.Run("returns empty when not set", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		if srv.Instructions() != "" {
+			t.Errorf("Instructions() = %q, want empty string", srv.Instructions())
+		}
+	})
+}

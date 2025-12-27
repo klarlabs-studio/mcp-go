@@ -237,6 +237,11 @@ tr:hover td {
   th, td {
     padding: var(--space-2) var(--space-3);
   }
+
+  .btn {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+  }
 }
 
 @media (max-width: 480px) {
