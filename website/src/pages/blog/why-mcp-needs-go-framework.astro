@@ -1,0 +1,190 @@
+---
+import BlogPostLayout from '../../layouts/BlogPostLayout.astro';
+---
+
+<BlogPostLayout
+  title="Why MCP needs a real Go framework (and not just SDKs)"
+  subtitle="Or: why we built mcp-go — the Gin-style framework for MCP servers in Go"
+  date="2024-12-27"
+  description="This post explains why MCP needs a real Go framework, how SDKs and frameworks differ, and why we built mcp-go."
+>
+
+<p>
+  The Model Context Protocol (MCP) is quickly becoming the connective tissue between AI agents, developer tools, and internal automation.
+</p>
+
+<p>
+  But if you're building MCP servers in Go today, you'll notice something familiar:
+  you're handed a protocol SDK — and then you're on your own.
+</p>
+
+<p>
+  That's fine for experimentation.
+  It breaks down quickly in production.
+</p>
+
+<p>
+  This post explains why MCP needs a real Go framework, how SDKs and frameworks differ, and why we built mcp-go.
+</p>
+
+<hr />
+
+<h2>MCP SDKs are necessary — but insufficient</h2>
+
+<p>SDKs do an important job:</p>
+
+<ul>
+  <li>enforce protocol correctness</li>
+  <li>track spec changes</li>
+  <li>expose low-level primitives</li>
+</ul>
+
+<p>That's exactly what they should do.</p>
+
+<p>But SDKs intentionally do not:</p>
+
+<ul>
+  <li>define application structure</li>
+  <li>enforce input validation</li>
+  <li>provide middleware</li>
+  <li>offer production defaults</li>
+  <li>optimize for developer experience</li>
+</ul>
+
+<p>If you've used Go long enough, this pattern is familiar.</p>
+
+<hr />
+
+<h2>The HTTP analogy everyone understands</h2>
+
+<p>Go already solved this once.</p>
+
+<ul>
+  <li><code>net/http</code> gives you correctness and control</li>
+  <li>frameworks like Gin give you structure, ergonomics, and safety</li>
+</ul>
+
+<p>Nobody argues that Gin "competes" with <code>net/http</code>.
+They live at different layers.</p>
+
+<p>MCP is no different.</p>
+
+<hr />
+
+<h2>The real problem: production MCP servers</h2>
+
+<p>Once you move beyond demos, every MCP server needs the same things:</p>
+
+<ul>
+  <li>typed inputs</li>
+  <li>validation before business logic</li>
+  <li>consistent error handling</li>
+  <li>middleware (auth, timeouts, logging, rate limits)</li>
+  <li>multiple transports (stdio for agents, HTTP for services)</li>
+  <li>predictable defaults</li>
+</ul>
+
+<p>Without a framework, every team rebuilds this themselves.</p>
+
+<p>That's wasted effort — and inconsistent outcomes.</p>
+
+<hr />
+
+<h2>Enter mcp-go</h2>
+
+<p>
+  mcp-go is a Go framework for building MCP servers, designed the same way Gin was designed for HTTP.
+</p>
+
+<p><strong>What it focuses on:</strong></p>
+
+<ul>
+  <li>typed handlers</li>
+  <li>automatic JSON Schema generation</li>
+  <li>first-class middleware</li>
+  <li>multiple transports from the same server</li>
+  <li>boring, production-safe defaults</li>
+</ul>
+
+<p><strong>What it intentionally avoids:</strong></p>
+
+<ul>
+  <li>agent logic</li>
+  <li>LLM abstractions</li>
+  <li>"magic"</li>
+  <li>protocol reinvention</li>
+</ul>
+
+<p>If the MCP SDK is the kernel, mcp-go is the runtime.</p>
+
+<hr />
+
+<h2>A concrete example</h2>
+
+<p>Instead of manually decoding maps and validating input, you write:</p>
+
+<pre><code>{`srv.Tool("search").
+    Input(SearchInput{}).
+    Handler(func(ctx context.Context, in SearchInput) (any, error) {
+        return svc.Search(ctx, in.Query, in.Limit)
+    })`}</code></pre>
+
+<p>Schema generation, validation, and error mapping happen automatically.</p>
+
+<p>
+  This is not about saving keystrokes.
+  It's about making the correct thing the easy thing.
+</p>
+
+<hr />
+
+<h2>SDKs, community libraries, and frameworks can coexist</h2>
+
+<p>The MCP ecosystem doesn't need "one library to rule them all".</p>
+
+<p>It needs:</p>
+
+<ul>
+  <li>a protocol SDK for correctness</li>
+  <li>community SDKs for flexibility</li>
+  <li>a framework for building real systems</li>
+</ul>
+
+<p>That's where mcp-go fits.</p>
+
+<hr />
+
+<h2>Who mcp-go is for</h2>
+
+<ul>
+  <li>Go platform and infra teams</li>
+  <li>AI tooling and automation services</li>
+  <li>OSS authors building on MCP</li>
+  <li>anyone deploying MCP servers in production</li>
+</ul>
+
+<p>
+  If you just want raw protocol access, an SDK is perfect.
+  If you want structure and safety, you want a framework.
+</p>
+
+<hr />
+
+<h2>Closing</h2>
+
+<p>
+  Frameworks don't replace SDKs.
+  They unlock adoption.
+</p>
+
+<p>
+  That's why we built mcp-go — and why we think MCP in Go needs one.
+</p>
+
+<p>
+  <a href="https://github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener">
+    View mcp-go on GitHub &rarr;
+  </a>
+</p>
+
+</BlogPostLayout>

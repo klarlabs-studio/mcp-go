@@ -1,0 +1,135 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const posts = [
+  {
+    slug: 'why-mcp-needs-go-framework',
+    title: 'Why MCP needs a real Go framework (and not just SDKs)',
+    subtitle: 'Or: why we built mcp-go — the Gin-style framework for MCP servers in Go',
+    date: '2024-12-27',
+    description: 'This post explains why MCP needs a real Go framework, how SDKs and frameworks differ, and why we built mcp-go.'
+  }
+];
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+}
+---
+
+<BaseLayout title="Blog" description="Articles about building MCP servers in Go with mcp-go.">
+  <section class="container blog-list">
+    <h1>Blog</h1>
+    <p class="intro">
+      Insights, updates, and guides from the mcp-go project.
+    </p>
+
+    <div class="posts">
+      {posts.map((post) => (
+        <article class="post-card">
+          <a href={`/mcp-go/blog/${post.slug}`} class="post-link">
+            <time datetime={post.date}>{formatDate(post.date)}</time>
+            <h2>{post.title}</h2>
+            {post.subtitle && <p class="post-subtitle">{post.subtitle}</p>}
+            <span class="read-more">Read more &rarr;</span>
+          </a>
+        </article>
+      ))}
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .blog-list {
+    max-width: 720px;
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-16);
+  }
+
+  .intro {
+    font-size: var(--text-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-10);
+  }
+
+  .posts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .post-card {
+    padding: var(--space-6);
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    transition: border-color 0.15s ease;
+  }
+
+  .post-card:hover {
+    border-color: var(--color-accent);
+  }
+
+  .post-link {
+    display: block;
+    text-decoration: none;
+  }
+
+  .post-link time {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+  }
+
+  .post-link h2 {
+    font-size: var(--text-xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+    transition: color 0.15s ease;
+  }
+
+  .post-card:hover .post-link h2 {
+    color: var(--color-accent);
+  }
+
+  .post-subtitle {
+    font-size: var(--text-base);
+    color: var(--color-text-secondary);
+    font-style: italic;
+    margin-bottom: var(--space-3);
+  }
+
+  .read-more {
+    font-size: var(--text-sm);
+    color: var(--color-accent);
+    font-weight: 500;
+  }
+
+  @media (max-width: 768px) {
+    .blog-list {
+      padding-top: var(--space-4);
+      padding-bottom: var(--space-8);
+    }
+
+    .intro {
+      font-size: var(--text-base);
+      margin-bottom: var(--space-6);
+    }
+
+    .post-card {
+      padding: var(--space-4);
+    }
+
+    .post-link h2 {
+      font-size: var(--text-lg);
+    }
+
+    .post-subtitle {
+      font-size: var(--text-sm);
+    }
+  }
+</style>
