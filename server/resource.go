@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// templateParamRegex matches {param} placeholders in URI templates.
+var templateParamRegex = regexp.MustCompile(`\{([^}]+)\}`)
+
 // ResourceContent represents the content returned by a resource read.
 type ResourceContent struct {
 	URI      string `json:"uri"`
@@ -104,9 +107,8 @@ func (b *ResourceBuilder) Handler(fn ResourceHandler) *ResourceBuilder {
 
 // compileTemplate converts a URI template to a regex for matching.
 func (r *Resource) compileTemplate() error {
-	// Extract parameter names and build regex
-	paramRegex := regexp.MustCompile(`\{([^}]+)\}`)
-	matches := paramRegex.FindAllStringSubmatch(r.uriTemplate, -1)
+	// Extract parameter names using pre-compiled regex
+	matches := templateParamRegex.FindAllStringSubmatch(r.uriTemplate, -1)
 
 	r.paramNames = make([]string, 0, len(matches))
 	for _, match := range matches {
@@ -117,7 +119,7 @@ func (r *Resource) compileTemplate() error {
 	pattern := regexp.QuoteMeta(r.uriTemplate)
 	pattern = strings.ReplaceAll(pattern, `\{`, "{")
 	pattern = strings.ReplaceAll(pattern, `\}`, "}")
-	pattern = paramRegex.ReplaceAllString(pattern, `([^/]+)`)
+	pattern = templateParamRegex.ReplaceAllString(pattern, `([^/]+)`)
 	pattern = "^" + pattern + "$"
 
 	var err error
@@ -127,7 +129,7 @@ func (r *Resource) compileTemplate() error {
 
 // Read executes the resource handler for the given URI.
 func (r *Resource) Read(ctx context.Context, uri string) (*ResourceContent, error) {
-	params, ok := matchURI(r.uriTemplate, uri)
+	params, ok := r.matchURI(uri)
 	if !ok {
 		return nil, fmt.Errorf("URI %q does not match template %q", uri, r.uriTemplate)
 	}
@@ -135,12 +137,12 @@ func (r *Resource) Read(ctx context.Context, uri string) (*ResourceContent, erro
 	return r.handler(ctx, uri, params)
 }
 
-// matchURI matches a URI against a template and extracts parameters.
-func matchURI(template, uri string) (map[string]string, bool) {
+// matchURITemplate matches a URI against a template string.
+// This compiles the template regex on each call and is intended for infrequent
+// operations like completion where we don't have a pre-compiled Resource.
+func matchURITemplate(template, uri string) (map[string]string, bool) {
 	// Extract parameter names
-	paramRegex := regexp.MustCompile(`\{([^}]+)\}`)
-	matches := paramRegex.FindAllStringSubmatch(template, -1)
-
+	matches := templateParamRegex.FindAllStringSubmatch(template, -1)
 	paramNames := make([]string, 0, len(matches))
 	for _, match := range matches {
 		paramNames = append(paramNames, match[1])
@@ -150,7 +152,7 @@ func matchURI(template, uri string) (map[string]string, bool) {
 	pattern := regexp.QuoteMeta(template)
 	pattern = strings.ReplaceAll(pattern, `\{`, "{")
 	pattern = strings.ReplaceAll(pattern, `\}`, "}")
-	pattern = paramRegex.ReplaceAllString(pattern, `([^/]+)`)
+	pattern = templateParamRegex.ReplaceAllString(pattern, `([^/]+)`)
 	pattern = "^" + pattern + "$"
 
 	re, err := regexp.Compile(pattern)
@@ -158,17 +160,36 @@ func matchURI(template, uri string) (map[string]string, bool) {
 		return nil, false
 	}
 
-	// Match URI
 	uriMatches := re.FindStringSubmatch(uri)
 	if uriMatches == nil {
 		return nil, false
 	}
 
-	// Extract parameter values
 	params := make(map[string]string)
 	for i, name := range paramNames {
 		if i+1 < len(uriMatches) {
 			params[name] = uriMatches[i+1]
+		}
+	}
+
+	return params, true
+}
+
+// matchURI matches a URI against the pre-compiled template regex and extracts parameters.
+func (r *Resource) matchURI(uri string) (map[string]string, bool) {
+	if r.uriRegex == nil {
+		return nil, false
+	}
+
+	matches := r.uriRegex.FindStringSubmatch(uri)
+	if matches == nil {
+		return nil, false
+	}
+
+	params := make(map[string]string)
+	for i, name := range r.paramNames {
+		if i+1 < len(matches) {
+			params[name] = matches[i+1]
 		}
 	}
 

@@ -103,7 +103,7 @@ func TestPrompt_Get(t *testing.T) {
 				}, nil
 			})
 
-		prompt, ok := srv.getPrompt("greet")
+		prompt, ok := srv.GetPrompt("greet")
 		if !ok {
 			t.Fatal("prompt not found")
 		}
@@ -136,7 +136,7 @@ func TestPrompt_Get(t *testing.T) {
 				return nil, expectedErr
 			})
 
-		prompt, _ := srv.getPrompt("failing")
+		prompt, _ := srv.GetPrompt("failing")
 		_, err := prompt.Get(context.Background(), nil)
 
 		if !errors.Is(err, expectedErr) {
@@ -153,7 +153,7 @@ func TestPrompt_Get(t *testing.T) {
 				return &PromptResult{}, nil
 			})
 
-		prompt, _ := srv.getPrompt("require-args")
+		prompt, _ := srv.GetPrompt("require-args")
 
 		// Missing required argument
 		_, err := prompt.Get(context.Background(), map[string]string{})

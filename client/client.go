@@ -4,12 +4,21 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/felixgeelhaar/mcp-go/protocol"
+)
+
+// Sentinel errors for client operations.
+var (
+	// ErrInvalidResult indicates the server returned an unexpected result type.
+	ErrInvalidResult = errors.New("invalid result type")
+	// ErrNoContent indicates the server returned no content for a resource.
+	ErrNoContent = errors.New("no content")
 )
 
 // Transport defines the interface for client-side transport.
@@ -176,7 +185,7 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("initialize: invalid result type")
+		return nil, fmt.Errorf("initialize: %w", ErrInvalidResult)
 	}
 
 	info := &ServerInfo{}
@@ -222,12 +231,12 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("list tools: invalid result type")
+		return nil, fmt.Errorf("list tools: %w", ErrInvalidResult)
 	}
 
 	toolsRaw, ok := result["tools"].([]any)
 	if !ok {
-		return nil, fmt.Errorf("list tools: invalid tools type")
+		return nil, fmt.Errorf("list tools: %w", ErrInvalidResult)
 	}
 
 	tools := make([]Tool, 0, len(toolsRaw))
@@ -269,7 +278,7 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*Too
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("call tool %q: invalid result type", name)
+		return nil, fmt.Errorf("call tool %q: %w", name, ErrInvalidResult)
 	}
 
 	toolResult := &ToolResult{}
@@ -311,12 +320,12 @@ func (c *Client) ListResources(ctx context.Context) ([]Resource, error) {
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("list resources: invalid result type")
+		return nil, fmt.Errorf("list resources: %w", ErrInvalidResult)
 	}
 
 	resourcesRaw, ok := result["resources"].([]any)
 	if !ok {
-		return nil, fmt.Errorf("list resources: invalid resources type")
+		return nil, fmt.Errorf("list resources: %w", ErrInvalidResult)
 	}
 
 	resources := make([]Resource, 0, len(resourcesRaw))
@@ -358,17 +367,17 @@ func (c *Client) ReadResource(ctx context.Context, uri string) (*ResourceContent
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("read resource %q: invalid result type", uri)
+		return nil, fmt.Errorf("read resource %q: %w", uri, ErrInvalidResult)
 	}
 
 	contents, ok := result["contents"].([]any)
 	if !ok || len(contents) == 0 {
-		return nil, fmt.Errorf("read resource %q: no content", uri)
+		return nil, fmt.Errorf("read resource %q: %w", uri, ErrNoContent)
 	}
 
 	cm, ok := contents[0].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("read resource %q: invalid content type", uri)
+		return nil, fmt.Errorf("read resource %q: %w", uri, ErrInvalidResult)
 	}
 
 	content := &ResourceContent{}
@@ -397,12 +406,12 @@ func (c *Client) ListPrompts(ctx context.Context) ([]Prompt, error) {
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("list prompts: invalid result type")
+		return nil, fmt.Errorf("list prompts: %w", ErrInvalidResult)
 	}
 
 	promptsRaw, ok := result["prompts"].([]any)
 	if !ok {
-		return nil, fmt.Errorf("list prompts: invalid prompts type")
+		return nil, fmt.Errorf("list prompts: %w", ErrInvalidResult)
 	}
 
 	prompts := make([]Prompt, 0, len(promptsRaw))
@@ -460,7 +469,7 @@ func (c *Client) GetPrompt(ctx context.Context, name string, arguments map[strin
 
 	result, ok := resp.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("get prompt %q: invalid result type", name)
+		return nil, fmt.Errorf("get prompt %q: %w", name, ErrInvalidResult)
 	}
 
 	promptResult := &PromptResult{}

@@ -88,7 +88,7 @@ func TestResource_Read(t *testing.T) {
 				}, nil
 			})
 
-		resource, ok := srv.getResource("users://{id}/profile")
+		resource, ok := srv.GetResource("users://{id}/profile")
 		if !ok {
 			t.Fatal("resource not found")
 		}
@@ -117,7 +117,7 @@ func TestResource_Read(t *testing.T) {
 				}, nil
 			})
 
-		resource, _ := srv.getResource("repos://{owner}/{repo}/files/{path}")
+		resource, _ := srv.GetResource("repos://{owner}/{repo}/files/{path}")
 		content, err := resource.Read(context.Background(), "repos://alice/myrepo/files/main.go")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -137,7 +137,7 @@ func TestResource_Read(t *testing.T) {
 				return nil, expectedErr
 			})
 
-		resource, _ := srv.getResource("missing://{id}")
+		resource, _ := srv.GetResource("missing://{id}")
 		_, err := resource.Read(context.Background(), "missing://123")
 
 		if !errors.Is(err, expectedErr) {
@@ -153,7 +153,7 @@ func TestResource_Read(t *testing.T) {
 				return &ResourceContent{URI: uri}, nil
 			})
 
-		resource, _ := srv.getResource("users://{id}")
+		resource, _ := srv.GetResource("users://{id}")
 		_, err := resource.Read(context.Background(), "other://123")
 
 		if err == nil {
@@ -214,10 +214,10 @@ func TestMatchURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := matchURI(tt.template, tt.uri)
+			got, ok := matchURITemplate(tt.template, tt.uri)
 
 			if ok != tt.wantOK {
-				t.Errorf("matchURI() ok = %v, want %v", ok, tt.wantOK)
+				t.Errorf("matchURITemplate() ok = %v, want %v", ok, tt.wantOK)
 				return
 			}
 
@@ -226,13 +226,13 @@ func TestMatchURI(t *testing.T) {
 			}
 
 			if len(got) != len(tt.want) {
-				t.Errorf("matchURI() got %d params, want %d", len(got), len(tt.want))
+				t.Errorf("matchURITemplate() got %d params, want %d", len(got), len(tt.want))
 				return
 			}
 
 			for k, v := range tt.want {
 				if got[k] != v {
-					t.Errorf("matchURI() got[%q] = %q, want %q", k, got[k], v)
+					t.Errorf("matchURITemplate() got[%q] = %q, want %q", k, got[k], v)
 				}
 			}
 		})

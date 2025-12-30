@@ -422,7 +422,7 @@ func DefaultMiddlewareWithTimeout(logger Logger, timeout time.Duration) []Middle
 
 // LogF creates a new log field with the given key and value.
 func LogF(key string, value any) LogField {
-	return middleware.F(key, value)
+	return middleware.NewField(key, value)
 }
 
 // OpenTelemetry re-exports for convenience.
@@ -470,30 +470,29 @@ func (h *requestHandler) HandleRequest(ctx context.Context, req *protocol.Reques
 	return h.handleFunc(ctx, req)
 }
 
-func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
-	switch req.Method {
-	case protocol.MethodInitialize:
-		return h.handleInitialize(req)
-	case protocol.MethodToolsList:
-		return h.handleToolsList(req)
-	case protocol.MethodToolsCall:
-		return h.handleToolsCall(ctx, req)
-	case protocol.MethodResourcesList:
-		return h.handleResourcesList(req)
-	case protocol.MethodResourcesRead:
-		return h.handleResourcesRead(ctx, req)
-	case protocol.MethodPromptsList:
-		return h.handlePromptsList(req)
-	case protocol.MethodPromptsGet:
-		return h.handlePromptsGet(ctx, req)
-	case protocol.MethodPing:
-		return h.handlePing(req)
-	default:
-		return nil, protocol.NewMethodNotFound(req.Method)
+// methodHandlers maps MCP methods to their handlers.
+// All handlers use the same signature (ctx, req) for uniform dispatch.
+func (h *requestHandler) methodHandlers() map[string]func(context.Context, *protocol.Request) (*protocol.Response, error) {
+	return map[string]func(context.Context, *protocol.Request) (*protocol.Response, error){
+		protocol.MethodInitialize:    h.handleInitialize,
+		protocol.MethodToolsList:     h.handleToolsList,
+		protocol.MethodToolsCall:     h.handleToolsCall,
+		protocol.MethodResourcesList: h.handleResourcesList,
+		protocol.MethodResourcesRead: h.handleResourcesRead,
+		protocol.MethodPromptsList:   h.handlePromptsList,
+		protocol.MethodPromptsGet:    h.handlePromptsGet,
+		protocol.MethodPing:          h.handlePing,
 	}
 }
 
-func (h *requestHandler) handleInitialize(req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	if handler, ok := h.methodHandlers()[req.Method]; ok {
+		return handler(ctx, req)
+	}
+	return nil, protocol.NewMethodNotFound(req.Method)
+}
+
+func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	manifest := h.srv.Manifest()
 
 	// Build capabilities based on what's registered
@@ -526,7 +525,7 @@ func (h *requestHandler) handleInitialize(req *protocol.Request) (*protocol.Resp
 	return protocol.NewResponse(req.ID, result), nil
 }
 
-func (h *requestHandler) handleToolsList(req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handleToolsList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	tools := h.srv.Tools()
 
 	toolList := make([]map[string]any, 0, len(tools))
@@ -599,7 +598,7 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	return protocol.NewResponse(req.ID, response), nil
 }
 
-func (h *requestHandler) handleResourcesList(req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handleResourcesList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	resources := h.srv.Resources()
 
 	resourceList := make([]map[string]any, 0, len(resources))
@@ -670,7 +669,7 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 	return protocol.NewResponse(req.ID, result), nil
 }
 
-func (h *requestHandler) handlePromptsList(req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handlePromptsList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	prompts := h.srv.Prompts()
 
 	promptList := make([]map[string]any, 0, len(prompts))
@@ -744,7 +743,7 @@ func (h *requestHandler) handlePromptsGet(ctx context.Context, req *protocol.Req
 	return protocol.NewResponse(req.ID, response), nil
 }
 
-func (h *requestHandler) handlePing(req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handlePing(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	return protocol.NewResponse(req.ID, map[string]any{}), nil
 }
 

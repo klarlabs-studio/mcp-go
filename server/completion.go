@@ -80,7 +80,7 @@ func (r *completionRegistry) Handle(ctx context.Context, ref CompletionRef, arg 
 		// Try to match by URI template pattern if exact match fails
 		if handler == nil {
 			for template, h := range r.resourceHandlers {
-				if _, ok := matchURI(template, ref.URI); ok {
+				if _, ok := matchURITemplate(template, ref.URI); ok {
 					handler = h
 					break
 				}

@@ -147,17 +147,12 @@ func (s *Server) registerTool(t *Tool) {
 	s.tools[t.name] = t
 }
 
-// getTool retrieves a tool by name (internal).
-func (s *Server) getTool(name string) (*Tool, bool) {
+// GetTool retrieves a tool by name.
+func (s *Server) GetTool(name string) (*Tool, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.tools[name]
 	return t, ok
-}
-
-// GetTool retrieves a tool by name (public).
-func (s *Server) GetTool(name string) (*Tool, bool) {
-	return s.getTool(name)
 }
 
 // Resource starts building a new resource with the given URI template.
@@ -195,17 +190,12 @@ func (s *Server) registerResource(r *Resource) {
 	s.resources[r.uriTemplate] = r
 }
 
-// getResource retrieves a resource by URI template.
-func (s *Server) getResource(uriTemplate string) (*Resource, bool) {
+// GetResource retrieves a resource by URI template.
+func (s *Server) GetResource(uriTemplate string) (*Resource, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	r, ok := s.resources[uriTemplate]
 	return r, ok
-}
-
-// GetResource retrieves a resource by URI template (public).
-func (s *Server) GetResource(uriTemplate string) (*Resource, bool) {
-	return s.getResource(uriTemplate)
 }
 
 // FindResourceForURI finds a resource that matches the given URI.
@@ -214,7 +204,7 @@ func (s *Server) FindResourceForURI(uri string) (*Resource, bool) {
 	defer s.mu.RUnlock()
 
 	for _, r := range s.resources {
-		if _, ok := matchURI(r.uriTemplate, uri); ok {
+		if _, ok := r.matchURI(uri); ok {
 			return r, true
 		}
 	}
@@ -255,17 +245,12 @@ func (s *Server) registerPrompt(p *Prompt) {
 	s.prompts[p.name] = p
 }
 
-// getPrompt retrieves a prompt by name.
-func (s *Server) getPrompt(name string) (*Prompt, bool) {
+// GetPrompt retrieves a prompt by name.
+func (s *Server) GetPrompt(name string) (*Prompt, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.prompts[name]
 	return p, ok
-}
-
-// GetPrompt retrieves a prompt by name (public).
-func (s *Server) GetPrompt(name string) (*Prompt, bool) {
-	return s.getPrompt(name)
 }
 
 // PromptCompletion starts building a completion handler for a prompt.

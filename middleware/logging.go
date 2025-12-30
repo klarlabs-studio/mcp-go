@@ -21,10 +21,14 @@ type Field struct {
 	Value any
 }
 
-// F creates a new Field with the given key and value.
-func F(key string, value any) Field {
+// NewField creates a new Field with the given key and value.
+func NewField(key string, value any) Field {
 	return Field{Key: key, Value: value}
 }
+
+// F is an alias for NewField for brevity in internal usage.
+// Deprecated: Use NewField instead for new code.
+var F = NewField
 
 // Logging returns middleware that logs request details.
 // Successful requests are logged at info level, errors at error level.
@@ -39,17 +43,17 @@ func Logging(logger Logger) Middleware {
 
 			// Build fields
 			fields := []Field{
-				F("method", req.Method),
-				F("duration", duration),
+				NewField("method", req.Method),
+				NewField("duration", duration),
 			}
 
 			// Add request ID if present
 			if requestID := RequestIDFromContext(ctx); requestID != "" {
-				fields = append(fields, F("request_id", requestID))
+				fields = append(fields, NewField("request_id", requestID))
 			}
 
 			if err != nil {
-				fields = append(fields, F("error", err.Error()))
+				fields = append(fields, NewField("error", err.Error()))
 				logger.Error("request failed", fields...)
 			} else {
 				logger.Info("request completed", fields...)

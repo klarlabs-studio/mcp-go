@@ -81,7 +81,9 @@ func OTel(opts ...OTelOption) Middleware {
 		metric.WithInstrumentationVersion("1.0.0"),
 	)
 
-	// Create metrics instruments
+	// Create metrics instruments.
+	// Errors are intentionally ignored: the OTel SDK returns no-op instruments on failure,
+	// allowing the middleware to function without metrics rather than failing entirely.
 	requestCounter, _ := meter.Int64Counter(
 		"mcp.server.requests",
 		metric.WithDescription("Total number of MCP requests"),

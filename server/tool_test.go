@@ -73,7 +73,7 @@ func TestTool_Execute(t *testing.T) {
 				return Output{Sum: input.A + input.B}, nil
 			})
 
-		tool, ok := srv.getTool("add")
+		tool, ok := srv.GetTool("add")
 		if !ok {
 			t.Fatal("tool not found")
 		}
@@ -108,7 +108,7 @@ func TestTool_Execute(t *testing.T) {
 				return input.Value, nil
 			})
 
-		tool, _ := srv.getTool("echo")
+		tool, _ := srv.GetTool("echo")
 		result, err := tool.Execute(context.Background(), []byte(`{"value": "hello"}`))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -130,7 +130,7 @@ func TestTool_Execute(t *testing.T) {
 				return "", expectedErr
 			})
 
-		tool, _ := srv.getTool("failing")
+		tool, _ := srv.GetTool("failing")
 		_, err := tool.Execute(context.Background(), []byte(`{}`))
 
 		if err == nil {
@@ -153,7 +153,7 @@ func TestTool_Execute(t *testing.T) {
 				return input.Value, nil
 			})
 
-		tool, _ := srv.getTool("parse-test")
+		tool, _ := srv.GetTool("parse-test")
 		_, err := tool.Execute(context.Background(), []byte(`{invalid`))
 
 		if err == nil {
