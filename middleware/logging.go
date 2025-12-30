@@ -27,6 +27,7 @@ func NewField(key string, value any) Field {
 }
 
 // F is an alias for NewField for brevity in internal usage.
+//
 // Deprecated: Use NewField instead for new code.
 var F = NewField
 
