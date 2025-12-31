@@ -237,6 +237,46 @@ srv.Tool("calculate").
     })
 ```
 
+#### Return Type Flexibility
+
+Tool handlers can return any JSON-serializable type. The framework automatically handles serialization:
+
+```go
+// String returns are used as-is
+srv.Tool("greet").
+    Handler(func(input GreetInput) (string, error) {
+        return "Hello, " + input.Name, nil
+    })
+
+// Structs are automatically JSON-serialized
+type StatusResult struct {
+    Status  string `json:"status"`
+    Count   int    `json:"count"`
+    Healthy bool   `json:"healthy"`
+}
+
+srv.Tool("status").
+    Handler(func(input StatusInput) (StatusResult, error) {
+        return StatusResult{
+            Status:  "ok",
+            Count:   42,
+            Healthy: true,
+        }, nil
+    })
+// Response text: {"status":"ok","count":42,"healthy":true}
+
+// Maps and slices work too
+srv.Tool("list").
+    Handler(func(input ListInput) (map[string]any, error) {
+        return map[string]any{
+            "items": []string{"a", "b", "c"},
+            "total": 3,
+        }, nil
+    })
+```
+
+This ensures compliance with the MCP specification which requires the `text` field to always be a string.
+
 ### Resources
 
 Resources expose data via URI templates:
