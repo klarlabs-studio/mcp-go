@@ -31,6 +31,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/felixgeelhaar/mcp-go/middleware"
@@ -585,12 +586,25 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		return nil, protocol.NewInternalError(err.Error())
 	}
 
-	// Format result
+	// Format result - ensure text is always a string per MCP spec
+	var textContent string
+	switch v := result.(type) {
+	case string:
+		textContent = v
+	default:
+		// Serialize non-string results to JSON string
+		data, err := json.Marshal(v)
+		if err != nil {
+			return nil, protocol.NewInternalError(fmt.Sprintf("failed to serialize tool result: %v", err))
+		}
+		textContent = string(data)
+	}
+
 	response := map[string]any{
 		"content": []map[string]any{
 			{
 				"type": "text",
-				"text": result,
+				"text": textContent,
 			},
 		},
 	}

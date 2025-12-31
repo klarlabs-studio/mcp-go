@@ -177,6 +177,110 @@ func TestServeStdio_ToolsCall(t *testing.T) {
 	}
 }
 
+func TestServeStdio_ToolsCall_StructResult(t *testing.T) {
+	srv := NewServer(ServerInfo{
+		Name:    "test-server",
+		Version: "1.0.0",
+	})
+
+	type StatusInput struct{}
+	type StatusResult struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Count   int    `json:"count"`
+	}
+
+	srv.Tool("status").
+		Description("Get status").
+		Handler(func(input StatusInput) (StatusResult, error) {
+			return StatusResult{
+				Status:  "ok",
+				Message: "All systems operational",
+				Count:   42,
+			}, nil
+		})
+
+	// Prepare tools/call request
+	callReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "status",
+			"arguments": map[string]any{},
+		},
+	}
+	callBytes, _ := json.Marshal(callReq)
+
+	in := bytes.NewBuffer(append(callBytes, '\n'))
+	out := &bytes.Buffer{}
+
+	tr := transport.NewStdio(
+		transport.WithStdin(in),
+		transport.WithStdout(out),
+	)
+
+	handler := newRequestHandler(srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = tr.Serve(ctx, handler)
+
+	output := out.String()
+
+	// Verify the response contains properly serialized JSON
+	if !strings.Contains(output, `"content"`) {
+		t.Errorf("expected content in response, got %q", output)
+	}
+
+	// The text field should be a JSON string, not a nested object
+	// Parse the response and verify the text field is a string
+	var resp struct {
+		Result struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
+	}
+
+	// Find the JSON response line (skip any empty lines)
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &resp); err == nil {
+			break
+		}
+	}
+
+	if len(resp.Result.Content) == 0 {
+		t.Fatalf("expected content array, got empty")
+	}
+
+	text := resp.Result.Content[0].Text
+	if text == "" {
+		t.Fatalf("expected text to be non-empty string")
+	}
+
+	// The text should be valid JSON that can be parsed
+	var result StatusResult
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		t.Fatalf("text should be valid JSON: %v, got: %q", err, text)
+	}
+
+	if result.Status != "ok" {
+		t.Errorf("Status = %q, want %q", result.Status, "ok")
+	}
+	if result.Message != "All systems operational" {
+		t.Errorf("Message = %q, want %q", result.Message, "All systems operational")
+	}
+	if result.Count != 42 {
+		t.Errorf("Count = %d, want %d", result.Count, 42)
+	}
+}
+
 func TestServeStdio_Ping(t *testing.T) {
 	srv := NewServer(ServerInfo{
 		Name:    "test-server",
