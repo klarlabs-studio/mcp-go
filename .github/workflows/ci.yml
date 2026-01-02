@@ -122,3 +122,39 @@ jobs:
 
       - name: Build examples
         run: go build ./examples/...
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Install security tools
+        run: |
+          go install github.com/felixgeelhaar/verdictsec/cmd/verdict@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/gitleaks/gitleaks/v8@latest
+
+      - name: Run VerdictSec Security Scan
+        run: |
+          verdict scan --json -o verdict-results.json || true
+          gosec -fmt sarif -out gosec.sarif ./... || true
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec.sarif
+        if: always()
+
+      - name: Upload VerdictSec results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: verdict-results.json
+        if: always()
