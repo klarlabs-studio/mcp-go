@@ -126,6 +126,9 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v6
 
@@ -139,7 +142,6 @@ jobs:
           go install github.com/felixgeelhaar/verdictsec/cmd/verdict@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          go install github.com/gitleaks/gitleaks/v8@latest
 
       - name: Run VerdictSec Security Scan
         run: |
