@@ -496,16 +496,17 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	manifest := h.srv.Manifest()
 
-	// Build capabilities based on what's registered
+	// Build capabilities based on explicit flags OR registered handlers
+	// This ensures capabilities are advertised even if users don't set flags explicitly
 	capabilities := make(map[string]any)
 
-	if manifest.Capabilities.Tools {
+	if manifest.Capabilities.Tools || len(h.srv.Tools()) > 0 {
 		capabilities["tools"] = map[string]any{}
 	}
-	if manifest.Capabilities.Resources {
+	if manifest.Capabilities.Resources || len(h.srv.Resources()) > 0 {
 		capabilities["resources"] = map[string]any{}
 	}
-	if manifest.Capabilities.Prompts {
+	if manifest.Capabilities.Prompts || len(h.srv.Prompts()) > 0 {
 		capabilities["prompts"] = map[string]any{}
 	}
 

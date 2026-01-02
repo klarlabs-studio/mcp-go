@@ -315,3 +315,158 @@ func TestServeStdio_Ping(t *testing.T) {
 		t.Errorf("expected result in response, got %q", output)
 	}
 }
+
+func TestServeStdio_Initialize_AutoDetectCapabilities(t *testing.T) {
+	// Create server WITHOUT explicit capabilities
+	srv := NewServer(ServerInfo{
+		Name:    "test-server",
+		Version: "1.0.0",
+		// Note: No Capabilities set - should auto-detect from registered handlers
+	})
+
+	// Register a tool (without setting Capabilities.Tools = true)
+	type Input struct {
+		Query string `json:"query"`
+	}
+	srv.Tool("search").
+		Description("Search for items").
+		Handler(func(input Input) (string, error) {
+			return "result", nil
+		})
+
+	// Register a resource (without setting Capabilities.Resources = true)
+	srv.Resource("data://info").
+		Name("Info").
+		Handler(func(ctx context.Context, uri string, params map[string]string) (*ResourceContent, error) {
+			return &ResourceContent{URI: uri, Text: "info"}, nil
+		})
+
+	// Register a prompt (without setting Capabilities.Prompts = true)
+	srv.Prompt("greeting").
+		Description("A greeting prompt").
+		Handler(func(ctx context.Context, args map[string]string) (*PromptResult, error) {
+			return &PromptResult{
+				Messages: []PromptMessage{{Role: "assistant", Content: TextContent{Type: "text", Text: "Hello"}}},
+			}, nil
+		})
+
+	// Prepare initialize request
+	initReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2024-11-05",
+			"clientInfo": map[string]any{
+				"name":    "test-client",
+				"version": "1.0.0",
+			},
+		},
+	}
+	initBytes, _ := json.Marshal(initReq)
+
+	in := bytes.NewBuffer(append(initBytes, '\n'))
+	out := &bytes.Buffer{}
+
+	tr := transport.NewStdio(
+		transport.WithStdin(in),
+		transport.WithStdout(out),
+	)
+
+	handler := newRequestHandler(srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = tr.Serve(ctx, handler)
+
+	output := out.String()
+
+	// Parse the response to verify capabilities
+	var resp struct {
+		Result struct {
+			Capabilities map[string]any `json:"capabilities"`
+		} `json:"result"`
+	}
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &resp); err == nil {
+			break
+		}
+	}
+
+	// Verify all three capabilities are present (auto-detected from registered handlers)
+	if _, ok := resp.Result.Capabilities["tools"]; !ok {
+		t.Errorf("expected tools capability to be advertised, got capabilities: %v", resp.Result.Capabilities)
+	}
+	if _, ok := resp.Result.Capabilities["resources"]; !ok {
+		t.Errorf("expected resources capability to be advertised, got capabilities: %v", resp.Result.Capabilities)
+	}
+	if _, ok := resp.Result.Capabilities["prompts"]; !ok {
+		t.Errorf("expected prompts capability to be advertised, got capabilities: %v", resp.Result.Capabilities)
+	}
+}
+
+func TestServeStdio_Initialize_EmptyCapabilities(t *testing.T) {
+	// Create server with no tools, resources, or prompts
+	srv := NewServer(ServerInfo{
+		Name:    "test-server",
+		Version: "1.0.0",
+	})
+
+	// Prepare initialize request
+	initReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2024-11-05",
+			"clientInfo": map[string]any{
+				"name":    "test-client",
+				"version": "1.0.0",
+			},
+		},
+	}
+	initBytes, _ := json.Marshal(initReq)
+
+	in := bytes.NewBuffer(append(initBytes, '\n'))
+	out := &bytes.Buffer{}
+
+	tr := transport.NewStdio(
+		transport.WithStdin(in),
+		transport.WithStdout(out),
+	)
+
+	handler := newRequestHandler(srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = tr.Serve(ctx, handler)
+
+	output := out.String()
+
+	// Parse the response to verify capabilities
+	var resp struct {
+		Result struct {
+			Capabilities map[string]any `json:"capabilities"`
+		} `json:"result"`
+	}
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := json.Unmarshal([]byte(line), &resp); err == nil {
+			break
+		}
+	}
+
+	// Verify capabilities is empty when nothing is registered
+	if len(resp.Result.Capabilities) != 0 {
+		t.Errorf("expected empty capabilities when nothing registered, got: %v", resp.Result.Capabilities)
+	}
+}
