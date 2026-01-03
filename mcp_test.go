@@ -76,6 +76,144 @@ func TestServeStdio_Initialize(t *testing.T) {
 	}
 }
 
+func TestServeStdio_Initialize_WithMetadata(t *testing.T) {
+	srv := NewServer(
+		ServerInfo{
+			Name:    "metadata-test",
+			Version: "2.0.0",
+		},
+		WithTitle("Metadata Test Server"),
+		WithDescription("A server with full metadata"),
+		WithWebsiteURL("https://example.com/docs"),
+		WithIcons(Icon{URI: "https://example.com/icon.png", MimeType: "image/png", Size: 64}),
+		WithBuildInfo("abc123def", "2025-01-03"),
+	)
+
+	// Prepare initialize request
+	initReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2024-11-05",
+			"clientInfo": map[string]any{
+				"name":    "test-client",
+				"version": "1.0.0",
+			},
+		},
+	}
+	initBytes, _ := json.Marshal(initReq)
+
+	in := bytes.NewBuffer(append(initBytes, '\n'))
+	out := &bytes.Buffer{}
+
+	tr := transport.NewStdio(
+		transport.WithStdin(in),
+		transport.WithStdout(out),
+	)
+
+	handler := newRequestHandler(srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = tr.Serve(ctx, handler)
+
+	output := out.String()
+
+	// Verify required fields
+	if !strings.Contains(output, `"name":"metadata-test"`) {
+		t.Errorf("expected server name in response, got %q", output)
+	}
+	if !strings.Contains(output, `"version":"2.0.0"`) {
+		t.Errorf("expected version in response, got %q", output)
+	}
+
+	// Verify optional metadata fields
+	if !strings.Contains(output, `"title":"Metadata Test Server"`) {
+		t.Errorf("expected title in response, got %q", output)
+	}
+	if !strings.Contains(output, `"description":"A server with full metadata"`) {
+		t.Errorf("expected description in response, got %q", output)
+	}
+	if !strings.Contains(output, `"websiteUrl":"https://example.com/docs"`) {
+		t.Errorf("expected websiteUrl in response, got %q", output)
+	}
+	if !strings.Contains(output, `"icons":[`) {
+		t.Errorf("expected icons array in response, got %q", output)
+	}
+	if !strings.Contains(output, `"uri":"https://example.com/icon.png"`) {
+		t.Errorf("expected icon URI in response, got %q", output)
+	}
+	if !strings.Contains(output, `"buildInfo":{`) {
+		t.Errorf("expected buildInfo in response, got %q", output)
+	}
+	if !strings.Contains(output, `"commit":"abc123def"`) {
+		t.Errorf("expected commit in buildInfo, got %q", output)
+	}
+}
+
+func TestServeStdio_Initialize_OmitsEmptyMetadata(t *testing.T) {
+	// Server with NO optional metadata set
+	srv := NewServer(ServerInfo{
+		Name:    "minimal-server",
+		Version: "1.0.0",
+	})
+
+	initReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2024-11-05",
+			"clientInfo": map[string]any{
+				"name":    "test-client",
+				"version": "1.0.0",
+			},
+		},
+	}
+	initBytes, _ := json.Marshal(initReq)
+
+	in := bytes.NewBuffer(append(initBytes, '\n'))
+	out := &bytes.Buffer{}
+
+	tr := transport.NewStdio(
+		transport.WithStdin(in),
+		transport.WithStdout(out),
+	)
+
+	handler := newRequestHandler(srv)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_ = tr.Serve(ctx, handler)
+
+	output := out.String()
+
+	// Verify required fields are present
+	if !strings.Contains(output, `"name":"minimal-server"`) {
+		t.Errorf("expected server name in response, got %q", output)
+	}
+
+	// Verify optional fields are NOT present (omitempty behavior)
+	if strings.Contains(output, `"title"`) {
+		t.Errorf("expected title to be omitted when empty, got %q", output)
+	}
+	if strings.Contains(output, `"description"`) {
+		t.Errorf("expected description to be omitted when empty, got %q", output)
+	}
+	if strings.Contains(output, `"websiteUrl"`) {
+		t.Errorf("expected websiteUrl to be omitted when empty, got %q", output)
+	}
+	if strings.Contains(output, `"icons"`) {
+		t.Errorf("expected icons to be omitted when empty, got %q", output)
+	}
+	if strings.Contains(output, `"buildInfo"`) {
+		t.Errorf("expected buildInfo to be omitted when nil, got %q", output)
+	}
+}
+
 func TestServeStdio_ToolsList(t *testing.T) {
 	srv := NewServer(ServerInfo{
 		Name:    "test-server",

@@ -39,10 +39,28 @@ type Client struct {
 	requestID  atomic.Int64
 }
 
+// Icon represents an icon for UI display.
+type Icon struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Size     int    `json:"size,omitempty"`
+}
+
+// BuildInfo contains build metadata for debugging and version verification.
+type BuildInfo struct {
+	Commit    string `json:"commit,omitempty"`
+	BuildDate string `json:"buildDate,omitempty"`
+}
+
 // ServerInfo contains information about the connected server.
 type ServerInfo struct {
 	Name            string
 	Version         string
+	Title           string
+	Description     string
+	WebsiteURL      string
+	Icons           []Icon
+	BuildInfo       *BuildInfo
 	ProtocolVersion string
 	Capabilities    Capabilities
 }
@@ -167,6 +185,39 @@ func New(transport Transport, opts ...Option) *Client {
 	}
 }
 
+// parseIcons parses an array of icon data into Icon structs.
+func parseIcons(icons []any) []Icon {
+	result := make([]Icon, 0, len(icons))
+	for _, item := range icons {
+		if m, ok := item.(map[string]any); ok {
+			icon := Icon{}
+			if uri, ok := m["uri"].(string); ok {
+				icon.URI = uri
+			}
+			if mime, ok := m["mimeType"].(string); ok {
+				icon.MimeType = mime
+			}
+			if size, ok := m["size"].(float64); ok {
+				icon.Size = int(size)
+			}
+			result = append(result, icon)
+		}
+	}
+	return result
+}
+
+// parseBuildInfo parses build info data into a BuildInfo struct.
+func parseBuildInfo(bi map[string]any) *BuildInfo {
+	info := &BuildInfo{}
+	if commit, ok := bi["commit"].(string); ok {
+		info.Commit = commit
+	}
+	if buildDate, ok := bi["buildDate"].(string); ok {
+		info.BuildDate = buildDate
+	}
+	return info
+}
+
 // Initialize performs the MCP handshake with the server.
 func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 	params := map[string]any{
@@ -200,6 +251,21 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 		}
 		if ver, ok := si["version"].(string); ok {
 			info.Version = ver
+		}
+		if title, ok := si["title"].(string); ok {
+			info.Title = title
+		}
+		if desc, ok := si["description"].(string); ok {
+			info.Description = desc
+		}
+		if url, ok := si["websiteUrl"].(string); ok {
+			info.WebsiteURL = url
+		}
+		if icons, ok := si["icons"].([]any); ok {
+			info.Icons = parseIcons(icons)
+		}
+		if bi, ok := si["buildInfo"].(map[string]any); ok {
+			info.BuildInfo = parseBuildInfo(bi)
 		}
 	}
 

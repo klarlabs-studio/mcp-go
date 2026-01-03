@@ -95,6 +95,77 @@ func TestClient_Initialize(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+
+	t.Run("parses extended metadata fields", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				{
+					JSONRPC: "2.0",
+					ID:      json.RawMessage(`1`),
+					Result: map[string]any{
+						"protocolVersion": "2024-11-05",
+						"serverInfo": map[string]any{
+							"name":        "metadata-server",
+							"version":     "2.0.0",
+							"title":       "Metadata Test Server",
+							"description": "A server with full metadata",
+							"websiteUrl":  "https://example.com/docs",
+							"icons": []any{
+								map[string]any{
+									"uri":      "https://example.com/icon.png",
+									"mimeType": "image/png",
+									"size":     float64(64),
+								},
+							},
+							"buildInfo": map[string]any{
+								"commit":    "abc123def",
+								"buildDate": "2025-01-03",
+							},
+						},
+						"capabilities": map[string]any{},
+					},
+				},
+			},
+		}
+
+		c := client.New(transport)
+		info, err := c.Initialize(context.Background())
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if info.Title != "Metadata Test Server" {
+			t.Errorf("Title = %q, want %q", info.Title, "Metadata Test Server")
+		}
+		if info.Description != "A server with full metadata" {
+			t.Errorf("Description = %q, want %q", info.Description, "A server with full metadata")
+		}
+		if info.WebsiteURL != "https://example.com/docs" {
+			t.Errorf("WebsiteURL = %q, want %q", info.WebsiteURL, "https://example.com/docs")
+		}
+		if len(info.Icons) != 1 {
+			t.Fatalf("Icons length = %d, want 1", len(info.Icons))
+		}
+		if info.Icons[0].URI != "https://example.com/icon.png" {
+			t.Errorf("Icons[0].URI = %q, want %q", info.Icons[0].URI, "https://example.com/icon.png")
+		}
+		if info.Icons[0].MimeType != "image/png" {
+			t.Errorf("Icons[0].MimeType = %q, want %q", info.Icons[0].MimeType, "image/png")
+		}
+		if info.Icons[0].Size != 64 {
+			t.Errorf("Icons[0].Size = %d, want 64", info.Icons[0].Size)
+		}
+		if info.BuildInfo == nil {
+			t.Fatal("BuildInfo is nil, want non-nil")
+		}
+		if info.BuildInfo.Commit != "abc123def" {
+			t.Errorf("BuildInfo.Commit = %q, want %q", info.BuildInfo.Commit, "abc123def")
+		}
+		if info.BuildInfo.BuildDate != "2025-01-03" {
+			t.Errorf("BuildInfo.BuildDate = %q, want %q", info.BuildInfo.BuildDate, "2025-01-03")
+		}
+	})
 }
 
 func TestClient_ListTools(t *testing.T) {

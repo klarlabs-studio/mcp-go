@@ -66,6 +66,10 @@ type PromptInfo = server.PromptInfo
 type TextContent = server.TextContent
 type ImageContent = server.ImageContent
 
+// ServerInfo metadata types
+type Icon = server.Icon
+type BuildInfo = server.BuildInfo
+
 // Progress types for streaming tool responses
 type ProgressToken = server.ProgressToken
 type Progress = server.Progress
@@ -313,6 +317,20 @@ func NewServer(info ServerInfo, opts ...Option) *Server {
 // about how to use this server effectively.
 var WithInstructions = server.WithInstructions
 
+// ServerInfo option functions
+var (
+	// WithTitle sets a human-readable display name for the server.
+	WithTitle = server.WithTitle
+	// WithDescription sets a description of what the server does.
+	WithDescription = server.WithDescription
+	// WithWebsiteURL sets the server's documentation or homepage URL.
+	WithWebsiteURL = server.WithWebsiteURL
+	// WithIcons sets the icons for UI display.
+	WithIcons = server.WithIcons
+	// WithBuildInfo sets build metadata for debugging and version verification.
+	WithBuildInfo = server.WithBuildInfo
+)
+
 // ServeStdio runs the server using stdio transport.
 // This blocks until the context is canceled or an error occurs.
 func ServeStdio(ctx context.Context, srv *Server, opts ...ServeOption) error {
@@ -510,13 +528,34 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 		capabilities["prompts"] = map[string]any{}
 	}
 
+	// Build serverInfo with required fields
+	serverInfo := map[string]any{
+		"name":    manifest.Name,
+		"version": manifest.Version,
+	}
+
+	// Add optional MCP spec fields if set
+	if manifest.Title != "" {
+		serverInfo["title"] = manifest.Title
+	}
+	if manifest.Description != "" {
+		serverInfo["description"] = manifest.Description
+	}
+	if manifest.WebsiteURL != "" {
+		serverInfo["websiteUrl"] = manifest.WebsiteURL
+	}
+	if len(manifest.Icons) > 0 {
+		serverInfo["icons"] = manifest.Icons
+	}
+	// Add extension field (not in MCP spec)
+	if manifest.BuildInfo != nil {
+		serverInfo["buildInfo"] = manifest.BuildInfo
+	}
+
 	result := map[string]any{
 		"protocolVersion": manifest.ProtocolVersion,
-		"serverInfo": map[string]any{
-			"name":    manifest.Name,
-			"version": manifest.Version,
-		},
-		"capabilities": capabilities,
+		"serverInfo":      serverInfo,
+		"capabilities":    capabilities,
 	}
 
 	// Include instructions if set

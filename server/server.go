@@ -8,11 +8,30 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
 
+// Icon represents an icon for UI display.
+type Icon struct {
+	URI      string `json:"uri"`                // data URI or https URL
+	MimeType string `json:"mimeType,omitempty"` // image/png, image/svg+xml, etc.
+	Size     int    `json:"size,omitempty"`     // pixel size (icons are square)
+}
+
+// BuildInfo contains build metadata for debugging and version verification.
+// This is an extension beyond the MCP spec.
+type BuildInfo struct {
+	Commit    string `json:"commit,omitempty"`    // Git commit SHA
+	BuildDate string `json:"buildDate,omitempty"` // Build timestamp
+}
+
 // Info contains server metadata exposed to clients.
 type Info struct {
-	Name         string
-	Version      string
-	Capabilities Capabilities
+	Name         string       // required - programmatic identifier
+	Version      string       // required - semantic version
+	Title        string       // optional - human-readable display name
+	Description  string       // optional - what this server does
+	WebsiteURL   string       // optional - docs/homepage link
+	Icons        []Icon       // optional - for UI display
+	BuildInfo    *BuildInfo   // optional - build metadata (extension)
+	Capabilities Capabilities // declares what features the server supports
 }
 
 // Capabilities declares what features the server supports.
@@ -27,6 +46,11 @@ type Capabilities struct {
 type Manifest struct {
 	Name            string       `json:"name"`
 	Version         string       `json:"version"`
+	Title           string       `json:"title,omitempty"`
+	Description     string       `json:"description,omitempty"`
+	WebsiteURL      string       `json:"websiteUrl,omitempty"`
+	Icons           []Icon       `json:"icons,omitempty"`
+	BuildInfo       *BuildInfo   `json:"buildInfo,omitempty"`
 	ProtocolVersion string       `json:"protocolVersion"`
 	Capabilities    Capabilities `json:"capabilities"`
 }
@@ -76,6 +100,44 @@ func New(info Info, opts ...Option) *Server {
 func WithInstructions(instructions string) Option {
 	return func(s *Server) {
 		s.instructions = instructions
+	}
+}
+
+// WithTitle sets a human-readable display name for the server.
+func WithTitle(title string) Option {
+	return func(s *Server) {
+		s.info.Title = title
+	}
+}
+
+// WithDescription sets a description of what the server does.
+func WithDescription(description string) Option {
+	return func(s *Server) {
+		s.info.Description = description
+	}
+}
+
+// WithWebsiteURL sets the server's documentation or homepage URL.
+func WithWebsiteURL(url string) Option {
+	return func(s *Server) {
+		s.info.WebsiteURL = url
+	}
+}
+
+// WithIcons sets the icons for UI display.
+func WithIcons(icons ...Icon) Option {
+	return func(s *Server) {
+		s.info.Icons = icons
+	}
+}
+
+// WithBuildInfo sets build metadata for debugging and version verification.
+func WithBuildInfo(commit, buildDate string) Option {
+	return func(s *Server) {
+		s.info.BuildInfo = &BuildInfo{
+			Commit:    commit,
+			BuildDate: buildDate,
+		}
 	}
 }
 
@@ -135,6 +197,11 @@ func (s *Server) Manifest() Manifest {
 	return Manifest{
 		Name:            s.info.Name,
 		Version:         s.info.Version,
+		Title:           s.info.Title,
+		Description:     s.info.Description,
+		WebsiteURL:      s.info.WebsiteURL,
+		Icons:           s.info.Icons,
+		BuildInfo:       s.info.BuildInfo,
 		ProtocolVersion: protocol.MCPVersion,
 		Capabilities:    s.info.Capabilities,
 	}
