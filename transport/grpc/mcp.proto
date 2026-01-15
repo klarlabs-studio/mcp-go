@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package mcp.v1;
+
+option go_package = "github.com/anthropics/mcp-go/transport/grpc/mcpv1";
+
+// MCP service provides bidirectional Model Context Protocol communication.
+// This service enables agents and tools to communicate using gRPC as the
+// transport layer while maintaining full MCP protocol compatibility.
+service MCP {
+  // Connect establishes a bidirectional stream for MCP communication.
+  // Both client and server can send messages at any time, enabling:
+  // - Client requests (tools/call, resources/read, etc.)
+  // - Server responses
+  // - Server-to-client requests (sampling/createMessage, roots/list)
+  // - Notifications in both directions (progress, resource updates, etc.)
+  rpc Connect(stream Message) returns (stream Message);
+}
+
+// Message is the envelope for all MCP communication over gRPC.
+// It uses a hybrid approach: strongly-typed envelope fields with
+// JSON-encoded payloads for method-specific params and results.
+message Message {
+  // Type indicates whether this is a request, response, or notification.
+  MessageType type = 1;
+
+  // Request fields (used when type == MESSAGE_TYPE_REQUEST)
+  // request_id uniquely identifies the request for correlation with response.
+  string request_id = 2;
+  // method is the MCP method name (e.g., "tools/call", "resources/read").
+  string method = 3;
+  // params contains JSON-encoded method parameters.
+  bytes params = 4;
+  // meta contains request metadata like progress tokens.
+  RequestMeta meta = 5;
+
+  // Response fields (used when type == MESSAGE_TYPE_RESPONSE)
+  // result contains JSON-encoded successful response data.
+  bytes result = 6;
+  // error contains error details if the request failed.
+  Error error = 7;
+
+  // Common metadata for headers, tracing IDs, auth tokens, etc.
+  // This maps naturally to gRPC metadata and HTTP headers.
+  map<string, string> metadata = 10;
+}
+
+// MessageType distinguishes between requests, responses, and notifications.
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  // REQUEST indicates a message expecting a response.
+  MESSAGE_TYPE_REQUEST = 1;
+  // RESPONSE indicates a reply to a previous request.
+  MESSAGE_TYPE_RESPONSE = 2;
+  // NOTIFICATION indicates a one-way message (no response expected).
+  MESSAGE_TYPE_NOTIFICATION = 3;
+}
+
+// RequestMeta contains metadata attached to requests.
+message RequestMeta {
+  // progress_token enables progress reporting for long-running operations.
+  // When present, the server may send progress notifications.
+  string progress_token = 1;
+}
+
+// Error represents an MCP/JSON-RPC error.
+// Error codes follow JSON-RPC 2.0 conventions:
+//   -32700: Parse error
+//   -32600: Invalid request
+//   -32601: Method not found
+//   -32602: Invalid params
+//   -32603: Internal error
+//   -32001: Not found (MCP extension)
+//   -32002: Unauthorized (MCP extension)
+message Error {
+  // code is the JSON-RPC error code.
+  int32 code = 1;
+  // message is a human-readable error description.
+  string message = 2;
+  // data contains optional JSON-encoded additional error details.
+  bytes data = 3;
+}
+
+// ProgressParams contains parameters for progress notifications.
+// Sent via notifications/progress method.
+message ProgressParams {
+  // progress_token correlates with the original request.
+  string progress_token = 1;
+  // progress is the current progress value.
+  double progress = 2;
+  // total is the optional maximum progress value.
+  optional double total = 3;
+  // message is an optional human-readable progress description.
+  optional string message = 4;
+}
+
+// LogMessageParams contains parameters for log message notifications.
+// Sent via notifications/message method.
+message LogMessageParams {
+  // level is the log level (debug, info, notice, warning, error, critical, alert, emergency).
+  string level = 1;
+  // logger identifies the source of the log message.
+  string logger = 2;
+  // data contains JSON-encoded log data.
+  bytes data = 3;
+}
+
+// ResourceUpdatedParams contains parameters for resource update notifications.
+// Sent via notifications/resources/updated method.
+message ResourceUpdatedParams {
+  // uri identifies the resource that was updated.
+  string uri = 1;
+}
+
+// CancelledParams contains parameters for cancellation notifications.
+// Sent via notifications/cancelled method.
+message CancelledParams {
+  // request_id identifies the cancelled request.
+  string request_id = 1;
+  // reason optionally explains why the request was cancelled.
+  optional string reason = 2;
+}

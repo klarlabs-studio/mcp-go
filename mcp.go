@@ -38,6 +38,7 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 	"github.com/felixgeelhaar/mcp-go/server"
 	"github.com/felixgeelhaar/mcp-go/transport"
+	grpctransport "github.com/felixgeelhaar/mcp-go/transport/grpc"
 )
 
 // Re-export core types for convenience
@@ -390,6 +391,37 @@ func WithWebSocketReadTimeout(d time.Duration) WebSocketOption {
 // WithWebSocketWriteTimeout sets the write timeout for WebSocket messages.
 func WithWebSocketWriteTimeout(d time.Duration) WebSocketOption {
 	return transport.WithWebSocketWriteTimeout(d)
+}
+
+// GRPCOption configures the gRPC transport.
+type GRPCOption = grpctransport.Option
+
+// ServeGRPC runs the server using gRPC transport with bidirectional streaming.
+// This enables MCP communication over gRPC, providing benefits like binary
+// encoding, built-in flow control, and native support for enterprise infrastructure.
+// This blocks until the context is canceled or an error occurs.
+func ServeGRPC(ctx context.Context, srv *Server, addr string, opts ...GRPCOption) error {
+	t := grpctransport.NewGRPC(addr, opts...)
+	handler := newRequestHandler(srv)
+	return t.Serve(ctx, handler)
+}
+
+// ServeGRPCWithMiddleware runs the server using gRPC transport with middleware support.
+func ServeGRPCWithMiddleware(ctx context.Context, srv *Server, addr string, grpcOpts []GRPCOption, serveOpts ...ServeOption) error {
+	t := grpctransport.NewGRPC(addr, grpcOpts...)
+	handler := newRequestHandler(srv, serveOpts...)
+	return t.Serve(ctx, handler)
+}
+
+// WithGRPCShutdownTimeout sets the maximum time to wait for graceful shutdown.
+func WithGRPCShutdownTimeout(d time.Duration) GRPCOption {
+	return grpctransport.WithShutdownTimeout(d)
+}
+
+// WithGRPCDrainDelay sets the delay before starting connection draining.
+// This allows load balancers to remove the server from rotation.
+func WithGRPCDrainDelay(d time.Duration) GRPCOption {
+	return grpctransport.WithDrainDelay(d)
 }
 
 // Middleware re-exports
