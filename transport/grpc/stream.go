@@ -129,7 +129,7 @@ func responseToProto(requestID string, resp *protocol.Response) *pb.Message {
 
 	if resp.Error != nil {
 		msg.Error = &pb.Error{
-			Code:    int32(resp.Error.Code),
+			Code:    int32(resp.Error.Code), //nolint:gosec // Error codes are JSON-RPC spec constants, always fit in int32
 			Message: resp.Error.Message,
 		}
 		if resp.Error.Data != nil {
@@ -152,7 +152,7 @@ func errorToProto(requestID string, err *protocol.Error) *pb.Message {
 		Type:      pb.MessageType_MESSAGE_TYPE_RESPONSE,
 		RequestId: requestID,
 		Error: &pb.Error{
-			Code:    int32(err.Code),
+			Code:    int32(err.Code), //nolint:gosec // Error codes are JSON-RPC spec constants, always fit in int32
 			Message: err.Message,
 		},
 	}

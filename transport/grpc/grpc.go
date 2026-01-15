@@ -43,7 +43,6 @@ type GRPC struct {
 // streamClient represents a single gRPC stream connection.
 type streamClient struct {
 	stream pb.MCP_ConnectServer
-	mu     sync.Mutex
 }
 
 // Option configures a GRPC transport.
