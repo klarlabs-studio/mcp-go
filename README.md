@@ -138,6 +138,35 @@ mcp.ServeStdio(ctx, srv)
 mcp.ServeHTTP(ctx, srv, ":8080")
 ```
 
+### MCP Apps Support
+
+Build tools with interactive UIs using the `_meta.ui` extension:
+
+```go
+srv.Tool("visualize").
+    Description("Visualize data interactively").
+    UIResource("ui://my-app/visualizer").
+    Handler(func(input VisualizeInput) (any, error) {
+        return getData(input.ID), nil
+    })
+
+// Serve the UI as a resource
+srv.Resource("ui://my-app/visualizer").
+    Name("Visualizer").
+    MimeType("text/html").
+    Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
+        return &mcp.ResourceContent{
+            URI:      uri,
+            MimeType: "text/html",
+            Text:     visualizerHTML,
+        }, nil
+    })
+```
+
+Tool responses automatically include `_meta.ui.resourceUri`, telling MCP hosts to render the linked resource as an interactive app alongside tool results.
+
+---
+
 ### Production-ready defaults
 
 - strict JSON decoding
@@ -318,6 +347,24 @@ srv.Prompt("code-review").
         }, nil
     })
 ```
+
+### Tool Metadata
+
+Attach arbitrary metadata to tools via `_meta`, or use the `UIResource` shorthand for MCP Apps:
+
+```go
+// Arbitrary metadata
+srv.Tool("my-tool").
+    Meta(map[string]any{"custom": "data"}).
+    Handler(myHandler)
+
+// MCP Apps shorthand — sets _meta.ui.resourceUri
+srv.Tool("visualize").
+    UIResource("ui://my-app/dashboard").
+    Handler(vizHandler)
+```
+
+The `_meta` field is included in both `tools/list` and `tools/call` JSON-RPC responses.
 
 ### Middleware
 
