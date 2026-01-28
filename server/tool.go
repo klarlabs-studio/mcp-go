@@ -21,6 +21,7 @@ type Tool struct {
 	handler       any
 	hasContext    bool
 	annotations   *ToolAnnotations
+	meta          map[string]any
 }
 
 // ToolBuilder provides a fluent API for building tools.
@@ -47,6 +48,30 @@ func (b *ToolBuilder) ValidateInput() *ToolBuilder {
 		return b
 	}
 	b.tool.validateInput = true
+	return b
+}
+
+// Meta sets arbitrary metadata on the tool, serialized as _meta in the tool listing.
+func (b *ToolBuilder) Meta(meta map[string]any) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.meta = meta
+	return b
+}
+
+// UIResource marks this tool as having an associated MCP App UI resource.
+// The given URI is included in the tool's _meta.ui.resourceUri field,
+// telling the host to render the resource as an interactive app.
+func (b *ToolBuilder) UIResource(uri string) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.meta = map[string]any{
+		"ui": map[string]any{
+			"resourceUri": uri,
+		},
+	}
 	return b
 }
 
@@ -122,6 +147,11 @@ func (b *ToolBuilder) validateHandler(fn any) error {
 	}
 
 	return nil
+}
+
+// Meta returns the tool's metadata map, used for _meta in MCP responses.
+func (t *Tool) Meta() map[string]any {
+	return t.meta
 }
 
 // Execute runs the tool handler with the given JSON input.

@@ -61,6 +61,7 @@ type ToolInfo struct {
 	Description string
 	InputSchema any
 	Annotations *ToolAnnotations
+	Meta        map[string]any
 }
 
 // Option configures a Server.
@@ -184,6 +185,7 @@ func (s *Server) Tools() []ToolInfo {
 			Description: t.description,
 			InputSchema: t.inputSchema,
 			Annotations: t.annotations,
+			Meta:        t.meta,
 		})
 	}
 	return result

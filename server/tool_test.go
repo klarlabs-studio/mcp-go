@@ -56,6 +56,71 @@ func TestToolBuilder(t *testing.T) {
 	})
 }
 
+func TestToolBuilder_UIResource(t *testing.T) {
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+
+	type Input struct {
+		ID string `json:"id"`
+	}
+
+	srv.Tool("visualize").
+		Description("Visualize a machine").
+		UIResource("ui://statekit/visualizer").
+		Handler(func(input Input) (string, error) {
+			return "ok", nil
+		})
+
+	tools := srv.Tools()
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+
+	meta := tools[0].Meta
+	if meta == nil {
+		t.Fatal("expected Meta to be set")
+	}
+
+	ui, ok := meta["ui"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta[\"ui\"] to be map, got %T", meta["ui"])
+	}
+
+	uri, ok := ui["resourceUri"].(string)
+	if !ok || uri != "ui://statekit/visualizer" {
+		t.Errorf("resourceUri = %q, want %q", uri, "ui://statekit/visualizer")
+	}
+}
+
+func TestToolBuilder_Meta(t *testing.T) {
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+
+	srv.Tool("custom-meta").
+		Meta(map[string]any{"custom": "value"}).
+		Handler(func(input Input) (string, error) {
+			return "ok", nil
+		})
+
+	tools := srv.Tools()
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+
+	if tools[0].Meta["custom"] != "value" {
+		t.Errorf("meta[custom] = %v, want %q", tools[0].Meta["custom"], "value")
+	}
+
+	// Verify Meta accessor on Tool struct
+	tool, ok := srv.GetTool("custom-meta")
+	if !ok {
+		t.Fatal("tool not found")
+	}
+	if tool.Meta()["custom"] != "value" {
+		t.Errorf("tool.Meta()[custom] = %v, want %q", tool.Meta()["custom"], "value")
+	}
+}
+
 func TestTool_Execute(t *testing.T) {
 	t.Run("executes handler with input", func(t *testing.T) {
 		srv := New(Info{Name: "test", Version: "1.0.0"})

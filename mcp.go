@@ -611,6 +611,9 @@ func (h *requestHandler) handleToolsList(_ context.Context, req *protocol.Reques
 		if t.Annotations != nil {
 			item["annotations"] = t.Annotations
 		}
+		if t.Meta != nil {
+			item["_meta"] = t.Meta
+		}
 		toolList = append(toolList, item)
 	}
 
@@ -679,6 +682,10 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 				"text": textContent,
 			},
 		},
+	}
+
+	if tool.Meta() != nil {
+		response["_meta"] = tool.Meta()
 	}
 
 	return protocol.NewResponse(req.ID, response), nil
