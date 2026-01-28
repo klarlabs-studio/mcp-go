@@ -91,7 +91,112 @@ func main() {
     </div>
   </section>
 
-  <section class="section">
+  <section class="section" id="mcp-apps">
+    <div class="container">
+      <div class="apps-header">
+        <span class="badge">New in v1.6</span>
+        <h2>MCP Apps — Interactive UIs for Tools</h2>
+        <p class="section-intro">
+          Turn tool results into live experiences. Attach interactive UIs — dashboards,
+          visualizers, editors — that hosts render alongside your tool output.
+        </p>
+      </div>
+
+      <div class="apps-flow">
+        <div class="apps-flow-step">
+          <div class="apps-flow-num">1</div>
+          <div class="apps-flow-content">
+            <h4>Declare a UI resource</h4>
+            <code>.UIResource("ui://my-app/viz")</code>
+          </div>
+        </div>
+        <div class="apps-flow-step">
+          <div class="apps-flow-num">2</div>
+          <div class="apps-flow-content">
+            <h4>Host calls your tool</h4>
+            <code>_meta.ui.resourceUri</code> in response
+          </div>
+        </div>
+        <div class="apps-flow-step">
+          <div class="apps-flow-num">3</div>
+          <div class="apps-flow-content">
+            <h4>Host renders your app</h4>
+            <code>text/html</code> resource in iframe
+          </div>
+        </div>
+      </div>
+
+      <div class="apps-code-grid">
+        <div class="apps-code-block">
+          <div class="apps-code-label">Define the tool</div>
+          <pre><code>{`srv.Tool("visualize").
+    Description("Visualize data").
+    UIResource("ui://my-app/dashboard").
+    Handler(func(ctx context.Context, in Input) (any, error) {
+        return fetchData(in.ID), nil
+    })`}</code></pre>
+        </div>
+        <div class="apps-code-block">
+          <div class="apps-code-label">Serve the UI</div>
+          <pre><code>{`srv.Resource("ui://my-app/dashboard").
+    Name("Dashboard").
+    MimeType("text/html").
+    Handler(func(ctx context.Context, uri string,
+        params map[string]string,
+    ) (*mcp.ResourceContent, error) {
+        return &mcp.ResourceContent{
+            URI: uri, MimeType: "text/html",
+            Text: dashboardHTML,
+        }, nil
+    })`}</code></pre>
+        </div>
+      </div>
+
+      <div class="apps-comm">
+        <h3>Bidirectional Communication</h3>
+        <p>Apps aren't static. The embedded UI communicates back to the host via <code>postMessage</code> JSON-RPC.</p>
+        <div class="apps-comm-grid">
+          <div class="apps-comm-card">
+            <h4>App &rarr; Host</h4>
+            <ul>
+              <li>Call other MCP tools</li>
+              <li>Push state into conversation</li>
+              <li>Read server resources</li>
+            </ul>
+          </div>
+          <div class="apps-comm-card">
+            <h4>Host &rarr; App</h4>
+            <ul>
+              <li>Pass tool results and data</li>
+              <li>Sync theme (light/dark)</li>
+              <li>Notify of resize events</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="apps-usecases">
+        <div class="apps-usecase">
+          <strong>State Machine Visualizer</strong>
+          <span>Interactive graph with live transitions</span>
+        </div>
+        <div class="apps-usecase">
+          <strong>Data Dashboards</strong>
+          <span>Charts and filters rendered inline</span>
+        </div>
+        <div class="apps-usecase">
+          <strong>Config Editors</strong>
+          <span>Form-based editing with validation</span>
+        </div>
+        <div class="apps-usecase">
+          <strong>Workflow Builders</strong>
+          <span>Drag-and-drop pipeline design</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-muted">
     <div class="container">
       <h2>How it fits into the MCP ecosystem</h2>
       <p class="section-intro">
@@ -208,6 +313,137 @@ func main() {
     font-size: var(--text-sm);
   }
 
+  .badge {
+    display: inline-block;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    border-radius: 999px;
+    margin-bottom: var(--space-4);
+  }
+
+  .apps-header {
+    margin-bottom: var(--space-8);
+  }
+
+  .apps-flow {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-8);
+  }
+
+  .apps-flow-step {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+  }
+
+  .apps-flow-num {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-accent);
+    color: white;
+    border-radius: 50%;
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  .apps-flow-content h4 {
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-1);
+    color: var(--color-text-primary);
+  }
+
+  .apps-flow-content code {
+    font-size: 0.8em;
+  }
+
+  .apps-code-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    margin-bottom: var(--space-8);
+  }
+
+  .apps-code-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-2);
+  }
+
+  .apps-code-block pre {
+    margin-bottom: 0;
+  }
+
+  .apps-comm {
+    margin-bottom: var(--space-8);
+  }
+
+  .apps-comm > p {
+    margin-bottom: var(--space-4);
+  }
+
+  .apps-comm-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+
+  .apps-comm-card {
+    padding: var(--space-4);
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+  }
+
+  .apps-comm-card h4 {
+    font-size: var(--text-base);
+    margin-bottom: var(--space-3);
+    color: var(--color-accent);
+  }
+
+  .apps-comm-card ul {
+    padding-left: var(--space-4);
+    margin-bottom: 0;
+  }
+
+  .apps-usecases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .apps-usecase {
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .apps-usecase strong {
+    font-size: var(--text-sm);
+    color: var(--color-text-primary);
+  }
+
+  .apps-usecase span {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
   .ecosystem {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -233,6 +469,22 @@ func main() {
 
     .feature {
       padding: var(--space-4);
+    }
+
+    .apps-flow {
+      grid-template-columns: 1fr;
+    }
+
+    .apps-code-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .apps-comm-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .apps-usecases {
+      grid-template-columns: 1fr;
     }
   }
 
