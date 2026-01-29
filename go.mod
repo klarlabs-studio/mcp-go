@@ -3,7 +3,7 @@ module github.com/felixgeelhaar/mcp-go
 go 1.24.0
 
 require (
-	github.com/felixgeelhaar/fortify v1.1.2
+	github.com/felixgeelhaar/fortify v1.2.1
 	github.com/gorilla/websocket v1.5.3
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/metric v1.39.0
