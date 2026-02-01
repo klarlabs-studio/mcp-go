@@ -140,7 +140,7 @@ mcp.ServeHTTP(ctx, srv, ":8080")
 
 ### MCP Apps Support
 
-Build tools with interactive UIs using the `_meta.ui` extension:
+Build tools with interactive UIs using the [MCP Apps extension](https://modelcontextprotocol.io/specification/2025-06-18/extensions/apps). Tools declare a `ui://` resource URI via `UIResource()`, and the linked HTML resource is rendered as a sandboxed iframe in supported hosts like Claude Desktop.
 
 ```go
 srv.Tool("visualize").
@@ -150,20 +150,51 @@ srv.Tool("visualize").
         return getData(input.ID), nil
     })
 
-// Serve the UI as a resource
+// Serve the UI as a resource with the MCP Apps MIME type
 srv.Resource("ui://my-app/visualizer").
     Name("Visualizer").
-    MimeType("text/html").
+    MimeType("text/html;profile=mcp-app").
     Handler(func(ctx context.Context, uri string, params map[string]string) (*mcp.ResourceContent, error) {
         return &mcp.ResourceContent{
             URI:      uri,
-            MimeType: "text/html",
+            MimeType: "text/html;profile=mcp-app",
             Text:     visualizerHTML,
         }, nil
     })
 ```
 
-Tool responses automatically include `_meta.ui.resourceUri`, telling MCP hosts to render the linked resource as an interactive app alongside tool results.
+`UIResource()` sets `_meta.ui.resourceUri` on both `tools/list` and `tools/call` responses, telling MCP hosts to render the linked resource as an interactive app alongside tool results.
+
+#### Building the HTML resource
+
+The HTML resource must be a **single self-contained file** (inline CSS, JS, no external requests). The recommended stack:
+
+- **[`@modelcontextprotocol/ext-apps`](https://www.npmjs.com/package/@modelcontextprotocol/ext-apps)** — Client SDK for the MCP Apps postMessage protocol (handles `ui/initialize` handshake, receives tool results)
+- **Vite + [`vite-plugin-singlefile`](https://www.npmjs.com/package/vite-plugin-singlefile)** — Bundles everything into one HTML file
+- **Go `embed.FS`** — Embeds the built HTML files into the Go binary
+
+#### Common pitfalls
+
+**Vue/React string templates and the runtime compiler.** If you use Vue's `defineComponent` with a `template` string (instead of `.vue` SFCs), Vite's default Vue build is **runtime-only** and cannot compile templates at runtime. The iframe will render empty with no error. Fix this by aliasing Vue to the full build in `vite.config.ts`:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  resolve: {
+    alias: {
+      vue: "vue/dist/vue.esm-bundler.js",
+    },
+  },
+});
+```
+
+**No TypeScript in runtime-compiled templates.** Vue's runtime template compiler only understands JavaScript. TypeScript syntax like `as any` or `: string` in template expressions will throw `SyntaxError: Unexpected identifier`. Move type assertions to `setup()` or use computed properties.
+
+**Resource MIME type.** Use `text/html;profile=mcp-app` (not plain `text/html`) so hosts recognize the resource as an MCP App.
+
+#### Working example
+
+[**Roady**](https://github.com/felixgeelhaar/roady) ships 14 MCP Apps (D3.js charts, task boards, interactive dashboards) built with mcp-go. See [`app/`](https://github.com/felixgeelhaar/roady/tree/main/app) for the Vue + Vite + singlefile setup and [`internal/infrastructure/mcp/`](https://github.com/felixgeelhaar/roady/tree/main/internal/infrastructure/mcp) for the Go resource registration.
 
 ---
 
@@ -210,9 +241,9 @@ If you want raw protocol access only, an SDK may be a better fit.
 
 ## Used by
 
-- **Obvia** (incident automation & AIOps tooling)
+- **[Roady](https://github.com/felixgeelhaar/roady)** — Planning-first system of record with 14 interactive MCP Apps (D3.js visualizations, task boards, dashboards)
+- **Obvia** — Incident automation & AIOps tooling
 - Internal MCP services and experiments
-- OSS projects building on MCP
 
 Want to add your project? Open a PR!
 
