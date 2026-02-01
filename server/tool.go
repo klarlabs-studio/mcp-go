@@ -61,8 +61,9 @@ func (b *ToolBuilder) Meta(meta map[string]any) *ToolBuilder {
 }
 
 // UIResource marks this tool as having an associated MCP App UI resource.
-// The given URI is included in the tool's _meta.ui.resourceUri field,
-// telling the host to render the resource as an interactive app.
+// The given URI is included in both the nested _meta.ui.resourceUri field
+// (preferred) and the flat _meta["ui/resourceUri"] key (legacy) for maximum
+// host compatibility per the MCP Apps extension spec.
 func (b *ToolBuilder) UIResource(uri string) *ToolBuilder {
 	if b.err != nil {
 		return b
@@ -71,6 +72,7 @@ func (b *ToolBuilder) UIResource(uri string) *ToolBuilder {
 		"ui": map[string]any{
 			"resourceUri": uri,
 		},
+		"ui/resourceUri": uri,
 	}
 	return b
 }

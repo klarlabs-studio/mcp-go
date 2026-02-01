@@ -89,6 +89,12 @@ func TestToolBuilder_UIResource(t *testing.T) {
 	if !ok || uri != "ui://statekit/visualizer" {
 		t.Errorf("resourceUri = %q, want %q", uri, "ui://statekit/visualizer")
 	}
+
+	// Verify legacy flat key is also set for host compatibility
+	flatURI, ok := meta["ui/resourceUri"].(string)
+	if !ok || flatURI != "ui://statekit/visualizer" {
+		t.Errorf("meta[\"ui/resourceUri\"] = %q, want %q", flatURI, "ui://statekit/visualizer")
+	}
 }
 
 func TestToolBuilder_Meta(t *testing.T) {
