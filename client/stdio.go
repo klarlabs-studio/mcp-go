@@ -32,8 +32,31 @@ type StdioTransport struct {
 type StdioTransportOption func(*StdioTransport)
 
 // NewStdioTransport creates a transport that spawns a subprocess.
+// The command and arguments are validated against shell metacharacters
+// and the command is resolved to an absolute path before execution.
+// Use [NewUnsafeStdioTransport] to bypass validation for trusted contexts.
 func NewStdioTransport(command string, args ...string) (*StdioTransport, error) {
-	cmd := exec.Command(command, args...)
+	resolved, err := ValidateCommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("validate command: %w", err)
+	}
+
+	if err := ValidateArgs(args); err != nil {
+		return nil, fmt.Errorf("validate args: %w", err)
+	}
+
+	return newStdioTransport(resolved, args)
+}
+
+// NewUnsafeStdioTransport creates a transport without command validation.
+// Use this only when the command and arguments come from a trusted source
+// (e.g., hard-coded in application code).
+func NewUnsafeStdioTransport(command string, args ...string) (*StdioTransport, error) {
+	return newStdioTransport(command, args)
+}
+
+func newStdioTransport(command string, args []string) (*StdioTransport, error) {
+	cmd := exec.Command(command, args...) //nolint:gosec // Caller is responsible for validation.
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

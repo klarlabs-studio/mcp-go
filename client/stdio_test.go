@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -43,6 +44,10 @@ func TestStdioTransport(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for nonexistent command")
 		}
+		// Validation now catches this earlier with ErrInvalidCommand
+		if !errors.Is(err, client.ErrInvalidCommand) {
+			t.Errorf("Error should wrap ErrInvalidCommand, got %v", err)
+		}
 	})
 }
 
@@ -67,6 +72,60 @@ func TestStdioTransport_Close(t *testing.T) {
 	if err := transport.Close(); err != nil {
 		t.Errorf("second close returned error: %v", err)
 	}
+}
+
+func TestNewStdioTransport_RejectsInjection(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rejects command with shell metacharacters", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := client.NewStdioTransport("cat;rm -rf /")
+		if err == nil {
+			t.Fatal("expected error for command with metacharacters")
+		}
+		if !errors.Is(err, client.ErrInvalidCommand) {
+			t.Errorf("Error should wrap ErrInvalidCommand, got %v", err)
+		}
+	})
+
+	t.Run("rejects args with shell metacharacters", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := client.NewStdioTransport("cat", "--flag;inject")
+		if err == nil {
+			t.Fatal("expected error for args with metacharacters")
+		}
+		if !errors.Is(err, client.ErrInvalidCommand) {
+			t.Errorf("Error should wrap ErrInvalidCommand, got %v", err)
+		}
+	})
+
+	t.Run("rejects non-existent command", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := client.NewStdioTransport("nonexistent-command-that-should-not-exist")
+		if err == nil {
+			t.Fatal("expected error for nonexistent command")
+		}
+		if !errors.Is(err, client.ErrInvalidCommand) {
+			t.Errorf("Error should wrap ErrInvalidCommand, got %v", err)
+		}
+	})
+}
+
+func TestNewUnsafeStdioTransport(t *testing.T) {
+	if _, err := exec.LookPath("cat"); err != nil {
+		t.Skip("cat not available")
+	}
+
+	t.Run("bypasses validation", func(t *testing.T) {
+		transport, err := client.NewUnsafeStdioTransport("cat")
+		if err != nil {
+			t.Fatalf("NewUnsafeStdioTransport() unexpected error: %v", err)
+		}
+		defer transport.Close()
+	})
 }
 
 func TestMain(m *testing.M) {
