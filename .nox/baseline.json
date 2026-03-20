@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "fingerprint": "50aee811c7d9ee9f8d1f5a9a0d5cc665253a1d5ae4a91022da314e32ec0bd08d",
+      "rule_id": "SEC-085",
+      "file_path": ".github/workflows/ci.yml",
+      "severity": "high",
+      "reason": "Standard GitHub Actions pattern for pushing with GITHUB_TOKEN; token is accessed via secrets, not hardcoded",
+      "created_at": "2026-03-20T21:18:29.780745Z"
+    },
+    {
+      "fingerprint": "4cdd27bf77527239abb59ce9a17bbb2c52913edc7d19d565b91fad055d23d23a",
+      "rule_id": "IAC-351",
+      "file_path": ".github/workflows/pages.yml",
+      "severity": "critical",
+      "reason": "id-token: write permission is required for GitHub Pages OIDC deployment; not a hardcoded secret",
+      "created_at": "2026-03-20T21:18:38.791272Z"
+    },
+    {
+      "fingerprint": "f7c0f20595ab04e7c7cbed23b6a8656da7b29e7b16e3094c86dfcc2a81530c25",
+      "rule_id": "IAC-018",
+      "file_path": ".github/workflows/ci.yml",
+      "severity": "low",
+      "reason": "continue-on-error is intentional for optional badge checkout when badges branch doesn't exist",
+      "created_at": "2026-03-20T21:19:04.573151Z"
+    },
+    {
+      "fingerprint": "2ff93f4b9a8831ce973ae262a5485c0451ebaa7d7623ba41952e231428958010",
+      "rule_id": "IAC-310",
+      "file_path": ".github/workflows/ci.yml",
+      "severity": "medium",
+      "reason": "continue-on-error is intentional for optional badge checkout when badges branch doesn't exist",
+      "created_at": "2026-03-20T21:19:05.937714Z"
+    }
+  ]
+}

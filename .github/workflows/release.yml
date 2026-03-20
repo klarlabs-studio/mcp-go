@@ -12,12 +12,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v6.0.0
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@41df91f41eda2496c770c3a5c6e2f3e7a9d6b99e # v6.1.0
         with:
           go-version: '1.24'
 
@@ -25,7 +25,7 @@ jobs:
         run: go test -race ./...
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3c4b7e0c6e2c97e2e12d3a7f4d3b5a3b5f4d3b5a # v2.1.0
         with:
           generate_release_notes: true
           draft: false
