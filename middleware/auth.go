@@ -2,7 +2,10 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
@@ -218,4 +221,180 @@ func ChainAuthenticators(authenticators ...Authenticator) Authenticator {
 		}
 		return nil, nil
 	}
+}
+
+type OAuth2Config struct {
+	TokenIntrospectionURL string
+	ClientID              string
+	ClientSecret          string
+	RequiredScopes        []string
+}
+
+type TokenClaims struct {
+	Subject   string
+	Audience  []string
+	ExpiresAt int64
+	IssuedAt  int64
+	Scopes    []string
+	Issuer    string
+}
+
+type TokenValidator interface {
+	ValidateToken(ctx context.Context, token string) (*TokenClaims, error)
+}
+
+type OAuth2Authenticator struct {
+	config   OAuth2Config
+	validate TokenValidator
+}
+
+func NewOAuth2Authenticator(config OAuth2Config, validator TokenValidator) *OAuth2Authenticator {
+	return &OAuth2Authenticator{
+		config:   config,
+		validate: validator,
+	}
+}
+
+func (a *OAuth2Authenticator) Authenticate(ctx context.Context, req *protocol.Request) (*Identity, error) {
+	auth := protocol.GetRequestMeta(ctx, "Authorization")
+	if auth == "" {
+		auth = protocol.GetRequestMeta(ctx, "authorization")
+	}
+	if auth == "" {
+		return nil, nil
+	}
+
+	const prefix = "Bearer "
+	if !strings.HasPrefix(auth, prefix) {
+		return nil, nil
+	}
+
+	token := strings.TrimPrefix(auth, prefix)
+	if token == "" {
+		return nil, nil
+	}
+
+	claims, err := a.validate.ValidateToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	expTime := claims.ExpiresAt
+	if expTime > 0 && expTime < 10000000000 {
+		expTime *= 1000
+	}
+
+	if expTime > 0 && expTime < time.Now().UnixMilli() {
+		return nil, &protocol.Error{
+			Code:    protocol.CodeUnauthorized,
+			Message: "token expired",
+		}
+	}
+
+	if len(a.config.RequiredScopes) > 0 {
+		for _, required := range a.config.RequiredScopes {
+			hasScope := false
+			for _, scope := range claims.Scopes {
+				if scope == required {
+					hasScope = true
+					break
+				}
+			}
+			if !hasScope {
+				return nil, &protocol.Error{
+					Code:    protocol.CodeUnauthorized,
+					Message: "insufficient scope",
+				}
+			}
+		}
+	}
+
+	return &Identity{
+		ID:   claims.Subject,
+		Name: claims.Subject,
+		Metadata: map[string]any{
+			"scopes":   claims.Scopes,
+			"audience": claims.Audience,
+			"issuer":   claims.Issuer,
+		},
+	}, nil
+}
+
+type JWTValidator struct {
+	secret []byte
+}
+
+func NewJWTValidator(secret string) *JWTValidator {
+	return &JWTValidator{secret: []byte(secret)}
+}
+
+func (v *JWTValidator) ValidateToken(ctx context.Context, token string) (*TokenClaims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, &protocol.Error{
+			Code:    protocol.CodeUnauthorized,
+			Message: "invalid token format",
+		}
+	}
+
+	decoded, err := base64Decode(parts[1])
+	if err != nil {
+		return nil, err
+	}
+
+	var claims map[string]any
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return nil, err
+	}
+
+	tokenClaims := &TokenClaims{}
+
+	if sub, ok := claims["sub"].(string); ok {
+		tokenClaims.Subject = sub
+	}
+
+	if iss, ok := claims["iss"].(string); ok {
+		tokenClaims.Issuer = iss
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		tokenClaims.ExpiresAt = int64(exp)
+	}
+
+	if iat, ok := claims["iat"].(float64); ok {
+		tokenClaims.IssuedAt = int64(iat)
+	}
+
+	if aud, ok := claims["aud"].(string); ok {
+		tokenClaims.Audience = []string{aud}
+	} else if auds, ok := claims["aud"].([]any); ok {
+		for _, a := range auds {
+			if s, ok := a.(string); ok {
+				tokenClaims.Audience = append(tokenClaims.Audience, s)
+			}
+		}
+	}
+
+	if scope, ok := claims["scope"].(string); ok {
+		tokenClaims.Scopes = strings.Split(scope, " ")
+	} else if scopes, ok := claims["scopes"].([]any); ok {
+		for _, s := range scopes {
+			if str, ok := s.(string); ok {
+				tokenClaims.Scopes = append(tokenClaims.Scopes, str)
+			}
+		}
+	}
+
+	return tokenClaims, nil
+}
+
+func base64Decode(s string) ([]byte, error) {
+	switch len(s) % 4 {
+	case 2:
+		s += "=="
+	case 3:
+		s += "="
+	}
+
+	return base64.StdEncoding.DecodeString(s)
 }

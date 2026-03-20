@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/felixgeelhaar/mcp-go"
+	"github.com/felixgeelhaar/mcp-go/server"
+	"github.com/felixgeelhaar/mcp-go/transport"
 )
 
 // CalculateInput is the input for the calculate tool.
@@ -109,13 +111,29 @@ Example: {"operation": "add", "a": 5, "b": 3} returns 8`,
 	fmt.Println("Starting MCP HTTP server...")
 	fmt.Printf("Server listening on http://localhost%s\n", addr)
 	fmt.Println("Endpoints:")
-	fmt.Println("  POST /mcp     - JSON-RPC requests")
-	fmt.Println("  GET  /sse     - Server-Sent Events")
-	fmt.Println("  GET  /health  - Health check")
+	fmt.Println("  GET  /.well-known/mcp - Server discovery metadata")
+	fmt.Println("  POST /mcp            - JSON-RPC requests")
+	fmt.Println("  GET  /mcp/sse        - Server-Sent Events")
+	fmt.Println("  GET  /health          - Health check")
+	fmt.Println("  GET  /healthz        - Readiness check")
+
+	discovery := transport.NewServerDiscovery(&server.Manifest{
+		Name:            srv.Manifest().Name,
+		Version:         srv.Manifest().Version,
+		ProtocolVersion: srv.Manifest().ProtocolVersion,
+		Capabilities:    srv.Manifest().Capabilities,
+		Title:           "HTTP Example",
+		Description:     "Calculator server with HTTP transport",
+		WebsiteURL:      "https://example.com",
+	}, transport.WithDiscoveryEndpoints(transport.ServerEndpoint{
+		StreamableHTTP: fmt.Sprintf("http://localhost%s/mcp", addr),
+		SSE:            fmt.Sprintf("http://localhost%s/mcp/sse", addr),
+	}))
 
 	if err := mcp.ServeHTTP(ctx, srv, addr,
 		mcp.WithReadTimeout(30*time.Second),
 		mcp.WithWriteTimeout(30*time.Second),
+		mcp.WithDiscovery(discovery),
 	); err != nil && err != context.Canceled {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

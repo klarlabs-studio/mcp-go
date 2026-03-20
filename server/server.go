@@ -78,6 +78,7 @@ type Server struct {
 	prompts      map[string]*Prompt
 	middleware   []Middleware
 	completions  *completionRegistry
+	tasks        *TaskManager
 }
 
 // New creates a new MCP server with the given info and options.

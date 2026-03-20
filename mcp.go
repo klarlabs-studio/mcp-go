@@ -365,6 +365,11 @@ func WithWriteTimeout(d time.Duration) HTTPOption {
 	return transport.WithWriteTimeout(d)
 }
 
+// WithDiscovery sets the server discovery metadata for the /.well-known/mcp endpoint.
+func WithDiscovery(discovery *transport.ServerDiscovery) HTTPOption {
+	return transport.WithDiscovery(discovery)
+}
+
 // WebSocketOption configures the WebSocket transport.
 type WebSocketOption = transport.WebSocketOption
 

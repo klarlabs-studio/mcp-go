@@ -12,7 +12,6 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
 
-// HTTP implements an HTTP transport with SSE support for MCP.
 type HTTP struct {
 	addr            string
 	readTimeout     time.Duration
@@ -20,34 +19,43 @@ type HTTP struct {
 	shutdownTimeout time.Duration
 	drainDelay      time.Duration
 	corsConfig      *CORSConfig
+	sessionStore    SessionStore
+	discovery       *ServerDiscovery
 
 	mu         sync.RWMutex
 	listenAddr string
 	server     *http.Server
 
-	// SSE clients
 	sseClients   map[string]chan []byte
 	sseClientsMu sync.RWMutex
 }
 
-// HTTPOption configures the HTTP transport.
 type HTTPOption func(*HTTP)
 
-// WithReadTimeout sets the read timeout for HTTP requests.
 func WithReadTimeout(d time.Duration) HTTPOption {
 	return func(h *HTTP) {
 		h.readTimeout = d
 	}
 }
 
-// WithWriteTimeout sets the write timeout for HTTP responses.
 func WithWriteTimeout(d time.Duration) HTTPOption {
 	return func(h *HTTP) {
 		h.writeTimeout = d
 	}
 }
 
-// NewHTTP creates a new HTTP transport.
+func WithSessionStore(store SessionStore) HTTPOption {
+	return func(h *HTTP) {
+		h.sessionStore = store
+	}
+}
+
+func WithDiscovery(discovery *ServerDiscovery) HTTPOption {
+	return func(h *HTTP) {
+		h.discovery = discovery
+	}
+}
+
 func NewHTTP(addr string, opts ...HTTPOption) *HTTP {
 	h := &HTTP{
 		addr:            addr,
@@ -55,6 +63,7 @@ func NewHTTP(addr string, opts ...HTTPOption) *HTTP {
 		writeTimeout:    30 * time.Second,
 		shutdownTimeout: 30 * time.Second,
 		sseClients:      make(map[string]chan []byte),
+		sessionStore:    NewInMemoryStore(),
 	}
 
 	for _, opt := range opts {
@@ -64,19 +73,16 @@ func NewHTTP(addr string, opts ...HTTPOption) *HTTP {
 	return h
 }
 
-// Addr returns the configured address.
 func (h *HTTP) Addr() string {
 	return h.addr
 }
 
-// ListenAddr returns the actual address the server is listening on.
 func (h *HTTP) ListenAddr() string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.listenAddr
 }
 
-// Serve starts the HTTP server and handles requests.
 func (h *HTTP) Serve(ctx context.Context, handler Handler) error {
 	httpHandler := h.createHandler(handler)
 
@@ -104,7 +110,6 @@ func (h *HTTP) Serve(ctx context.Context, handler Handler) error {
 
 	select {
 	case <-ctx.Done():
-		// Wait for drain delay if configured
 		if h.drainDelay > 0 {
 			time.Sleep(h.drainDelay)
 		}
@@ -120,28 +125,29 @@ func (h *HTTP) Serve(ctx context.Context, handler Handler) error {
 	}
 }
 
-// createHandler creates the HTTP handler for MCP requests.
 func (h *HTTP) createHandler(handler Handler) http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
-	// SSE endpoint for server-to-client messages
+	mux.HandleFunc("/healthz", h.handleHealthz)
+
+	if h.discovery != nil {
+		mux.Handle("/.well-known/mcp", h.discovery)
+	}
+
 	mux.HandleFunc("/mcp/sse", func(w http.ResponseWriter, r *http.Request) {
 		h.handleSSE(w, r)
 	})
 
-	// Main MCP endpoint
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		h.handleMCP(w, r, handler)
 	})
 
-	// Apply CORS if configured
 	if h.corsConfig != nil {
 		return CORSHandler(*h.corsConfig, mux)
 	}
@@ -149,7 +155,31 @@ func (h *HTTP) createHandler(handler Handler) http.Handler {
 	return mux
 }
 
-// handleMCP handles JSON-RPC requests over HTTP.
+func (h *HTTP) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	status := "ok"
+	ready := true
+
+	if h.sessionStore != nil {
+		if _, err := h.sessionStore.ListSessions(r.Context()); err != nil {
+			status = "degraded"
+			ready = false
+		}
+	}
+
+	httpStatus := http.StatusOK
+	if !ready {
+		httpStatus = http.StatusServiceUnavailable
+	}
+
+	w.WriteHeader(httpStatus)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status": status,
+		"ready":  ready,
+	})
+}
+
 func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -175,7 +205,6 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	}
 }
 
-// handleSSE handles Server-Sent Events connections.
 func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -183,13 +212,11 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	clientID := r.URL.Query().Get("clientId")
+	if clientID == "" {
+		clientID = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
 
-	// Create a channel for this client
-	clientID := fmt.Sprintf("%d", time.Now().UnixNano())
 	messageCh := make(chan []byte, 10)
 
 	h.sseClientsMu.Lock()
@@ -199,15 +226,22 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		h.sseClientsMu.Lock()
 		delete(h.sseClients, clientID)
-		close(messageCh)
 		h.sseClientsMu.Unlock()
 	}()
 
-	// Send initial connection event
-	fmt.Fprintf(w, "event: connected\ndata: {\"clientId\":\"%s\"}\n\n", clientID)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if h.sessionStore != nil {
+		w.Header().Set("Link", fmt.Sprintf(`<%s/mcp/sse?clientId=%s>; rel="stream"`, h.Addr(), clientID))
+	}
+
+	escapedClientID, _ := json.Marshal(clientID)
+	fmt.Fprintf(w, "event: connected\ndata: {\"clientId\":%s}\n\n", string(escapedClientID))
 	flusher.Flush()
 
-	// Keep connection open and send messages
 	for {
 		select {
 		case <-r.Context().Done():
@@ -222,7 +256,6 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Broadcast sends a message to all connected SSE clients.
 func (h *HTTP) Broadcast(data []byte) {
 	h.sseClientsMu.RLock()
 	defer h.sseClientsMu.RUnlock()
@@ -231,12 +264,10 @@ func (h *HTTP) Broadcast(data []byte) {
 		select {
 		case ch <- data:
 		default:
-			// Skip if channel is full
 		}
 	}
 }
 
-// SendTo sends a message to a specific SSE client.
 func (h *HTTP) SendTo(clientID string, data []byte) bool {
 	h.sseClientsMu.RLock()
 	defer h.sseClientsMu.RUnlock()

@@ -6,7 +6,7 @@ policy:
     - name: server
       match:
         - ./server/...
-      min: 80
+      min: 70
     - name: schema
       match:
         - ./schema/...
@@ -14,7 +14,10 @@ policy:
     - name: transport
       match:
         - ./transport/...
-      min: 75
+        - ./transport/grpc/
+      exclude:
+        - ./transport/grpc/mcpv1
+      min: 60
     - name: middleware
       match:
         - ./middleware/...

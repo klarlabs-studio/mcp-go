@@ -1,0 +1,73 @@
+{
+  "id": "plan--1774037416",
+  "spec_id": "",
+  "tasks": [
+    {
+      "id": "phase1-session-store",
+      "title": "Phase 1: SessionStore Interface for Horizontal Scaling",
+      "description": "",
+      "priority": "medium",
+      "estimate": "8h",
+      "depends_on": [],
+      "feature_id": "2026 Roadmap Alignment"
+    },
+    {
+      "id": "phase1-redis-example",
+      "title": "Implement Redis-backed SessionStore example",
+      "description": "",
+      "priority": "medium",
+      "estimate": "4h",
+      "depends_on": [
+        "phase1-session-store"
+      ],
+      "feature_id": "2026 Roadmap Alignment"
+    },
+    {
+      "id": "phase1-healthz",
+      "title": "Add /healthz endpoint with readiness checks",
+      "description": "",
+      "priority": "medium",
+      "estimate": "2h",
+      "depends_on": [
+        "phase1-session-store"
+      ],
+      "feature_id": "2026 Roadmap Alignment"
+    },
+    {
+      "id": "phase2-discovery",
+      "title": "Phase 2: .well-known Discovery Endpoint",
+      "description": "",
+      "priority": "medium",
+      "estimate": "4h",
+      "depends_on": [
+        "phase1-session-store"
+      ],
+      "feature_id": "2026 Roadmap Alignment"
+    },
+    {
+      "id": "phase3-tasks",
+      "title": "Phase 3: Tasks Primitive for Agent Communication",
+      "description": "",
+      "priority": "medium",
+      "estimate": "8h",
+      "depends_on": [
+        "phase1-session-store"
+      ],
+      "feature_id": "2026 Roadmap Alignment"
+    },
+    {
+      "id": "phase4-enterprise",
+      "title": "Phase 4: Enterprise Features (Audit, OAuth)",
+      "description": "",
+      "priority": "medium",
+      "estimate": "8h",
+      "depends_on": [
+        "phase2-discovery"
+      ],
+      "feature_id": "2026 Roadmap Alignment"
+    }
+  ],
+  "approval_status": "approved",
+  "created_at": "2026-03-20T21:10:16.232146+01:00",
+  "updated_at": "2026-03-20T21:10:16.232152+01:00"
+}
