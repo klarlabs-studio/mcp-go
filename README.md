@@ -417,6 +417,63 @@ Built-in middleware:
 - `Auth()` - API key and Bearer token authentication
 - `RateLimit()` - Request throttling
 - `SizeLimit()` - Request size limits
+- `Audit()` - Request/response audit logging
+- `Tracing()` - Correlation and trace ID propagation
+- `OAuth2()` - JWT-based OAuth 2.0 authentication
+
+### Enterprise Features
+
+#### Horizontal Scaling with SessionStore
+
+Persist sessions across server restarts for load-balanced deployments:
+
+```go
+// Redis-backed session store
+store := redis.NewSessionStore(redisClient, 24*time.Hour)
+
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithSessionStore(store),
+)
+
+// In-memory store for single-instance deployments
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithSessionStore(mcp.NewInMemorySessionStore()),
+)
+```
+
+#### Server Discovery
+
+Clients can discover MCP servers via `/.well-known/mcp`:
+
+```go
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithDiscovery(mcp.ServerDiscovery{
+        Name:        "my-server",
+        Description: "My MCP server",
+    }),
+)
+```
+
+#### Tasks for Long-Running Operations
+
+Register async tasks that can be created, monitored, and canceled:
+
+```go
+srv.RegisterTask("long-task", "A long running task", func(ctx context.Context, input map[string]any) (*mcp.TaskResult, error) {
+    // Task runs asynchronously
+    return &mcp.TaskResult{Data: "completed"}, nil
+})
+
+// Create a task
+task, _ := srv.Tasks().CreateTask(ctx, mcp.CreateTaskRequest{
+    Name:   "long-task",
+    Params: map[string]any{"key": "value"},
+})
+
+// List and cancel tasks
+tasks, _ := srv.Tasks().ListTasks(10, "")
+srv.Tasks().CancelTask(task.ID)
+```
 
 ### HTTP Transport
 

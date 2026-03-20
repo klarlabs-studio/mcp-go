@@ -196,6 +196,57 @@ func main() {
     </div>
   </section>
 
+  <section class="section" id="enterprise">
+    <div class="container">
+      <div class="apps-header">
+        <span class="badge">New in v1.7</span>
+        <h2>Enterprise Features</h2>
+        <p class="section-intro">
+          Production-ready features for scaling and securing MCP servers in enterprise environments.
+        </p>
+      </div>
+
+      <div class="features">
+        <div class="feature">
+          <h3>Horizontal Scaling</h3>
+          <p>SessionStore interface for load-balanced deployments. Redis-backed persistence with TTL support.</p>
+        </div>
+        <div class="feature">
+          <h3>Server Discovery</h3>
+          <p>Clients discover servers via <code>/.well-known/mcp</code> endpoint with protocol and capability info.</p>
+        </div>
+        <div class="feature">
+          <h3>Tasks</h3>
+          <p>Async task execution with create, get, list, and cancel operations for long-running operations.</p>
+        </div>
+        <div class="feature">
+          <h3>Enterprise Middleware</h3>
+          <p>Audit logging, distributed tracing with correlation IDs, and OAuth2/JWT authentication.</p>
+        </div>
+      </div>
+
+      <div class="apps-code-grid">
+        <div class="apps-code-block">
+          <div class="apps-code-label">SessionStore</div>
+          <pre><code>{`store := redis.NewSessionStore(client, 24*time.Hour)
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithSessionStore(store),
+)`}</code></pre>
+        </div>
+        <div class="apps-code-block">
+          <div class="apps-code-label">Tasks</div>
+          <pre><code>{`srv.RegisterTask("build", "Run a build", 
+    func(ctx, input) (*TaskResult, error) {
+        return build(ctx, input)
+    })
+    
+task, _ := srv.Tasks().CreateTask(ctx, 
+    CreateTaskRequest{Name: "build"})`}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section section-muted">
     <div class="container">
       <h2>How it fits into the MCP ecosystem</h2>
