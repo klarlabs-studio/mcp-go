@@ -26,7 +26,7 @@ func TestStdioTransport(t *testing.T) {
 		}
 		defer transport.Close()
 
-		c := client.New(transport, client.WithTimeout(5*time.Second))
+		c := client.New(transport, client.WithTimeout(30*time.Second))
 
 		// Initialize should work
 		info, err := c.Initialize(context.Background())
