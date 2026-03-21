@@ -158,6 +158,7 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
         <li><code>Auth(validator)</code> — API key and Bearer token authentication</li>
         <li><code>RateLimit(rps)</code> — Request throttling</li>
         <li><code>SizeLimit(bytes)</code> — Request size limits</li>
+        <li><code>OTel()</code> — OpenTelemetry tracing and metrics</li>
         <li><code>Audit()</code> — Request/response audit logging</li>
         <li><code>Tracing()</code> — Correlation and trace ID propagation</li>
         <li><code>OAuth2()</code> — JWT-based OAuth 2.0 authentication</li>
@@ -195,6 +196,17 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
         <li><code>GET /health</code> — Health check</li>
       </ul>
       <p><strong>Use HTTP for:</strong> Web deployments, service-to-service, load balancing.</p>
+
+      <h3>WebSocket</h3>
+      <p>
+        Full-duplex transport over a single TCP connection.
+        Supports bidirectional streaming without polling.
+      </p>
+      <pre><code>{`mcp.ServeWebSocket(ctx, srv, ":8081",
+    mcp.WithWebSocketReadTimeout(30*time.Second),
+    mcp.WithWebSocketWriteTimeout(30*time.Second),
+)`}</code></pre>
+      <p><strong>Use WebSocket for:</strong> Real-time applications, bidirectional streaming, persistent connections.</p>
 
       <h3>gRPC</h3>
       <p>

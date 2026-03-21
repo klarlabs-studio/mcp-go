@@ -135,8 +135,14 @@ Run the same server over:
 // Stdio for CLI tools
 mcp.ServeStdio(ctx, srv)
 
-// HTTP for web services
+// HTTP + SSE for web services
 mcp.ServeHTTP(ctx, srv, ":8080")
+
+// WebSocket for bidirectional communication
+mcp.ServeWebSocket(ctx, srv, ":8081")
+
+// gRPC for high-performance service-to-service
+mcp.ServeGRPC(ctx, srv, ":9090")
 ```
 
 ### MCP Apps Support
@@ -418,6 +424,7 @@ Built-in middleware:
 - `Auth()` - API key and Bearer token authentication
 - `RateLimit()` - Request throttling
 - `SizeLimit()` - Request size limits
+- `OTel()` - OpenTelemetry tracing and metrics
 - `Audit()` - Request/response audit logging
 - `Tracing()` - Correlation and trace ID propagation
 - `OAuth2()` - JWT-based OAuth 2.0 authentication
@@ -476,6 +483,61 @@ tasks, _ := srv.Tasks().ListTasks(10, "")
 srv.Tasks().CancelTask(task.ID)
 ```
 
+### Tool Annotations
+
+Mark tools with behavioral hints for clients:
+
+```go
+srv.Tool("read-config").
+    Description("Read configuration").
+    ReadOnly().
+    Handler(readHandler)
+
+srv.Tool("delete-user").
+    Description("Delete a user account").
+    Destructive().
+    Handler(deleteHandler)
+
+srv.Tool("update-setting").
+    Description("Update a setting").
+    Idempotent().
+    Handler(updateHandler)
+```
+
+### Completion Support
+
+Provide autocomplete suggestions for prompt arguments and resource URIs:
+
+```go
+srv.PromptCompletion("code-review").
+    Argument("language", func(ctx context.Context, value string) (*mcp.CompletionResult, error) {
+        return &mcp.CompletionResult{
+            Values: []string{"go", "python", "typescript"},
+        }, nil
+    })
+```
+
+### Bidirectional Communication
+
+Servers can make requests back to clients via sessions:
+
+```go
+// Request LLM completion from client (sampling)
+session := mcp.SessionFromContext(ctx)
+result, _ := session.CreateMessage(ctx, mcp.CreateMessageRequest{
+    Messages: []mcp.SamplingMessage{{Role: mcp.User, Content: mcp.Content{Type: "text", Text: "Summarize this"}}},
+})
+
+// Query client workspace roots
+roots, _ := session.ListRoots(ctx)
+
+// Send log messages to client
+session.LogMessage(ctx, mcp.LoggingMessage{Level: mcp.Info, Data: "Processing complete"})
+
+// Notify clients of resource changes
+session.NotifyResourceUpdated(ctx, "config://app")
+```
+
 ### HTTP Transport
 
 Serve over HTTP with Server-Sent Events:
@@ -485,6 +547,60 @@ mcp.ServeHTTP(ctx, srv, ":8080",
     mcp.WithReadTimeout(30*time.Second),
     mcp.WithWriteTimeout(30*time.Second),
 )
+```
+
+### WebSocket Transport
+
+Serve over WebSocket for full-duplex communication:
+
+```go
+mcp.ServeWebSocket(ctx, srv, ":8081",
+    mcp.WithWebSocketReadTimeout(30*time.Second),
+    mcp.WithWebSocketWriteTimeout(30*time.Second),
+)
+```
+
+### gRPC Transport
+
+Serve over gRPC with Protocol Buffers for high-performance service-to-service communication:
+
+```go
+mcp.ServeGRPC(ctx, srv, ":9090",
+    mcp.WithGRPCShutdownTimeout(10*time.Second),
+)
+```
+
+### Client SDK
+
+Consume MCP servers programmatically:
+
+```go
+transport, _ := client.NewStdioTransport("./my-server")
+c := client.New(transport, client.WithTimeout(10*time.Second))
+
+info, _ := c.Initialize(ctx)
+tools, _ := c.ListTools(ctx)
+result, _ := c.CallTool(ctx, "search", SearchInput{Query: "hello"})
+```
+
+### Testing
+
+Test MCP servers without transport overhead:
+
+```go
+func TestMyServer(t *testing.T) {
+    srv := mcp.NewServer(mcp.ServerInfo{Name: "test", Version: "1.0.0"})
+    srv.Tool("greet").Handler(greetHandler)
+
+    tc := testutil.NewTestClient(t, srv)
+    defer tc.Close()
+
+    result, err := tc.CallTool("greet", map[string]any{"name": "World"})
+    if err != nil {
+        t.Fatal(err)
+    }
+    // result == "Hello, World!"
+}
 ```
 
 ---
