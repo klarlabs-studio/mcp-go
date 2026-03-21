@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.8.0...v1.9.0)
+
+### Features
+
+#### Structured Content in Tool Responses (#57)
+- Added `OutputSchema()` builder method for tools to declare typed output schemas
+- Added `StructuredResult` type for returning both text content blocks and structured data
+- Tools with `outputSchema` advertise it in `tools/list` responses
+- Backward compatible: existing string-returning handlers continue to work unchanged
+
+#### Dynamic Tool Registration with List Changed (#58)
+- Added `RemoveTool(name)`, `RemoveResource(uriTemplate)`, `RemovePrompt(name)` methods to `Server`
+- Capabilities now advertise `listChanged: true` for tools, resources, and prompts
+- Enables runtime tool set management — add/remove tools and notify clients via `session.NotifyToolListChanged()`
+
+#### Elicitation Protocol for Interactive User Prompts (#59)
+- Added `elicitation/create` method for server-to-client structured input requests
+- New types: `ElicitRequest`, `ElicitResult`, `Elicitor`
+- Context helper `ElicitFromContext(ctx)` available in tool handlers when client supports elicitation
+- Supports accept, decline, and cancel actions with JSON Schema-defined input forms
+
+#### MCP Channels for Server-Initiated Push Messages (#60)
+- Added `notifications/channel/message` for server-to-client push messaging
+- New types: `ChannelMessage`, `ChannelSender`
+- Context helper `ChannelFromContext(ctx)` available in tool handlers when client supports channels
+- Convenience method `SendText(channel, text)` for simple text messages
+- Eliminates polling — servers can proactively push DOM changes, network events, navigation alerts
+
 ## [1.8.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.7.0...v1.8.0)
 
 ### Breaking Changes

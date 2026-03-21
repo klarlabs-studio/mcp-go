@@ -247,6 +247,65 @@ task, _ := srv.Tasks().CreateTask(ctx,
     </div>
   </section>
 
+  <section class="section" id="dynamic-mcp">
+    <div class="container">
+      <div class="apps-header">
+        <span class="badge">New in v1.9</span>
+        <h2>Dynamic MCP — Structured Content, Elicitation &amp; Channels</h2>
+        <p class="section-intro">
+          Tools return typed structured data. Servers ask users for input mid-task. Push messages flow without polling.
+        </p>
+      </div>
+
+      <div class="features">
+        <div class="feature">
+          <h3>Structured Content</h3>
+          <p>Tools declare <code>OutputSchema</code> and return typed <code>StructuredResult</code> alongside text content blocks.</p>
+        </div>
+        <div class="feature">
+          <h3>Dynamic Registration</h3>
+          <p><code>RemoveTool()</code>, <code>RemoveResource()</code>, <code>RemovePrompt()</code> with <code>listChanged</code> notifications.</p>
+        </div>
+        <div class="feature">
+          <h3>Elicitation</h3>
+          <p>Request structured input from users mid-task via <code>ElicitFromContext(ctx)</code> with JSON Schema forms.</p>
+        </div>
+        <div class="feature">
+          <h3>Channels</h3>
+          <p>Push messages proactively via <code>ChannelFromContext(ctx)</code>. No polling — servers notify clients of DOM changes, network events, and navigation.</p>
+        </div>
+      </div>
+
+      <div class="apps-code-grid">
+        <div class="apps-code-block">
+          <div class="apps-code-label">Structured Content</div>
+          <pre><code>{`srv.Tool("extract_table").
+    OutputSchema(TableOutput{}).
+    Handler(func(ctx context.Context, in Input) (mcp.StructuredResult, error) {
+        return mcp.StructuredResult{
+            Content: []mcp.Content{mcp.NewTextContent("Found 3 rows")},
+            StructuredContent: map[string]any{
+                "headers": []string{"name", "age"},
+            },
+        }, nil
+    })`}</code></pre>
+        </div>
+        <div class="apps-code-block">
+          <div class="apps-code-label">Elicitation &amp; Channels</div>
+          <pre><code>{`// Ask user for clarification
+elicitor := mcp.ElicitFromContext(ctx)
+result, _ := elicitor.Elicit(ctx, &mcp.ElicitRequest{
+    Message: "Which field?",
+})
+
+// Push events to AI session
+channel := mcp.ChannelFromContext(ctx)
+channel.SendText("nav", "Page changed to /dashboard")`}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section section-muted">
     <div class="container">
       <h2>How it fits into the MCP ecosystem</h2>

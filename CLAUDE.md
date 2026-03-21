@@ -182,6 +182,7 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 **Client Methods (Server → Client):**
 - `sampling/createMessage` - Server requests LLM completion
 - `roots/list` - Server requests workspace roots
+- `elicitation/create` - Server requests structured input from user
 
 **Notifications:**
 - `notifications/progress` - Progress for long-running tools
@@ -192,6 +193,7 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 - `notifications/tools/list_changed` - Tool list changed
 - `notifications/prompts/list_changed` - Prompt list changed
 - `notifications/roots/list_changed` - Roots changed (client → server)
+- `notifications/channel/message` - Server pushes channel message to client
 
 ## v1.0 Features (Complete)
 
@@ -256,3 +258,26 @@ Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.
 - [x] Request spans with method and service attributes
 - [x] Request count, duration, and error metrics
 - [x] Helper functions: SpanFromContext, AddSpanEvent, SetSpanAttribute
+
+## v1.9 Features (Complete)
+
+**Structured Content:**
+- [x] `OutputSchema()` builder method for typed output schemas
+- [x] `StructuredResult` type with content + structuredContent
+- [x] `outputSchema` advertised in `tools/list` responses
+
+**Dynamic Registration:**
+- [x] `RemoveTool()`, `RemoveResource()`, `RemovePrompt()` methods
+- [x] `listChanged: true` capability advertisement
+
+**Elicitation:**
+- [x] `elicitation/create` method (server → client)
+- [x] `ElicitRequest`, `ElicitResult` types
+- [x] `ElicitFromContext(ctx)` context helper
+- [x] Client capability negotiation
+
+**Channels:**
+- [x] `notifications/channel/message` notification
+- [x] `ChannelMessage`, `ChannelSender` types
+- [x] `ChannelFromContext(ctx)` context helper
+- [x] `SendText()` convenience method

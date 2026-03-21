@@ -8,7 +8,7 @@ mcp-go is a Go framework for building [Model Context Protocol (MCP)](https://mod
 
 ## Prerequisites
 
-- **Go 1.23** or later
+- **Go 1.25** or later
 - Basic Go knowledge (packages, structs, functions)
 - No prior MCP knowledge required
 

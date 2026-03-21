@@ -344,6 +344,53 @@ srv.Tool("list").
 
 This ensures compliance with the MCP specification which requires the `text` field to always be a string.
 
+#### Structured Content
+
+Tools can return typed structured data alongside text content blocks using `OutputSchema` and `StructuredResult`:
+
+```go
+type TableOutput struct {
+    Headers []string   `json:"headers"`
+    Rows    [][]string `json:"rows"`
+}
+
+srv.Tool("extract_table").
+    Description("Extract table data from a page").
+    OutputSchema(TableOutput{}).
+    Handler(func(ctx context.Context, input ExtractInput) (mcp.StructuredResult, error) {
+        return mcp.StructuredResult{
+            Content:           []mcp.Content{mcp.NewTextContent("Found 3 rows")},
+            StructuredContent: map[string]any{"headers": []string{"name", "age"}, "rows": [][]string{{"Alice", "30"}}},
+        }, nil
+    })
+```
+
+The response includes both `content` (text blocks for display) and `structuredContent` (typed data matching the output schema). Clients that understand `structuredContent` can render it natively (tables, trees, etc.).
+
+#### Dynamic Tool Registration
+
+Add and remove tools at runtime, then notify connected clients:
+
+```go
+// Add a tool dynamically
+srv.Tool("fill_form").Handler(fillFormHandler)
+
+// Notify clients that the tool list changed
+session := mcp.SessionFromContext(ctx)
+session.NotifyToolListChanged()
+
+// Remove a tool when it's no longer relevant
+srv.RemoveTool("fill_form")
+session.NotifyToolListChanged()
+
+// Same pattern works for resources and prompts
+srv.RemoveResource("config://temp")
+session.NotifyResourceListChanged()
+
+srv.RemovePrompt("onboarding")
+session.NotifyPromptListChanged()
+```
+
 ### Resources
 
 Resources expose data via URI templates:
@@ -536,6 +583,36 @@ session.LogMessage(ctx, mcp.LoggingMessage{Level: mcp.Info, Data: "Processing co
 
 // Notify clients of resource changes
 session.NotifyResourceUpdated(ctx, "config://app")
+
+// Elicitation — ask the user for structured input mid-task
+elicitor := mcp.ElicitFromContext(ctx)
+if elicitor != nil {
+    result, _ := elicitor.Elicit(ctx, &mcp.ElicitRequest{
+        Message: "Multiple fields match 'Name'. Which one?",
+        RequestedSchema: map[string]any{
+            "type": "object",
+            "properties": map[string]any{
+                "field": map[string]any{"type": "string", "enum": []string{"First Name", "Last Name"}},
+            },
+        },
+    })
+    if result.Action == "accept" {
+        selectedField := result.Content["field"]
+        // Use selectedField...
+    }
+}
+
+// Channels — push messages proactively into the AI session
+channel := mcp.ChannelFromContext(ctx)
+if channel != nil {
+    channel.SendText("navigation", "Page navigated to /dashboard")
+    channel.Send(&mcp.ChannelMessage{
+        Channel:  "network",
+        Content:  mcp.NewTextContent("API response received"),
+        Data:     map[string]any{"status": 200, "url": "/api/users"},
+        Priority: "high",
+    })
+}
 ```
 
 ### HTTP Transport

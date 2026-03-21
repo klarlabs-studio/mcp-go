@@ -131,6 +131,105 @@ srv.Prompt("code-review").
     </section>
 
     <section>
+      <h2>Structured Content</h2>
+      <p>
+        Tools can return typed structured data alongside text content blocks. Declare an output schema
+        and return a <code>StructuredResult</code> — clients that understand structured content can render
+        it natively (tables, JSON trees, images).
+      </p>
+      <p><strong>Use structured content for:</strong> Tables, complex data, typed API responses that clients can render natively.</p>
+      <pre><code>{`type TableOutput struct {
+    Headers []string   \`json:"headers"\`
+    Rows    [][]string \`json:"rows"\`
+}
+
+srv.Tool("extract_table").
+    OutputSchema(TableOutput{}).
+    Handler(func(ctx context.Context, in Input) (mcp.StructuredResult, error) {
+        return mcp.StructuredResult{
+            Content:           []mcp.Content{mcp.NewTextContent("Found 3 rows")},
+            StructuredContent: map[string]any{"headers": []string{"name", "age"}, "rows": rows},
+        }, nil
+    })`}</code></pre>
+      <p>
+        Legacy handlers returning strings or structs continue to work unchanged.
+        <code>StructuredResult</code> is opt-in.
+      </p>
+    </section>
+
+    <section>
+      <h2>Dynamic Registration</h2>
+      <p>
+        Add and remove tools, resources, and prompts at runtime. Notify connected clients
+        when the available set changes.
+      </p>
+      <p><strong>Use dynamic registration for:</strong> Context-dependent tools, feature flags, progressive disclosure of capabilities.</p>
+      <pre><code>{`// Remove a tool that's no longer relevant
+srv.RemoveTool("fill_form")
+session.NotifyToolListChanged()
+
+// Same for resources and prompts
+srv.RemoveResource("config://temp")
+srv.RemovePrompt("onboarding")`}</code></pre>
+    </section>
+
+    <section>
+      <h2>Elicitation</h2>
+      <p>
+        Servers can request structured input from users mid-task. Use elicitation when a tool
+        encounters ambiguity, needs confirmation, or requires user selection.
+      </p>
+      <p><strong>Use elicitation for:</strong> Disambiguation, confirmation dialogs, multi-step workflows, user selection from options.</p>
+      <pre><code>{`elicitor := mcp.ElicitFromContext(ctx)
+if elicitor != nil {
+    result, err := elicitor.Elicit(ctx, &mcp.ElicitRequest{
+        Message: "Multiple fields match 'Name'. Which one?",
+        RequestedSchema: map[string]any{
+            "type": "object",
+            "properties": map[string]any{
+                "field": map[string]any{
+                    "type": "string",
+                    "enum": []string{"First Name", "Last Name", "Full Name"},
+                },
+            },
+        },
+    })
+    // result.Action is "accept", "decline", or "cancel"
+    // result.Content has the user's selection when accepted
+}`}</code></pre>
+      <p>
+        Elicitation requires client support. <code>ElicitFromContext</code> returns <code>nil</code>
+        when the client doesn't support it.
+      </p>
+    </section>
+
+    <section>
+      <h2>Channels</h2>
+      <p>
+        Servers can push messages proactively into AI sessions without waiting to be polled.
+        Channel messages are notifications — fire-and-forget with no response expected.
+      </p>
+      <p><strong>Use channels for:</strong> DOM mutation alerts, network request completion, page navigation events, element appearance notifications.</p>
+      <pre><code>{`channel := mcp.ChannelFromContext(ctx)
+if channel != nil {
+    // Simple text message
+    channel.SendText("navigation", "SPA route changed to /dashboard")
+
+    // Rich message with structured data
+    channel.Send(&mcp.ChannelMessage{
+        Channel:  "network",
+        Content:  mcp.NewTextContent("API response received"),
+        Data:     map[string]any{"status": 200, "url": "/api/users"},
+        Priority: "high",
+    })
+}`}</code></pre>
+      <p>
+        Channels require client support. <code>ChannelFromContext</code> returns <code>nil</code>
+        when the client doesn't support it.
+      </p>
+    </section>
+
+    <section>
       <h2>Middleware</h2>
       <p>
         Middleware wraps request handlers to add cross-cutting concerns.
