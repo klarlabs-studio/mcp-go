@@ -1,4 +1,4 @@
-.PHONY: all build test lint coverage bench clean help
+.PHONY: all build test lint coverage bench clean help hooks
 
 # Default target
 all: lint test build
@@ -71,6 +71,11 @@ vet:
 # Run all checks (for CI)
 ci: deps lint test build
 
+# Install git hooks
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed (using .githooks/)"
+
 # Install development tools
 tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
@@ -96,5 +101,6 @@ help:
 	@echo "  fmt           - Format code with gofmt"
 	@echo "  vet           - Run go vet"
 	@echo "  ci            - Run all CI checks"
+	@echo "  hooks         - Install git pre-commit hooks"
 	@echo "  tools         - Install development tools"
 	@echo "  help          - Show this help"
