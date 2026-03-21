@@ -137,15 +137,15 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Install VerdictSec
-        run: go install github.com/felixgeelhaar/verdictsec/cmd/verdict@latest
+      - name: Install nox
+        run: go install github.com/felixgeelhaar/nox@latest
 
-      - name: Run VerdictSec Security Scan
-        run: verdict scan --json -o verdict-results.json || true
+      - name: Run nox Security Scan
+        run: nox scan . || true
 
-      - name: Upload VerdictSec results
+      - name: Upload nox results
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: security-scan-results
-          path: verdict-results.json
+          path: findings.json
         if: always()
