@@ -158,6 +158,9 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
         <li><code>Auth(validator)</code> — API key and Bearer token authentication</li>
         <li><code>RateLimit(rps)</code> — Request throttling</li>
         <li><code>SizeLimit(bytes)</code> — Request size limits</li>
+        <li><code>Audit()</code> — Request/response audit logging</li>
+        <li><code>Tracing()</code> — Correlation and trace ID propagation</li>
+        <li><code>OAuth2()</code> — JWT-based OAuth 2.0 authentication</li>
       </ul>
     </section>
 
@@ -192,6 +195,14 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
         <li><code>GET /health</code> — Health check</li>
       </ul>
       <p><strong>Use HTTP for:</strong> Web deployments, service-to-service, load balancing.</p>
+
+      <h3>gRPC</h3>
+      <p>
+        High-performance transport using Protocol Buffers and HTTP/2.
+        Ideal for service-to-service communication with strong typing and streaming.
+      </p>
+      <pre><code>{`mcp.ServeGRPC(ctx, srv, ":9090")`}</code></pre>
+      <p><strong>Use gRPC for:</strong> Microservices, high-throughput pipelines, polyglot environments.</p>
 
       <h3>Same server, different transports</h3>
       <p>

@@ -129,6 +129,7 @@ Run the same server over:
 - **stdio** (CLI / agent use)
 - **HTTP + SSE** (service deployments)
 - **WebSocket** (bidirectional communication)
+- **gRPC** (high-performance service-to-service)
 
 ```go
 // Stdio for CLI tools
@@ -255,7 +256,7 @@ Want to add your project? Open a PR!
 go get github.com/felixgeelhaar/mcp-go
 ```
 
-Requires Go 1.23 or later.
+Requires Go 1.25 or later.
 
 ---
 
