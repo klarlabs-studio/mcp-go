@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/felixgeelhaar/mcp-go/protocol"
 	"github.com/felixgeelhaar/mcp-go/transport"
 )
 
@@ -606,5 +607,198 @@ func TestServeStdio_Initialize_EmptyCapabilities(t *testing.T) {
 	// Verify capabilities is empty when nothing is registered
 	if len(resp.Result.Capabilities) != 0 {
 		t.Errorf("expected empty capabilities when nothing registered, got: %v", resp.Result.Capabilities)
+	}
+}
+
+func TestHandleToolsList_WithOutputSchema(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct {
+		URL string `json:"url"`
+	}
+	type TableOutput struct {
+		Headers []string   `json:"headers"`
+		Rows    [][]string `json:"rows"`
+	}
+
+	srv.Tool("extract_table").
+		Description("Extract table data").
+		OutputSchema(TableOutput{}).
+		Handler(func(input Input) (StructuredResult, error) {
+			return StructuredResult{
+				Content:           []Content{NewTextContent("Found table")},
+				StructuredContent: map[string]any{"headers": []string{"a"}},
+			}, nil
+		})
+
+	handler := newRequestHandler(srv)
+
+	listReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), listReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	if !strings.Contains(string(result), `"outputSchema"`) {
+		t.Errorf("expected outputSchema in tools/list response, got: %s", result)
+	}
+}
+
+func TestHandleToolsCall_StructuredResult(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+
+	srv.Tool("structured").
+		Handler(func(input Input) (StructuredResult, error) {
+			return StructuredResult{
+				Content: []Content{NewTextContent("Found 3 rows")},
+				StructuredContent: map[string]any{
+					"headers": []string{"name", "age"},
+					"rows":    [][]string{{"Alice", "30"}},
+				},
+			}, nil
+		})
+
+	handler := newRequestHandler(srv)
+
+	callReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"structured","arguments":{}}`),
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), callReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	resultStr := string(result)
+
+	if !strings.Contains(resultStr, `"structuredContent"`) {
+		t.Errorf("expected structuredContent in response, got: %s", resultStr)
+	}
+	if !strings.Contains(resultStr, `"content"`) {
+		t.Errorf("expected content in response, got: %s", resultStr)
+	}
+	if !strings.Contains(resultStr, "Found 3 rows") {
+		t.Errorf("expected text content in response, got: %s", resultStr)
+	}
+}
+
+func TestHandleToolsCall_LegacyStringResult(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+
+	srv.Tool("simple").
+		Handler(func(input Input) (string, error) {
+			return "hello world", nil
+		})
+
+	handler := newRequestHandler(srv)
+
+	callReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"simple","arguments":{}}`),
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), callReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	resultStr := string(result)
+
+	// Should NOT have structuredContent
+	if strings.Contains(resultStr, `"structuredContent"`) {
+		t.Errorf("legacy handler should not return structuredContent, got: %s", resultStr)
+	}
+	if !strings.Contains(resultStr, "hello world") {
+		t.Errorf("expected text content, got: %s", resultStr)
+	}
+}
+
+func TestServer_RemoveTool_Integration(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+
+	srv.Tool("a").Handler(func(input Input) (string, error) { return "a", nil })
+	srv.Tool("b").Handler(func(input Input) (string, error) { return "b", nil })
+
+	handler := newRequestHandler(srv)
+
+	// List tools - should have 2
+	listReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	}
+
+	resp, _ := handler.HandleRequest(context.Background(), listReq)
+	result, _ := json.Marshal(resp.Result)
+
+	var listResult struct {
+		Tools []map[string]any `json:"tools"`
+	}
+	json.Unmarshal(result, &listResult)
+
+	if len(listResult.Tools) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(listResult.Tools))
+	}
+
+	// Remove tool "a"
+	srv.RemoveTool("a")
+
+	// List tools - should have 1
+	resp, _ = handler.HandleRequest(context.Background(), listReq)
+	result, _ = json.Marshal(resp.Result)
+	json.Unmarshal(result, &listResult)
+
+	if len(listResult.Tools) != 1 {
+		t.Fatalf("expected 1 tool after removal, got %d", len(listResult.Tools))
+	}
+	if listResult.Tools[0]["name"] != "b" {
+		t.Errorf("expected remaining tool 'b', got %q", listResult.Tools[0]["name"])
+	}
+}
+
+func TestInitialize_ListChangedCapability(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+	srv.Tool("t").Handler(func(input Input) (string, error) { return "", nil })
+
+	handler := newRequestHandler(srv)
+
+	initReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1.0.0"}}`),
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), initReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	resultStr := string(result)
+
+	if !strings.Contains(resultStr, `"listChanged":true`) {
+		t.Errorf("expected listChanged:true in capabilities, got: %s", resultStr)
 	}
 }

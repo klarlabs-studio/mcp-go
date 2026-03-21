@@ -10,12 +10,25 @@ import (
 	"github.com/felixgeelhaar/mcp-go/schema"
 )
 
+// StructuredResult allows tool handlers to return structured content
+// alongside text content blocks. When a handler returns this type,
+// the response includes both content and structuredContent fields.
+type StructuredResult struct {
+	// Content contains text/image content blocks for display.
+	Content []Content `json:"content,omitempty"`
+	// StructuredContent contains typed data matching the tool's outputSchema.
+	StructuredContent map[string]any `json:"structuredContent"`
+	// IsError indicates whether the result represents an error.
+	IsError bool `json:"isError,omitempty"`
+}
+
 // Tool represents a callable function exposed via MCP.
 type Tool struct {
 	name          string
 	description   string
 	inputType     reflect.Type
 	inputSchema   any
+	outputSchema  any
 	validatable   *schema.Schema
 	validateInput bool
 	handler       any
@@ -37,6 +50,23 @@ func (b *ToolBuilder) Description(desc string) *ToolBuilder {
 		return b
 	}
 	b.tool.description = desc
+	return b
+}
+
+// OutputSchema sets the output schema for structured content responses.
+// Pass a zero-value instance of the output type (e.g., OutputSchema(MyOutput{})).
+// When set, the tool advertises an outputSchema in its listing and handlers
+// can return StructuredResult with typed structured content.
+func (b *ToolBuilder) OutputSchema(example any) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	s, err := schema.Generate(example)
+	if err != nil {
+		b.err = fmt.Errorf("failed to generate output schema: %w", err)
+		return b
+	}
+	b.tool.outputSchema = s
 	return b
 }
 
@@ -154,6 +184,11 @@ func (b *ToolBuilder) validateHandler(fn any) error {
 // Meta returns the tool's metadata map, used for _meta in MCP responses.
 func (t *Tool) Meta() map[string]any {
 	return t.meta
+}
+
+// OutputSchema returns the tool's output schema, or nil if not set.
+func (t *Tool) OutputSchema() any {
+	return t.outputSchema
 }
 
 // Execute runs the tool handler with the given JSON input.

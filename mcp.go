@@ -152,6 +152,28 @@ type SubscriptionManager = server.SubscriptionManager
 
 var NewSubscriptionManager = server.NewSubscriptionManager
 
+// Structured result types for tool responses
+type StructuredResult = server.StructuredResult
+
+// Elicitation types for interactive user prompts
+type ElicitRequest = server.ElicitRequest
+type ElicitResult = server.ElicitResult
+type Elicitor = server.Elicitor
+
+var (
+	NewElicitor       = server.NewElicitor
+	ElicitFromContext = server.ElicitFromContext
+)
+
+// Channel types for server-initiated push messages
+type ChannelMessage = server.ChannelMessage
+type ChannelSender = server.ChannelSender
+
+var (
+	NewChannelSender   = server.NewChannelSender
+	ChannelFromContext = server.ChannelFromContext
+)
+
 // Completion types for autocomplete support
 type CompletionRef = server.CompletionRef
 type CompletionArgument = server.CompletionArgument
@@ -556,13 +578,13 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	capabilities := make(map[string]any)
 
 	if manifest.Capabilities.Tools || len(h.srv.Tools()) > 0 {
-		capabilities["tools"] = map[string]any{}
+		capabilities["tools"] = map[string]any{"listChanged": true}
 	}
 	if manifest.Capabilities.Resources || len(h.srv.Resources()) > 0 {
-		capabilities["resources"] = map[string]any{}
+		capabilities["resources"] = map[string]any{"listChanged": true}
 	}
 	if manifest.Capabilities.Prompts || len(h.srv.Prompts()) > 0 {
-		capabilities["prompts"] = map[string]any{}
+		capabilities["prompts"] = map[string]any{"listChanged": true}
 	}
 
 	// Build serverInfo with required fields
@@ -613,6 +635,9 @@ func (h *requestHandler) handleToolsList(_ context.Context, req *protocol.Reques
 			"description": t.Description,
 			"inputSchema": t.InputSchema,
 		}
+		if t.OutputSchema != nil {
+			item["outputSchema"] = t.OutputSchema
+		}
 		if t.Annotations != nil {
 			item["annotations"] = t.Annotations
 		}
@@ -655,6 +680,16 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		}
 	}
 
+	// Inject elicitor and channel sender if session is available
+	if session := server.SessionFromContext(ctx); session != nil {
+		if session.SupportsFeature("elicitation") {
+			ctx = server.ContextWithElicitor(ctx, server.NewElicitor(session))
+		}
+		if session.SupportsFeature("channels") {
+			ctx = server.ContextWithChannel(ctx, server.NewChannelSender(session))
+		}
+	}
+
 	// Execute tool
 	result, err := tool.Execute(ctx, params.Arguments)
 	if err != nil {
@@ -666,27 +701,51 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		return nil, protocol.NewInternalError(err.Error())
 	}
 
-	// Format result - ensure text is always a string per MCP spec
-	var textContent string
-	switch v := result.(type) {
-	case string:
-		textContent = v
-	default:
-		// Serialize non-string results to JSON string
-		data, err := json.Marshal(v)
-		if err != nil {
-			return nil, protocol.NewInternalError(fmt.Sprintf("failed to serialize tool result: %v", err))
-		}
-		textContent = string(data)
-	}
+	// Format result based on type
+	response := make(map[string]any)
 
-	response := map[string]any{
-		"content": []map[string]any{
+	switch v := result.(type) {
+	case server.StructuredResult:
+		if len(v.Content) > 0 {
+			response["content"] = v.Content
+		} else {
+			response["content"] = []map[string]any{}
+		}
+		response["structuredContent"] = v.StructuredContent
+		if v.IsError {
+			response["isError"] = true
+		}
+	case *server.StructuredResult:
+		if v != nil {
+			if len(v.Content) > 0 {
+				response["content"] = v.Content
+			} else {
+				response["content"] = []map[string]any{}
+			}
+			response["structuredContent"] = v.StructuredContent
+			if v.IsError {
+				response["isError"] = true
+			}
+		}
+	default:
+		// Legacy: serialize to text content block
+		var textContent string
+		switch tv := result.(type) {
+		case string:
+			textContent = tv
+		default:
+			data, err := json.Marshal(tv)
+			if err != nil {
+				return nil, protocol.NewInternalError(fmt.Sprintf("failed to serialize tool result: %v", err))
+			}
+			textContent = string(data)
+		}
+		response["content"] = []map[string]any{
 			{
 				"type": "text",
 				"text": textContent,
 			},
-		},
+		}
 	}
 
 	if tool.Meta() != nil {

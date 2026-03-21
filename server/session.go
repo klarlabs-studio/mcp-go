@@ -35,8 +35,10 @@ type Session struct {
 
 // ClientCapabilities describes what features the client supports.
 type ClientCapabilities struct {
-	Sampling bool             `json:"sampling,omitempty"`
-	Roots    *RootsCapability `json:"roots,omitempty"`
+	Sampling    bool             `json:"sampling,omitempty"`
+	Roots       *RootsCapability `json:"roots,omitempty"`
+	Elicitation bool             `json:"elicitation,omitempty"`
+	Channels    bool             `json:"channels,omitempty"`
 }
 
 // RootsCapability describes the client's roots support.
@@ -117,6 +119,10 @@ func (s *Session) SupportsFeature(feature string) bool {
 		return s.clientCaps.Roots != nil
 	case "roots.listChanged":
 		return s.clientCaps.Roots != nil && s.clientCaps.Roots.ListChanged
+	case "elicitation":
+		return s.clientCaps.Elicitation
+	case "channels":
+		return s.clientCaps.Channels
 	default:
 		return false
 	}

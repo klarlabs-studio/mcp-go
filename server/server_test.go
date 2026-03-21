@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"testing"
 )
 
@@ -397,5 +398,95 @@ func TestServer_AllMetadataOptions(t *testing.T) {
 	}
 	if srv.Instructions() != "Use wisely" {
 		t.Errorf("Instructions = %q, want %q", srv.Instructions(), "Use wisely")
+	}
+}
+
+func TestServer_RemoveTool(t *testing.T) {
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+
+	type Input struct {
+		Query string `json:"query"`
+	}
+
+	srv.Tool("search").Handler(func(input Input) (string, error) { return "ok", nil })
+	srv.Tool("fetch").Handler(func(input Input) (string, error) { return "ok", nil })
+
+	if len(srv.Tools()) != 2 {
+		t.Fatalf("expected 2 tools, got %d", len(srv.Tools()))
+	}
+
+	// Remove existing tool
+	if !srv.RemoveTool("search") {
+		t.Error("expected RemoveTool to return true for existing tool")
+	}
+	if len(srv.Tools()) != 1 {
+		t.Errorf("expected 1 tool after removal, got %d", len(srv.Tools()))
+	}
+
+	// Remove non-existing tool
+	if srv.RemoveTool("nonexistent") {
+		t.Error("expected RemoveTool to return false for non-existing tool")
+	}
+
+	// Verify correct tool was removed
+	_, ok := srv.GetTool("search")
+	if ok {
+		t.Error("expected 'search' tool to be removed")
+	}
+	_, ok = srv.GetTool("fetch")
+	if !ok {
+		t.Error("expected 'fetch' tool to still exist")
+	}
+}
+
+func TestServer_RemoveResource(t *testing.T) {
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+
+	srv.Resource("config://app").
+		Name("Config").
+		Handler(func(ctx context.Context, uri string, params map[string]string) (*ResourceContent, error) {
+			return &ResourceContent{URI: uri, Text: "data"}, nil
+		})
+
+	if len(srv.Resources()) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(srv.Resources()))
+	}
+
+	if !srv.RemoveResource("config://app") {
+		t.Error("expected RemoveResource to return true")
+	}
+	if len(srv.Resources()) != 0 {
+		t.Errorf("expected 0 resources after removal, got %d", len(srv.Resources()))
+	}
+
+	if srv.RemoveResource("config://app") {
+		t.Error("expected RemoveResource to return false for already removed resource")
+	}
+}
+
+func TestServer_RemovePrompt(t *testing.T) {
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+
+	srv.Prompt("greeting").
+		Description("A greeting prompt").
+		Handler(func(ctx context.Context, args map[string]string) (*PromptResult, error) {
+			return &PromptResult{
+				Messages: []PromptMessage{{Role: "user", Content: TextContent{Type: "text", Text: "hi"}}},
+			}, nil
+		})
+
+	if len(srv.Prompts()) != 1 {
+		t.Fatalf("expected 1 prompt, got %d", len(srv.Prompts()))
+	}
+
+	if !srv.RemovePrompt("greeting") {
+		t.Error("expected RemovePrompt to return true")
+	}
+	if len(srv.Prompts()) != 0 {
+		t.Errorf("expected 0 prompts after removal, got %d", len(srv.Prompts()))
+	}
+
+	if srv.RemovePrompt("greeting") {
+		t.Error("expected RemovePrompt to return false for already removed prompt")
 	}
 }

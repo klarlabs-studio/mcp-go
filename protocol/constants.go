@@ -28,6 +28,7 @@ const (
 	MethodToolListChanged     = "notifications/tools/list_changed"
 	MethodPromptListChanged   = "notifications/prompts/list_changed"
 	MethodRootsListChanged    = "notifications/roots/list_changed"
+	MethodChannelMessage      = "notifications/channel/message"
 )
 
 // Client feature methods (server requests these from client).
@@ -35,6 +36,7 @@ const (
 	MethodSamplingCreateMessage = "sampling/createMessage"
 	MethodRootsList             = "roots/list"
 	MethodLoggingSetLevel       = "logging/setLevel"
+	MethodElicitationCreate     = "elicitation/create"
 )
 
 // Resource subscription methods.

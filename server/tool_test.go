@@ -231,4 +231,86 @@ func TestTool_Execute(t *testing.T) {
 			t.Fatal("expected error for invalid JSON")
 		}
 	})
+
+	t.Run("returns StructuredResult from handler", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct{}
+
+		srv.Tool("structured").
+			Handler(func(input Input) (StructuredResult, error) {
+				return StructuredResult{
+					Content: []Content{NewTextContent("Found 3 rows")},
+					StructuredContent: map[string]any{
+						"headers": []string{"name", "age"},
+						"rows":    [][]string{{"Alice", "30"}},
+					},
+				}, nil
+			})
+
+		tool, _ := srv.GetTool("structured")
+		result, err := tool.Execute(context.Background(), []byte(`{}`))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		sr, ok := result.(StructuredResult)
+		if !ok {
+			t.Fatalf("expected StructuredResult, got %T", result)
+		}
+		if len(sr.Content) != 1 {
+			t.Errorf("expected 1 content block, got %d", len(sr.Content))
+		}
+		if sr.StructuredContent["headers"] == nil {
+			t.Error("expected structuredContent to have headers")
+		}
+	})
+}
+
+func TestToolBuilder_OutputSchema(t *testing.T) {
+	t.Run("sets output schema", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct{}
+		type Output struct {
+			Headers []string   `json:"headers"`
+			Rows    [][]string `json:"rows"`
+		}
+
+		srv.Tool("extract_table").
+			OutputSchema(Output{}).
+			Handler(func(input Input) (StructuredResult, error) {
+				return StructuredResult{
+					StructuredContent: map[string]any{"headers": []string{"a"}},
+				}, nil
+			})
+
+		tools := srv.Tools()
+		if len(tools) != 1 {
+			t.Fatalf("expected 1 tool, got %d", len(tools))
+		}
+		if tools[0].OutputSchema == nil {
+			t.Error("expected OutputSchema to be set")
+		}
+
+		// Verify via tool accessor
+		tool, _ := srv.GetTool("extract_table")
+		if tool.OutputSchema() == nil {
+			t.Error("expected tool.OutputSchema() to be non-nil")
+		}
+	})
+
+	t.Run("output schema not set by default", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct{}
+
+		srv.Tool("simple").
+			Handler(func(input Input) (string, error) { return "ok", nil })
+
+		tools := srv.Tools()
+		if tools[0].OutputSchema != nil {
+			t.Error("expected OutputSchema to be nil by default")
+		}
+	})
 }

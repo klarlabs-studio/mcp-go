@@ -57,11 +57,12 @@ type Manifest struct {
 
 // ToolInfo represents metadata about a registered tool.
 type ToolInfo struct {
-	Name        string
-	Description string
-	InputSchema any
-	Annotations *ToolAnnotations
-	Meta        map[string]any
+	Name         string
+	Description  string
+	InputSchema  any
+	OutputSchema any
+	Annotations  *ToolAnnotations
+	Meta         map[string]any
 }
 
 // Option configures a Server.
@@ -182,11 +183,12 @@ func (s *Server) Tools() []ToolInfo {
 	result := make([]ToolInfo, 0, len(s.tools))
 	for _, t := range s.tools {
 		result = append(result, ToolInfo{
-			Name:        t.name,
-			Description: t.description,
-			InputSchema: t.inputSchema,
-			Annotations: t.annotations,
-			Meta:        t.meta,
+			Name:         t.name,
+			Description:  t.description,
+			InputSchema:  t.inputSchema,
+			OutputSchema: t.outputSchema,
+			Annotations:  t.annotations,
+			Meta:         t.meta,
 		})
 	}
 	return result
@@ -223,6 +225,17 @@ func (s *Server) GetTool(name string) (*Tool, bool) {
 	defer s.mu.RUnlock()
 	t, ok := s.tools[name]
 	return t, ok
+}
+
+// RemoveTool removes a tool by name. Returns true if the tool existed.
+func (s *Server) RemoveTool(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.tools[name]
+	if ok {
+		delete(s.tools, name)
+	}
+	return ok
 }
 
 // Resource starts building a new resource with the given URI template.
@@ -266,6 +279,17 @@ func (s *Server) GetResource(uriTemplate string) (*Resource, bool) {
 	defer s.mu.RUnlock()
 	r, ok := s.resources[uriTemplate]
 	return r, ok
+}
+
+// RemoveResource removes a resource by URI template. Returns true if it existed.
+func (s *Server) RemoveResource(uriTemplate string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.resources[uriTemplate]
+	if ok {
+		delete(s.resources, uriTemplate)
+	}
+	return ok
 }
 
 // FindResourceForURI finds a resource that matches the given URI.
@@ -321,6 +345,17 @@ func (s *Server) GetPrompt(name string) (*Prompt, bool) {
 	defer s.mu.RUnlock()
 	p, ok := s.prompts[name]
 	return p, ok
+}
+
+// RemovePrompt removes a prompt by name. Returns true if it existed.
+func (s *Server) RemovePrompt(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.prompts[name]
+	if ok {
+		delete(s.prompts, name)
+	}
+	return ok
 }
 
 // PromptCompletion starts building a completion handler for a prompt.
