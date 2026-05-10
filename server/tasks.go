@@ -20,6 +20,12 @@ const (
 	TaskStatusCanceled  TaskStatus = "canceled"
 )
 
+// Task metadata field keys.
+const (
+	metaKeyName   = "name"
+	metaKeyParams = "params"
+)
+
 type TaskResult struct {
 	Data  any    `json:"data,omitempty"`
 	Error string `json:"error,omitempty"`
@@ -197,8 +203,8 @@ func (m *TaskManager) CreateTask(ctx context.Context, req CreateTaskRequest) (*T
 		Message:   "Task queued",
 		CreatedAt: time.Now(),
 		Metadata: map[string]any{
-			"name":   req.Name,
-			"params": req.Params,
+			metaKeyName:   req.Name,
+			metaKeyParams: req.Params,
 		},
 	}
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const tagRequired = "required"
+
 // Schema represents a JSON Schema.
 type Schema struct {
 	Type        string             `json:"type,omitempty"`
@@ -32,7 +34,7 @@ func GenerateFromType(t reflect.Type) (*Schema, error) {
 
 func generateFromType(t reflect.Type) (*Schema, error) {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -40,18 +42,18 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 	case reflect.Struct:
 		return generateStructSchema(t)
 	case reflect.String:
-		return &Schema{Type: "string"}, nil
+		return &Schema{Type: typeString}, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return &Schema{Type: "integer"}, nil
+		return &Schema{Type: typeInteger}, nil
 	case reflect.Float32, reflect.Float64:
-		return &Schema{Type: "number"}, nil
+		return &Schema{Type: typeNumber}, nil
 	case reflect.Bool:
-		return &Schema{Type: "boolean"}, nil
+		return &Schema{Type: typeBoolean}, nil
 	case reflect.Slice, reflect.Array:
 		return generateArraySchema(t)
 	case reflect.Map:
-		return &Schema{Type: "object"}, nil
+		return &Schema{Type: typeObject}, nil
 	default:
 		return &Schema{}, nil
 	}
@@ -59,7 +61,7 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 
 func generateStructSchema(t reflect.Type) (*Schema, error) {
 	schema := &Schema{
-		Type:       "object",
+		Type:       typeObject,
 		Properties: make(map[string]*Schema),
 	}
 
@@ -107,7 +109,7 @@ func generateArraySchema(t reflect.Type) (*Schema, error) {
 	}
 
 	return &Schema{
-		Type:  "array",
+		Type:  typeArray,
 		Items: itemSchema,
 	}, nil
 }
@@ -121,7 +123,7 @@ func parseJSONSchemaTag(tag string, schema *Schema, required *[]string, fieldNam
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 
-		if part == "required" {
+		if part == tagRequired {
 			*required = append(*required, fieldName)
 			continue
 		}

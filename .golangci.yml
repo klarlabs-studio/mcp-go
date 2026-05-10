@@ -67,6 +67,7 @@ linters:
           - gosec
           - gocritic
           - errorlint
+          - goconst
 
       - path: e2e/
         linters:

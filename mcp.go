@@ -41,6 +41,17 @@ import (
 	grpctransport "github.com/felixgeelhaar/mcp-go/transport/grpc"
 )
 
+// JSON field names used in MCP protocol payloads. Extracted as constants
+// so map-literal builders share a single source of truth (and silence
+// goconst).
+const (
+	fieldName            = "name"
+	fieldVersion         = "version"
+	fieldProtocolVersion = "protocolVersion"
+	fieldListChanged     = "listChanged"
+	fieldText            = "text"
+)
+
 // Re-export core types for convenience
 
 // ServerInfo contains server metadata exposed to clients.
@@ -578,19 +589,19 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	capabilities := make(map[string]any)
 
 	if manifest.Capabilities.Tools || len(h.srv.Tools()) > 0 {
-		capabilities["tools"] = map[string]any{"listChanged": true}
+		capabilities["tools"] = map[string]any{fieldListChanged: true}
 	}
 	if manifest.Capabilities.Resources || len(h.srv.Resources()) > 0 {
-		capabilities["resources"] = map[string]any{"listChanged": true}
+		capabilities["resources"] = map[string]any{fieldListChanged: true}
 	}
 	if manifest.Capabilities.Prompts || len(h.srv.Prompts()) > 0 {
-		capabilities["prompts"] = map[string]any{"listChanged": true}
+		capabilities["prompts"] = map[string]any{fieldListChanged: true}
 	}
 
 	// Build serverInfo with required fields
 	serverInfo := map[string]any{
-		"name":    manifest.Name,
-		"version": manifest.Version,
+		fieldName:    manifest.Name,
+		fieldVersion: manifest.Version,
 	}
 
 	// Add optional MCP spec fields if set
@@ -612,9 +623,9 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	}
 
 	result := map[string]any{
-		"protocolVersion": manifest.ProtocolVersion,
-		"serverInfo":      serverInfo,
-		"capabilities":    capabilities,
+		fieldProtocolVersion: manifest.ProtocolVersion,
+		"serverInfo":         serverInfo,
+		"capabilities":       capabilities,
 	}
 
 	// Include instructions if set
@@ -631,7 +642,7 @@ func (h *requestHandler) handleToolsList(_ context.Context, req *protocol.Reques
 	toolList := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
 		item := map[string]any{
-			"name":        t.Name,
+			fieldName:     t.Name,
 			"description": t.Description,
 			"inputSchema": t.InputSchema,
 		}
@@ -742,8 +753,8 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		}
 		response["content"] = []map[string]any{
 			{
-				"type": "text",
-				"text": textContent,
+				"type":    fieldText,
+				fieldText: textContent,
 			},
 		}
 	}
@@ -761,8 +772,8 @@ func (h *requestHandler) handleResourcesList(_ context.Context, req *protocol.Re
 	resourceList := make([]map[string]any, 0, len(resources))
 	for _, r := range resources {
 		item := map[string]any{
-			"uri":  r.URITemplate,
-			"name": r.Name,
+			"uri":     r.URITemplate,
+			fieldName: r.Name,
 		}
 		if r.Description != "" {
 			item["description"] = r.Description
@@ -813,7 +824,7 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 			{
 				"uri":      content.URI,
 				"mimeType": content.MimeType,
-				"text":     content.Text,
+				fieldText:  content.Text,
 			},
 		},
 	}
@@ -832,7 +843,7 @@ func (h *requestHandler) handlePromptsList(_ context.Context, req *protocol.Requ
 	promptList := make([]map[string]any, 0, len(prompts))
 	for _, p := range prompts {
 		item := map[string]any{
-			"name": p.Name,
+			fieldName: p.Name,
 		}
 		if p.Description != "" {
 			item["description"] = p.Description
@@ -841,7 +852,7 @@ func (h *requestHandler) handlePromptsList(_ context.Context, req *protocol.Requ
 			args := make([]map[string]any, 0, len(p.Arguments))
 			for _, arg := range p.Arguments {
 				argItem := map[string]any{
-					"name":     arg.Name,
+					fieldName:  arg.Name,
 					"required": arg.Required,
 				}
 				if arg.Description != "" {

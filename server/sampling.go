@@ -14,6 +14,12 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
+// Content type tag values used inside Content.Type.
+const (
+	contentTypeText  = "text"
+	contentTypeImage = "image"
+)
+
 // Content represents the content of a message.
 type Content struct {
 	Type     string `json:"type"`
@@ -25,7 +31,7 @@ type Content struct {
 // NewTextContent creates a text content block.
 func NewTextContent(text string) Content {
 	return Content{
-		Type: "text",
+		Type: contentTypeText,
 		Text: text,
 	}
 }
@@ -33,7 +39,7 @@ func NewTextContent(text string) Content {
 // NewImageContent creates an image content block.
 func NewImageContent(mimeType, data string) Content {
 	return Content{
-		Type:     "image",
+		Type:     contentTypeImage,
 		MimeType: mimeType,
 		Data:     data,
 	}

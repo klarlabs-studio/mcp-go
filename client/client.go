@@ -21,6 +21,13 @@ var (
 	ErrNoContent = errors.New("no content")
 )
 
+// JSON field names used in MCP handshake payloads.
+const (
+	fieldName            = "name"
+	fieldVersion         = "version"
+	fieldProtocolVersion = "protocolVersion"
+)
+
 // Transport defines the interface for client-side transport.
 type Transport interface {
 	// Send sends a request and waits for a response.
@@ -221,10 +228,10 @@ func parseBuildInfo(bi map[string]any) *BuildInfo {
 // Initialize performs the MCP handshake with the server.
 func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 	params := map[string]any{
-		"protocolVersion": c.opts.protocolVer,
+		fieldProtocolVersion: c.opts.protocolVer,
 		"clientInfo": map[string]any{
-			"name":    c.opts.clientName,
-			"version": c.opts.clientVer,
+			fieldName:    c.opts.clientName,
+			fieldVersion: c.opts.clientVer,
 		},
 		"capabilities": map[string]any{},
 	}
@@ -241,15 +248,15 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 
 	info := &ServerInfo{}
 
-	if pv, ok := result["protocolVersion"].(string); ok {
+	if pv, ok := result[fieldProtocolVersion].(string); ok {
 		info.ProtocolVersion = pv
 	}
 
 	if si, ok := result["serverInfo"].(map[string]any); ok {
-		if name, ok := si["name"].(string); ok {
+		if name, ok := si[fieldName].(string); ok {
 			info.Name = name
 		}
-		if ver, ok := si["version"].(string); ok {
+		if ver, ok := si[fieldVersion].(string); ok {
 			info.Version = ver
 		}
 		if title, ok := si["title"].(string); ok {

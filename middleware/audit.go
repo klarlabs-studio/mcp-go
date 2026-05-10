@@ -8,6 +8,21 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
 
+// Shared string constants for middleware audit/auth/rate-limit/size-limit
+// emitters. Defined here since AuditEvent is the canonical home; auth.go,
+// ratelimit.go, sizelimit.go and logging.go reuse them.
+const (
+	statusError   = "error"
+	statusSuccess = "success"
+
+	actionToolsList    = "tools.list"
+	actionToolsExecute = "tools.execute"
+
+	// Log/audit field keys reused across middleware emitters.
+	fieldKeyMethod = "method"
+	fieldKeyError  = "error"
+)
+
 type AuditEvent struct {
 	Timestamp     time.Time      `json:"timestamp"`
 	CorrelationID string         `json:"correlationId"`
@@ -58,13 +73,13 @@ func (a *AuditMiddleware) Middleware() Middleware {
 			event.Error = ""
 			switch {
 			case err != nil:
-				event.Status = "error"
+				event.Status = statusError
 				event.Error = err.Error()
 			case resp != nil && resp.Error != nil:
-				event.Status = "error"
+				event.Status = statusError
 				event.Error = resp.Error.Message
 			default:
-				event.Status = "success"
+				event.Status = statusSuccess
 			}
 
 			a.logger.LogEvent(ctx, event)
@@ -76,27 +91,27 @@ func (a *AuditMiddleware) Middleware() Middleware {
 
 func classifyAction(method string) string {
 	switch method {
-	case "initialize":
+	case protocol.MethodInitialize:
 		return "session.start"
-	case "notifications/initialized":
+	case protocol.MethodInitialized:
 		return "session.ready"
-	case "tools/list":
-		return "tools.list"
-	case "tools/call":
-		return "tools.execute"
-	case "resources/list":
+	case protocol.MethodToolsList:
+		return actionToolsList
+	case protocol.MethodToolsCall:
+		return actionToolsExecute
+	case protocol.MethodResourcesList:
 		return "resources.list"
-	case "resources/read":
+	case protocol.MethodResourcesRead:
 		return "resources.read"
-	case "resources/subscribe":
+	case protocol.MethodResourcesSubscribe:
 		return "resources.subscribe"
-	case "resources/unsubscribe":
+	case protocol.MethodResourcesUnsubscribe:
 		return "resources.unsubscribe"
-	case "prompts/list":
+	case protocol.MethodPromptsList:
 		return "prompts.list"
-	case "prompts/get":
+	case protocol.MethodPromptsGet:
 		return "prompts.get"
-	case "ping":
+	case protocol.MethodPing:
 		return "health.ping"
 	case "tasks/create":
 		return "tasks.create"
@@ -106,7 +121,7 @@ func classifyAction(method string) string {
 		return "tasks.list"
 	case "tasks/cancel":
 		return "tasks.cancel"
-	case "logging/setLevel":
+	case protocol.MethodLoggingSetLevel:
 		return "logging.configure"
 	default:
 		return "unknown"

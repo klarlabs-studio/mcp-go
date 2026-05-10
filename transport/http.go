@@ -12,6 +12,10 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
 
+// healthStatusField is the JSON field name used in /health and /healthz
+// payloads.
+const healthStatusField = "status"
+
 type HTTP struct {
 	addr            string
 	readTimeout     time.Duration
@@ -131,7 +135,7 @@ func (h *HTTP) createHandler(handler Handler) http.Handler {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{healthStatusField: "ok"})
 	})
 
 	mux.HandleFunc("/healthz", h.handleHealthz)
@@ -175,8 +179,8 @@ func (h *HTTP) handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(httpStatus)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"status": status,
-		"ready":  ready,
+		healthStatusField: status,
+		"ready":           ready,
 	})
 }
 
