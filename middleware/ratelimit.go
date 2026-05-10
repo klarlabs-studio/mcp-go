@@ -44,7 +44,7 @@ func RateLimit(rate int, burst int, opts ...RateLimitOption) Middleware {
 	}
 
 	// Create rate limiter with fortify
-	limiter := ratelimit.New(&ratelimit.Config{
+	limiter := ratelimit.New(ratelimit.Config{
 		Rate:     rate,
 		Burst:    burst,
 		Interval: time.Second,
