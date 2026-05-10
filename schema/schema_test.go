@@ -203,3 +203,88 @@ func TestSchema_MarshalJSON(t *testing.T) {
 		t.Errorf("type = %v, want %q", result["type"], "object")
 	}
 }
+
+// TestSchema_EmptyStructIsStrictModeCompatible regression-tests the
+// OpenAI strict tool-calling failure where zero-arg handlers produced
+// `{"type":"object"}` and were rejected with
+// `object schema missing properties. (format)`.
+//
+// The encoded schema for an empty struct must:
+//   - include a "properties" key (empty object), not omit it
+//   - declare additionalProperties: false (closed object)
+func TestSchema_EmptyStructIsStrictModeCompatible(t *testing.T) {
+	type Empty struct{}
+
+	s, err := Generate(Empty{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	props, ok := got["properties"]
+	if !ok {
+		t.Fatalf("properties key missing; raw=%s", data)
+	}
+	if pm, ok := props.(map[string]any); !ok || len(pm) != 0 {
+		t.Errorf("properties = %v, want empty object", props)
+	}
+	if got["additionalProperties"] != false {
+		t.Errorf("additionalProperties = %v, want false; raw=%s", got["additionalProperties"], data)
+	}
+	if got["type"] != "object" {
+		t.Errorf("type = %v, want object", got["type"])
+	}
+}
+
+// TestSchema_StructIsClosed verifies non-empty struct schemas are also
+// closed (additionalProperties: false) so they pass strict mode.
+func TestSchema_StructIsClosed(t *testing.T) {
+	type Input struct {
+		Name string `json:"name"`
+	}
+
+	s, err := Generate(Input{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["additionalProperties"] != false {
+		t.Errorf("additionalProperties = %v, want false; raw=%s", got["additionalProperties"], data)
+	}
+}
+
+// TestSchema_NonObjectUnaffected ensures string/number/etc. schemas
+// don't pick up spurious properties keys from the object-only path.
+func TestSchema_NonObjectUnaffected(t *testing.T) {
+	s := &Schema{Type: "string"}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, has := got["properties"]; has {
+		t.Errorf("string schema should not emit properties; raw=%s", data)
+	}
+	if _, has := got["additionalProperties"]; has {
+		t.Errorf("string schema should not emit additionalProperties; raw=%s", data)
+	}
+}
