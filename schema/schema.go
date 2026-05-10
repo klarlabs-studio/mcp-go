@@ -2,6 +2,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 )
@@ -9,16 +10,70 @@ import (
 const tagRequired = "required"
 
 // Schema represents a JSON Schema.
+//
+// AdditionalProperties is encoded only when explicitly set. For struct-derived
+// schemas it is set to bool(false) so the resulting JSON satisfies OpenAI
+// strict tool-calling, which requires closed objects. Map-derived schemas
+// leave it unset so they remain open.
 type Schema struct {
-	Type        string             `json:"type,omitempty"`
-	Properties  map[string]*Schema `json:"properties,omitempty"`
-	Required    []string           `json:"required,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Default     any                `json:"default,omitempty"`
-	Enum        []any              `json:"enum,omitempty"`
-	Minimum     *float64           `json:"minimum,omitempty"`
-	Maximum     *float64           `json:"maximum,omitempty"`
-	Items       *Schema            `json:"items,omitempty"`
+	Type                 string             `json:"type,omitempty"`
+	Properties           map[string]*Schema `json:"properties,omitempty"`
+	AdditionalProperties any                `json:"-"`
+	Required             []string           `json:"required,omitempty"`
+	Description          string             `json:"description,omitempty"`
+	Default              any                `json:"default,omitempty"`
+	Enum                 []any              `json:"enum,omitempty"`
+	Minimum              *float64           `json:"minimum,omitempty"`
+	Maximum              *float64           `json:"maximum,omitempty"`
+	Items                *Schema            `json:"items,omitempty"`
+}
+
+// MarshalJSON encodes the schema. For object-typed schemas it forces the
+// "properties" key to be present (emitting `{}` when empty) and writes
+// AdditionalProperties when set.
+//
+// Why: OpenAI's strict function-calling mode rejects object schemas that
+// omit "properties" with the error
+// `object schema missing properties. (format)`, which would otherwise
+// break any tool whose handler input is `struct{}`. Forcing properties
+// to materialize removes the footgun for downstream consumers.
+func (s Schema) MarshalJSON() ([]byte, error) {
+	if s.Type != typeObject {
+		type plain Schema
+		return json.Marshal(plain(s))
+	}
+
+	out := map[string]any{"type": typeObject}
+	props := s.Properties
+	if props == nil {
+		props = map[string]*Schema{}
+	}
+	out["properties"] = props
+	if s.AdditionalProperties != nil {
+		out["additionalProperties"] = s.AdditionalProperties
+	}
+	if len(s.Required) > 0 {
+		out[tagRequired] = s.Required
+	}
+	if s.Description != "" {
+		out["description"] = s.Description
+	}
+	if s.Default != nil {
+		out["default"] = s.Default
+	}
+	if len(s.Enum) > 0 {
+		out["enum"] = s.Enum
+	}
+	if s.Minimum != nil {
+		out["minimum"] = *s.Minimum
+	}
+	if s.Maximum != nil {
+		out["maximum"] = *s.Maximum
+	}
+	if s.Items != nil {
+		out["items"] = s.Items
+	}
+	return json.Marshal(out)
 }
 
 // Generate creates a JSON Schema from a Go value.
@@ -60,9 +115,13 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 }
 
 func generateStructSchema(t reflect.Type) (*Schema, error) {
+	// AdditionalProperties: false marks the object as closed so OpenAI
+	// strict tool-calling accepts the schema. Maps, which can grow at
+	// runtime, leave AdditionalProperties unset (handled separately).
 	schema := &Schema{
-		Type:       typeObject,
-		Properties: make(map[string]*Schema),
+		Type:                 typeObject,
+		Properties:           make(map[string]*Schema),
+		AdditionalProperties: false,
 	}
 
 	for i := 0; i < t.NumField(); i++ {
