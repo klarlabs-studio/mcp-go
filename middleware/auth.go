@@ -110,8 +110,8 @@ func Auth(authenticator Authenticator, opts ...AuthOption) Middleware {
 			if err != nil {
 				if cfg.logger != nil {
 					cfg.logger.Warn("authentication failed",
-						Field{Key: "method", Value: req.Method},
-						Field{Key: "error", Value: err.Error()},
+						Field{Key: fieldKeyMethod, Value: req.Method},
+						Field{Key: fieldKeyError, Value: err.Error()},
 					)
 				}
 				return nil, &protocol.Error{
@@ -123,7 +123,7 @@ func Auth(authenticator Authenticator, opts ...AuthOption) Middleware {
 			if identity == nil {
 				if cfg.logger != nil {
 					cfg.logger.Warn("authentication failed: no identity",
-						Field{Key: "method", Value: req.Method},
+						Field{Key: fieldKeyMethod, Value: req.Method},
 					)
 				}
 				return nil, &protocol.Error{
@@ -134,7 +134,7 @@ func Auth(authenticator Authenticator, opts ...AuthOption) Middleware {
 
 			if cfg.logger != nil {
 				cfg.logger.Debug("authenticated",
-					Field{Key: "method", Value: req.Method},
+					Field{Key: fieldKeyMethod, Value: req.Method},
 					Field{Key: "identity", Value: identity.ID},
 				)
 			}

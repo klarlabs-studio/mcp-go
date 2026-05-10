@@ -113,7 +113,7 @@ func (s *Stdio) SendNotification(method string, params any) error {
 	}
 
 	notif := Notification{
-		JSONRPC: "2.0",
+		JSONRPC: JSONRPCVersion,
 		Method:  method,
 		Params:  paramsData,
 	}

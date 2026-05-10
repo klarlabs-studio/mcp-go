@@ -8,6 +8,10 @@ import (
 	"github.com/felixgeelhaar/mcp-go/protocol"
 )
 
+// JSONRPCVersion is the JSON-RPC version emitted in every transport-level
+// notification or response. MCP is JSON-RPC 2.0.
+const JSONRPCVersion = "2.0"
+
 // Handler processes incoming MCP requests.
 type Handler interface {
 	HandleRequest(ctx context.Context, req *protocol.Request) (*protocol.Response, error)

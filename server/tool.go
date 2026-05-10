@@ -154,7 +154,7 @@ func (b *ToolBuilder) validateHandler(fn any) error {
 
 	// Store input type
 	inputType := fnType.In(inputParamIdx)
-	if inputType.Kind() == reflect.Ptr {
+	if inputType.Kind() == reflect.Pointer {
 		inputType = inputType.Elem()
 	}
 	b.tool.inputType = inputType

@@ -34,6 +34,14 @@ import (
 	"github.com/felixgeelhaar/mcp-go/transport"
 )
 
+// JSON field names used in testutil request/response payloads.
+const (
+	fieldName      = "name"
+	fieldArguments = "arguments"
+	fieldURI       = "uri"
+	fieldText      = "text"
+)
+
 // TestClient is a test client for MCP servers.
 type TestClient struct {
 	t       testing.TB
@@ -121,7 +129,7 @@ func (tc *TestClient) Initialize() (map[string]any, error) {
 	resp, err := tc.SendRequest(protocol.MethodInitialize, map[string]any{
 		"protocolVersion": protocol.MCPVersion,
 		"clientInfo": map[string]any{
-			"name":    "test-client",
+			fieldName: "test-client",
 			"version": "1.0.0",
 		},
 	})
@@ -179,8 +187,8 @@ func (tc *TestClient) CallTool(name string, args any) (string, error) {
 	tc.t.Helper()
 
 	resp, err := tc.SendRequest(protocol.MethodToolsCall, map[string]any{
-		"name":      name,
-		"arguments": args,
+		fieldName:      name,
+		fieldArguments: args,
 	})
 	if err != nil {
 		return "", err
@@ -215,7 +223,7 @@ func (tc *TestClient) CallTool(name string, args any) (string, error) {
 		return "", fmt.Errorf("nil content item")
 	}
 
-	text, _ := first["text"].(string)
+	text, _ := first[fieldText].(string)
 	return text, nil
 }
 
@@ -224,8 +232,8 @@ func (tc *TestClient) CallToolRaw(name string, args any) (*protocol.Response, er
 	tc.t.Helper()
 
 	return tc.SendRequest(protocol.MethodToolsCall, map[string]any{
-		"name":      name,
-		"arguments": args,
+		fieldName:      name,
+		fieldArguments: args,
 	})
 }
 
@@ -268,7 +276,7 @@ func (tc *TestClient) ReadResource(uri string) (string, error) {
 	tc.t.Helper()
 
 	resp, err := tc.SendRequest(protocol.MethodResourcesRead, map[string]any{
-		"uri": uri,
+		fieldURI: uri,
 	})
 	if err != nil {
 		return "", err
@@ -303,7 +311,7 @@ func (tc *TestClient) ReadResource(uri string) (string, error) {
 		return "", fmt.Errorf("nil contents item")
 	}
 
-	text, _ := first["text"].(string)
+	text, _ := first[fieldText].(string)
 	return text, nil
 }
 
@@ -346,8 +354,8 @@ func (tc *TestClient) GetPrompt(name string, args map[string]string) (map[string
 	tc.t.Helper()
 
 	resp, err := tc.SendRequest(protocol.MethodPromptsGet, map[string]any{
-		"name":      name,
-		"arguments": args,
+		fieldName:      name,
+		fieldArguments: args,
 	})
 	if err != nil {
 		return nil, err
@@ -424,7 +432,7 @@ func (h *requestHandler) handleInitialize(req *protocol.Request) (*protocol.Resp
 	result := map[string]any{
 		"protocolVersion": manifest.ProtocolVersion,
 		"serverInfo": map[string]any{
-			"name":    manifest.Name,
+			fieldName: manifest.Name,
 			"version": manifest.Version,
 		},
 		"capabilities": capabilities,
@@ -439,7 +447,7 @@ func (h *requestHandler) handleToolsList(req *protocol.Request) (*protocol.Respo
 	toolList := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
 		toolList = append(toolList, map[string]any{
-			"name":        t.Name,
+			fieldName:     t.Name,
 			"description": t.Description,
 			"inputSchema": t.InputSchema,
 		})
@@ -469,7 +477,7 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 
 	response := map[string]any{
 		"content": []map[string]any{
-			{"type": "text", "text": result},
+			{"type": fieldText, fieldText: result},
 		},
 	}
 
@@ -482,8 +490,8 @@ func (h *requestHandler) handleResourcesList(req *protocol.Request) (*protocol.R
 	resourceList := make([]map[string]any, 0, len(resources))
 	for _, r := range resources {
 		item := map[string]any{
-			"uri":  r.URITemplate,
-			"name": r.Name,
+			fieldURI:  r.URITemplate,
+			fieldName: r.Name,
 		}
 		if r.Description != "" {
 			item["description"] = r.Description
@@ -534,7 +542,7 @@ func (h *requestHandler) handlePromptsList(req *protocol.Request) (*protocol.Res
 	promptList := make([]map[string]any, 0, len(prompts))
 	for _, p := range prompts {
 		item := map[string]any{
-			"name": p.Name,
+			fieldName: p.Name,
 		}
 		if p.Description != "" {
 			item["description"] = p.Description
@@ -543,7 +551,7 @@ func (h *requestHandler) handlePromptsList(req *protocol.Request) (*protocol.Res
 			args := make([]map[string]any, 0, len(p.Arguments))
 			for _, arg := range p.Arguments {
 				argItem := map[string]any{
-					"name":     arg.Name,
+					fieldName:  arg.Name,
 					"required": arg.Required,
 				}
 				if arg.Description != "" {
@@ -551,7 +559,7 @@ func (h *requestHandler) handlePromptsList(req *protocol.Request) (*protocol.Res
 				}
 				args = append(args, argItem)
 			}
-			item["arguments"] = args
+			item[fieldArguments] = args
 		}
 		promptList = append(promptList, item)
 	}

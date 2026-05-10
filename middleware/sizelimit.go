@@ -36,7 +36,7 @@ func SizeLimit(maxBytes int64, opts ...SizeLimitOption) Middleware {
 				if size > maxBytes {
 					if cfg.logger != nil {
 						cfg.logger.Warn("request size limit exceeded",
-							Field{Key: "method", Value: req.Method},
+							Field{Key: fieldKeyMethod, Value: req.Method},
 							Field{Key: "size", Value: size},
 							Field{Key: "max", Value: maxBytes},
 						)

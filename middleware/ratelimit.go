@@ -57,7 +57,7 @@ func RateLimit(rate int, burst int, opts ...RateLimitOption) Middleware {
 			if !limiter.Allow(ctx, key) {
 				if cfg.logger != nil {
 					cfg.logger.Warn("rate limit exceeded",
-						Field{Key: "method", Value: req.Method},
+						Field{Key: fieldKeyMethod, Value: req.Method},
 						Field{Key: "key", Value: key},
 					)
 				}

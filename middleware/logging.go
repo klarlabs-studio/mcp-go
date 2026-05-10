@@ -44,7 +44,7 @@ func Logging(logger Logger) Middleware {
 
 			// Build fields
 			fields := []Field{
-				NewField("method", req.Method),
+				NewField(fieldKeyMethod, req.Method),
 				NewField("duration", duration),
 			}
 
@@ -54,7 +54,7 @@ func Logging(logger Logger) Middleware {
 			}
 
 			if err != nil {
-				fields = append(fields, NewField("error", err.Error()))
+				fields = append(fields, NewField(fieldKeyError, err.Error()))
 				logger.Error("request failed", fields...)
 			} else {
 				logger.Info("request completed", fields...)

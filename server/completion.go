@@ -4,6 +4,12 @@ import (
 	"context"
 )
 
+// CompletionRef Type values defined by the MCP completion spec.
+const (
+	CompletionRefPrompt   = "ref/prompt"
+	CompletionRefResource = "ref/resource"
+)
+
 // CompletionHandler handles completion requests for prompts or resources.
 type CompletionHandler func(ctx context.Context, ref CompletionRef, argument CompletionArgument) (*CompletionResult, error)
 
@@ -73,9 +79,9 @@ func (r *completionRegistry) Handle(ctx context.Context, ref CompletionRef, arg 
 	var handler CompletionHandler
 
 	switch ref.Type {
-	case "ref/prompt":
+	case CompletionRefPrompt:
 		handler = r.promptHandlers[ref.Name]
-	case "ref/resource":
+	case CompletionRefResource:
 		handler = r.resourceHandlers[ref.URI]
 		// Try to match by URI template pattern if exact match fails
 		if handler == nil {
