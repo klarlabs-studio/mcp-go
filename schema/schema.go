@@ -5,7 +5,17 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
+	"time"
 )
+
+// timeType is cached so the time.Time special case in generateFromType
+// is a single pointer comparison rather than a string compare on every
+// field traversal.
+var timeType = reflect.TypeOf(time.Time{})
+
+// formatDateTime is the JSON Schema "format" annotation used for
+// time.Time values, which marshal as RFC3339 strings.
+const formatDateTime = "date-time"
 
 const tagRequired = "required"
 
@@ -17,6 +27,7 @@ const tagRequired = "required"
 // leave it unset so they remain open.
 type Schema struct {
 	Type                 string             `json:"type,omitempty"`
+	Format               string             `json:"format,omitempty"`
 	Properties           map[string]*Schema `json:"properties,omitempty"`
 	AdditionalProperties any                `json:"-"`
 	Required             []string           `json:"required,omitempty"`
@@ -44,6 +55,9 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 	}
 
 	out := map[string]any{"type": typeObject}
+	if s.Format != "" {
+		out["format"] = s.Format
+	}
 	props := s.Properties
 	if props == nil {
 		props = map[string]*Schema{}
@@ -91,6 +105,16 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 	// Handle pointers
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
+	}
+
+	// time.Time marshals as an RFC3339 string, not as a struct of its
+	// internal fields. Treat it as a string-format date-time so the
+	// generated schema agrees with the actual JSON output. Without this
+	// special case, time.Time fields produce object schemas that any
+	// strict MCP client rejects (`structuredContent does not match the
+	// tool's output schema: data/... must be object`).
+	if t == timeType {
+		return &Schema{Type: typeString, Format: formatDateTime}, nil
 	}
 
 	switch t.Kind() {
