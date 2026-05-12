@@ -713,50 +713,9 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	}
 
 	// Format result based on type
-	response := make(map[string]any)
-
-	switch v := result.(type) {
-	case server.StructuredResult:
-		if len(v.Content) > 0 {
-			response["content"] = v.Content
-		} else {
-			response["content"] = []map[string]any{}
-		}
-		response["structuredContent"] = v.StructuredContent
-		if v.IsError {
-			response["isError"] = true
-		}
-	case *server.StructuredResult:
-		if v != nil {
-			if len(v.Content) > 0 {
-				response["content"] = v.Content
-			} else {
-				response["content"] = []map[string]any{}
-			}
-			response["structuredContent"] = v.StructuredContent
-			if v.IsError {
-				response["isError"] = true
-			}
-		}
-	default:
-		// Legacy: serialize to text content block
-		var textContent string
-		switch tv := result.(type) {
-		case string:
-			textContent = tv
-		default:
-			data, err := json.Marshal(tv)
-			if err != nil {
-				return nil, protocol.NewInternalError(fmt.Sprintf("failed to serialize tool result: %v", err))
-			}
-			textContent = string(data)
-		}
-		response["content"] = []map[string]any{
-			{
-				"type":    fieldText,
-				fieldText: textContent,
-			},
-		}
+	response, err := buildToolCallResponse(tool, result)
+	if err != nil {
+		return nil, err
 	}
 
 	if tool.Meta() != nil {
@@ -764,6 +723,78 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	}
 
 	return protocol.NewResponse(req.ID, response), nil
+}
+
+// buildToolCallResponse converts a handler's return value into the MCP
+// tools/call response body. Three shapes are accepted:
+//
+//   - server.StructuredResult / *server.StructuredResult: explicit
+//     content + structuredContent + optional isError flag.
+//   - string: legacy single text content block.
+//   - any other typed value: serialized to a text content block, and
+//     (when the tool declares an outputSchema) promoted to
+//     structuredContent so strict MCP clients accept the response.
+//
+// Extracted from handleToolsCall to keep that function under the
+// project's cyclomatic-complexity ceiling.
+func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error) {
+	response := make(map[string]any)
+
+	switch v := result.(type) {
+	case server.StructuredResult:
+		applyStructuredResult(response, &v)
+		return response, nil
+	case *server.StructuredResult:
+		if v != nil {
+			applyStructuredResult(response, v)
+		}
+		return response, nil
+	}
+
+	// Legacy: serialize to a single text content block. Typed structs
+	// also feed structuredContent when an outputSchema is declared so
+	// the response satisfies strict MCP clients.
+	var textContent string
+	var marshaled []byte
+	switch tv := result.(type) {
+	case string:
+		textContent = tv
+	default:
+		data, err := json.Marshal(tv)
+		if err != nil {
+			return nil, protocol.NewInternalError(fmt.Sprintf("failed to serialize tool result: %v", err))
+		}
+		textContent = string(data)
+		marshaled = data
+	}
+	response["content"] = []map[string]any{
+		{
+			"type":    fieldText,
+			fieldText: textContent,
+		},
+	}
+	if tool.OutputSchema() != nil && marshaled != nil {
+		var structured map[string]any
+		if err := json.Unmarshal(marshaled, &structured); err == nil && structured != nil {
+			response["structuredContent"] = structured
+		}
+	}
+	return response, nil
+}
+
+// applyStructuredResult writes a StructuredResult into the response map.
+// Empty Content is normalized to [] (per MCP spec) so clients never see
+// a missing content field.
+func applyStructuredResult(response map[string]any, v *server.StructuredResult) {
+	if len(v.Content) > 0 {
+		response["content"] = v.Content
+	} else {
+		response["content"] = []map[string]any{}
+	}
+	response["structuredContent"] = v.StructuredContent
+	if v.IsError {
+		response["isError"] = true
+	}
 }
 
 func (h *requestHandler) handleResourcesList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {

@@ -694,6 +694,104 @@ func TestHandleToolsCall_StructuredResult(t *testing.T) {
 	}
 }
 
+// TestHandleToolsCall_TypedStructResultPopulatesStructuredContent
+// regression-tests strict-client failures of the form
+// `Tool ... has an output schema but did not return structured content`.
+//
+// When a tool declares OutputSchema and the handler returns a typed
+// struct (not StructuredResult), the server must populate
+// structuredContent on the response so the payload satisfies the spec.
+// Text content is preserved for backward compatibility with clients that
+// only read content[].text.
+func TestHandleToolsCall_TypedStructResultPopulatesStructuredContent(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+	type Output struct {
+		Answer string   `json:"answer"`
+		Tags   []string `json:"tags"`
+	}
+
+	srv.Tool("query").
+		OutputSchema(Output{}).
+		Handler(func(input Input) (Output, error) {
+			return Output{Answer: "42", Tags: []string{"a", "b"}}, nil
+		})
+
+	handler := newRequestHandler(srv)
+
+	callReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"query","arguments":{}}`),
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), callReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	var parsed map[string]any
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("unmarshal: %v; raw=%s", err, result)
+	}
+
+	sc, ok := parsed["structuredContent"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected structuredContent object; raw=%s", result)
+	}
+	if sc["answer"] != "42" {
+		t.Errorf("structuredContent.answer = %v, want %q; raw=%s", sc["answer"], "42", result)
+	}
+	tags, ok := sc["tags"].([]any)
+	if !ok || len(tags) != 2 {
+		t.Errorf("structuredContent.tags = %v, want 2-element array; raw=%s", sc["tags"], result)
+	}
+
+	// Text content is still present for legacy clients.
+	if !strings.Contains(string(result), `"content"`) {
+		t.Errorf("expected content array for backward compat; raw=%s", result)
+	}
+}
+
+// TestHandleToolsCall_TypedStructResultWithoutSchemaOmitsStructured
+// guards against regressions in the other direction: when no
+// OutputSchema is declared the legacy text-only path must remain.
+func TestHandleToolsCall_TypedStructResultWithoutSchemaOmitsStructured(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
+
+	type Input struct{}
+	type Output struct {
+		Answer string `json:"answer"`
+	}
+
+	srv.Tool("query_no_schema").
+		Handler(func(input Input) (Output, error) {
+			return Output{Answer: "42"}, nil
+		})
+
+	handler := newRequestHandler(srv)
+
+	callReq := &protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"query_no_schema","arguments":{}}`),
+	}
+
+	resp, err := handler.HandleRequest(context.Background(), callReq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result, _ := json.Marshal(resp.Result)
+	if strings.Contains(string(result), `"structuredContent"`) {
+		t.Errorf("no outputSchema declared, should not emit structuredContent; raw=%s", result)
+	}
+}
+
 func TestHandleToolsCall_LegacyStringResult(t *testing.T) {
 	srv := NewServer(ServerInfo{Name: "test", Version: "1.0.0"})
 

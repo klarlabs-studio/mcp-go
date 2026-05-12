@@ -3,6 +3,7 @@ package schema
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestGenerate(t *testing.T) {
@@ -267,6 +268,97 @@ func TestSchema_StructIsClosed(t *testing.T) {
 	if got["additionalProperties"] != false {
 		t.Errorf("additionalProperties = %v, want false; raw=%s", got["additionalProperties"], data)
 	}
+}
+
+// TestGenerate_TimeIsStringDateTime regression-tests the strict
+// outputSchema failure where time.Time fields generated nested object
+// schemas (one property per internal time field) but encoded as RFC3339
+// strings at runtime. Strict clients rejected the mismatch with
+// `structuredContent does not match the tool's output schema:
+// data/.../CreatedAt must be object`.
+//
+// time.Time must render as a string/date-time schema, both as a top-level
+// type and when embedded as a struct field.
+func TestGenerate_TimeIsStringDateTime(t *testing.T) {
+	t.Run("top-level time.Time", func(t *testing.T) {
+		s, err := Generate(time.Time{})
+		if err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		if s.Type != "string" {
+			t.Errorf("Type = %q, want %q", s.Type, "string")
+		}
+		if s.Format != "date-time" {
+			t.Errorf("Format = %q, want %q", s.Format, "date-time")
+		}
+	})
+
+	t.Run("time.Time field is string, not nested object", func(t *testing.T) {
+		type Event struct {
+			Name      string    `json:"name"`
+			CreatedAt time.Time `json:"created_at"`
+		}
+
+		s, err := Generate(Event{})
+		if err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+
+		createdAt, ok := s.Properties["created_at"]
+		if !ok {
+			t.Fatal("expected 'created_at' property")
+		}
+		if createdAt.Type != "string" {
+			t.Errorf("created_at.Type = %q, want %q", createdAt.Type, "string")
+		}
+		if createdAt.Format != "date-time" {
+			t.Errorf("created_at.Format = %q, want %q", createdAt.Format, "date-time")
+		}
+		if len(createdAt.Properties) != 0 {
+			t.Errorf("created_at should not have nested properties, got %d", len(createdAt.Properties))
+		}
+	})
+
+	t.Run("format survives MarshalJSON", func(t *testing.T) {
+		type Event struct {
+			At time.Time `json:"at"`
+		}
+		s, err := Generate(Event{})
+		if err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		data, err := json.Marshal(s.Properties["at"])
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got["type"] != "string" {
+			t.Errorf("type = %v, want string; raw=%s", got["type"], data)
+		}
+		if got["format"] != "date-time" {
+			t.Errorf("format = %v, want date-time; raw=%s", got["format"], data)
+		}
+	})
+
+	t.Run("pointer to time.Time", func(t *testing.T) {
+		type Event struct {
+			DeletedAt *time.Time `json:"deleted_at"`
+		}
+		s, err := Generate(Event{})
+		if err != nil {
+			t.Fatalf("generate: %v", err)
+		}
+		deletedAt := s.Properties["deleted_at"]
+		if deletedAt.Type != "string" {
+			t.Errorf("deleted_at.Type = %q, want %q", deletedAt.Type, "string")
+		}
+		if deletedAt.Format != "date-time" {
+			t.Errorf("deleted_at.Format = %q, want %q", deletedAt.Format, "date-time")
+		}
+	})
 }
 
 // TestSchema_NonObjectUnaffected ensures string/number/etc. schemas
