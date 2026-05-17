@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -25,6 +26,7 @@ type HTTP struct {
 	corsConfig      *CORSConfig
 	sessionStore    SessionStore
 	discovery       *ServerDiscovery
+	tlsConfig       *tls.Config
 
 	mu         sync.RWMutex
 	listenAddr string
@@ -57,6 +59,24 @@ func WithSessionStore(store SessionStore) HTTPOption {
 func WithDiscovery(discovery *ServerDiscovery) HTTPOption {
 	return func(h *HTTP) {
 		h.discovery = discovery
+	}
+}
+
+// WithTLSConfig enables embedded TLS termination. When set, the
+// transport serves over HTTPS using the supplied *tls.Config — bring
+// your own certificate loading, rotation, and verification strategy
+// (crypto/tls.LoadX509KeyPair, autocert, SPIFFE workload API, etc.).
+//
+// Set Certificates or GetCertificate on the config for plain HTTPS;
+// add ClientCAs and ClientAuth for mTLS. mcp-go does not validate the
+// config — pass tls.Config.Clone() if you want to keep mutating the
+// original after handing it off.
+//
+// When TLS is enabled, the WebSocket upgrade path inherits HTTPS
+// automatically since both share the same *http.Server.
+func WithTLSConfig(cfg *tls.Config) HTTPOption {
+	return func(h *HTTP) {
+		h.tlsConfig = cfg
 	}
 }
 
@@ -101,13 +121,24 @@ func (h *HTTP) Serve(ctx context.Context, handler Handler) error {
 		Handler:      httpHandler,
 		ReadTimeout:  h.readTimeout,
 		WriteTimeout: h.writeTimeout,
+		TLSConfig:    h.tlsConfig,
 	}
+	tlsEnabled := h.tlsConfig != nil
 	h.mu.Unlock()
 
 	errCh := make(chan error, 1)
 	go func() {
-		if err := h.server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			errCh <- err
+		var srvErr error
+		if tlsEnabled {
+			// ServeTLS reads cert/key from h.server.TLSConfig.Certificates
+			// (or GetCertificate) — the empty filename args are
+			// intentional and required by the stdlib API.
+			srvErr = h.server.ServeTLS(listener, "", "")
+		} else {
+			srvErr = h.server.Serve(listener)
+		}
+		if srvErr != nil && srvErr != http.ErrServerClosed {
+			errCh <- srvErr
 		}
 		close(errCh)
 	}()

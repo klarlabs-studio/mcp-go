@@ -29,6 +29,7 @@ package mcp
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -403,6 +404,14 @@ func WithDiscovery(discovery *transport.ServerDiscovery) HTTPOption {
 	return transport.WithDiscovery(discovery)
 }
 
+// WithTLSConfig enables HTTPS termination on the HTTP transport. The
+// supplied *tls.Config is used verbatim — bring your own certificate
+// loading + rotation strategy (LoadX509KeyPair, autocert, SPIFFE,
+// etc.). Set ClientCAs + ClientAuth for mTLS.
+func WithTLSConfig(cfg *tls.Config) HTTPOption {
+	return transport.WithTLSConfig(cfg)
+}
+
 // WebSocketOption configures the WebSocket transport.
 type WebSocketOption = transport.WebSocketOption
 
@@ -429,6 +438,12 @@ func WithWebSocketReadTimeout(d time.Duration) WebSocketOption {
 // WithWebSocketWriteTimeout sets the write timeout for WebSocket messages.
 func WithWebSocketWriteTimeout(d time.Duration) WebSocketOption {
 	return transport.WithWebSocketWriteTimeout(d)
+}
+
+// WithWebSocketTLSConfig enables wss:// on the WebSocket transport.
+// Same caller-owned cert strategy as WithTLSConfig.
+func WithWebSocketTLSConfig(cfg *tls.Config) WebSocketOption {
+	return transport.WithWebSocketTLSConfig(cfg)
 }
 
 // GRPCOption configures the gRPC transport.
@@ -460,6 +475,15 @@ func WithGRPCShutdownTimeout(d time.Duration) GRPCOption {
 // This allows load balancers to remove the server from rotation.
 func WithGRPCDrainDelay(d time.Duration) GRPCOption {
 	return grpctransport.WithDrainDelay(d)
+}
+
+// WithGRPCTLSConfig is a shorthand for embedded TLS on the gRPC
+// transport. Equivalent to passing grpc.Creds(credentials.NewTLS(cfg))
+// through grpctransport.WithServerOptions. Use the underlying
+// grpctransport.WithServerOptions when you need credentials that
+// aren't a static *tls.Config (SPIFFE, ALTS, etc.).
+func WithGRPCTLSConfig(cfg *tls.Config) GRPCOption {
+	return grpctransport.WithTLSConfig(cfg)
 }
 
 // Middleware re-exports

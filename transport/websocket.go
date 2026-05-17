@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,6 +22,7 @@ type WebSocket struct {
 
 	readTimeout  time.Duration
 	writeTimeout time.Duration
+	tlsConfig    *tls.Config
 
 	mu      sync.RWMutex
 	clients map[*wsClient]struct{}
@@ -53,6 +55,15 @@ func WithWebSocketWriteTimeout(d time.Duration) WebSocketOption {
 func WithWebSocketCheckOrigin(fn func(r *http.Request) bool) WebSocketOption {
 	return func(ws *WebSocket) {
 		ws.upgrader.CheckOrigin = fn
+	}
+}
+
+// WithWebSocketTLSConfig enables wss:// by terminating TLS at the
+// transport. Bring your own certificate strategy — mcp-go does not
+// load or rotate certs. Set ClientCAs + ClientAuth for mTLS.
+func WithWebSocketTLSConfig(cfg *tls.Config) WebSocketOption {
+	return func(ws *WebSocket) {
+		ws.tlsConfig = cfg
 	}
 }
 
@@ -94,12 +105,21 @@ func (ws *WebSocket) Serve(ctx context.Context, handler Handler) error {
 		Handler:      mux,
 		ReadTimeout:  ws.readTimeout,
 		WriteTimeout: ws.writeTimeout,
+		TLSConfig:    ws.tlsConfig,
 	}
 
 	errChan := make(chan error, 1)
 	go func() {
-		if err := ws.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errChan <- err
+		var srvErr error
+		if ws.tlsConfig != nil {
+			// ListenAndServeTLS reads from server.TLSConfig when given
+			// empty cert/key filenames.
+			srvErr = ws.server.ListenAndServeTLS("", "")
+		} else {
+			srvErr = ws.server.ListenAndServe()
+		}
+		if srvErr != nil && !errors.Is(srvErr, http.ErrServerClosed) {
+			errChan <- srvErr
 		}
 	}()
 
