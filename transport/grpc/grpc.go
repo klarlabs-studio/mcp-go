@@ -17,11 +17,13 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/felixgeelhaar/mcp-go/transport"
 	pb "github.com/felixgeelhaar/mcp-go/transport/grpc/mcpv1"
@@ -64,10 +66,25 @@ func WithDrainDelay(d time.Duration) Option {
 }
 
 // WithServerOptions sets additional gRPC server options.
-// Use this to configure TLS, interceptors, max message sizes, etc.
+// Use this to configure interceptors, max message sizes, custom
+// credentials, etc.
 func WithServerOptions(opts ...grpc.ServerOption) Option {
 	return func(g *GRPC) {
 		g.serverOpts = append(g.serverOpts, opts...)
+	}
+}
+
+// WithTLSConfig is a shorthand for embedded TLS termination. It is
+// equivalent to passing grpc.Creds(credentials.NewTLS(cfg)) through
+// WithServerOptions. Bring your own certificate loading + rotation
+// strategy; set ClientCAs + ClientAuth on the config for mTLS, which
+// is the common case for service-mesh and regulated deployments.
+//
+// Use the underlying WithServerOptions when you need credentials that
+// aren't a static *tls.Config (SPIFFE workload API, ALTS, etc.).
+func WithTLSConfig(cfg *tls.Config) Option {
+	return func(g *GRPC) {
+		g.serverOpts = append(g.serverOpts, grpc.Creds(credentials.NewTLS(cfg)))
 	}
 }
 
