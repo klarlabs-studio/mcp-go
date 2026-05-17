@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.12.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.11.2...v1.12.0)
+
+### Features
+
+#### BearerAuth shorthand for shared-secret deployments (#87, #88)
+- Added `mcp.BearerAuth(tokens map[string]string, opts ...AuthOption) Middleware`
+- Single-call entry point for the most common bearer-auth case: reject calls that don't present a shared secret
+- Map values become `Identity.ID` + `Identity.Name` surfaced via `IdentityFromContext`
+- Handshake methods (`initialize`, `notifications/initialized`, `ping`) exempted automatically
+- The full `Auth` + `BearerTokenAuthenticator` + `StaticTokens` primitives remain in place for scope-aware authz, multi-tenant identity, and per-token metadata
+
+#### TLS configuration for HTTP, gRPC, and WebSocket transports (#86, #89)
+- Added `mcp.WithTLSConfig(*tls.Config) HTTPOption` — switches the HTTP transport to `ServeTLS`
+- Added `mcp.WithWebSocketTLSConfig(*tls.Config) WebSocketOption` — switches WebSocket to `ListenAndServeTLS`
+- Added `mcp.WithGRPCTLSConfig(*tls.Config) GRPCOption` — wraps `grpc.Creds(credentials.NewTLS(cfg))` and composes with `WithServerOptions`
+- `*tls.Config` is the only surface — operators bring their own cert loading + rotation strategy (`LoadX509KeyPair`, autocert, SPIFFE workload API, etc.)
+- Set `ClientCAs` + `ClientAuth` on the config for mTLS — common in service-mesh + regulated single-binary deployments where ops doesn't want a separate TLS-terminating proxy
+
 ## [1.9.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.8.0...v1.9.0)
 
 ### Features
