@@ -297,6 +297,34 @@ var (
 	ContextWithIdentity      = middleware.ContextWithIdentity
 )
 
+// BearerAuth returns a Middleware that requires clients to present one
+// of the given tokens as a Bearer credential in the Authorization
+// header.
+//
+// The map's keys are the secret tokens to accept; the values become
+// the Identity.ID + Identity.Name surfaced in the request context via
+// IdentityFromContext. Pass a friendly client name as the value.
+//
+// Handshake methods ("initialize", "notifications/initialized", and
+// "ping") are exempted from authentication automatically — clients
+// can't present a token until the handshake completes. Additional
+// opts (WithAuthRealm, WithAuthSkipMethods, etc.) compose with the
+// defaults.
+//
+// Use the full Auth + BearerTokenAuthenticator + StaticTokens API
+// directly if you need per-token metadata, scopes, or multi-tenant
+// identity routing.
+func BearerAuth(tokens map[string]string, opts ...AuthOption) middleware.Middleware {
+	identities := make(map[string]*Identity, len(tokens))
+	for token, name := range tokens {
+		identities[token] = &Identity{ID: name, Name: name}
+	}
+	authOpts := append([]AuthOption{
+		WithAuthSkipMethods(protocol.MethodInitialized),
+	}, opts...)
+	return Auth(BearerTokenAuthenticator(StaticTokens(identities)), authOpts...)
+}
+
 // HTTPOption configures the HTTP transport.
 type HTTPOption = transport.HTTPOption
 
