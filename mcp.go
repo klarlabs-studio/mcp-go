@@ -353,8 +353,11 @@ var (
 type ServeOption func(*serveOptions)
 
 type serveOptions struct {
-	middleware []Middleware
-	logger     Logger
+	middleware     []Middleware
+	logger         Logger
+	toolFilter     ToolFilterFunc
+	resourceFilter ResourceFilterFunc
+	promptFilter   PromptFilterFunc
 }
 
 // WithMiddleware adds middleware to the request handling chain.
@@ -368,6 +371,59 @@ func WithMiddleware(m ...Middleware) ServeOption {
 func WithLogger(l Logger) ServeOption {
 	return func(o *serveOptions) {
 		o.logger = l
+	}
+}
+
+// ToolFilterFunc decides whether a tool should be visible to (and
+// callable by) the caller represented by ctx. Returning false hides
+// the tool from tools/list AND causes tools/call to fail with a
+// not-found error, so the filter is the authoritative contract
+// rather than a display-only layer.
+//
+// Use IdentityFromContext(ctx) to read the authenticated caller when
+// the predicate needs to vary by client.
+type ToolFilterFunc func(ctx context.Context, name string) bool
+
+// ResourceFilterFunc decides whether a resource should be visible to
+// the caller represented by ctx. The predicate receives both the URI
+// template and the human-readable name so authorisation can route on
+// either. Returning false hides the resource from resources/list AND
+// blocks resources/read for that URI.
+type ResourceFilterFunc func(ctx context.Context, uri, name string) bool
+
+// PromptFilterFunc decides whether a prompt should be visible to the
+// caller. Returning false hides the prompt from prompts/list AND
+// blocks prompts/get.
+type PromptFilterFunc func(ctx context.Context, name string) bool
+
+// WithToolFilter installs a predicate that gates tools/list visibility
+// and tools/call execution. The predicate runs once per list entry
+// (and once per call) with the request context, so identity-aware
+// filtering composes naturally with the auth middleware.
+//
+// Without this option, every registered tool is visible to every
+// caller. Multiple WithToolFilter calls replace previous ones — there
+// is no chaining; if you need multiple predicates, compose them in a
+// single function.
+func WithToolFilter(filter ToolFilterFunc) ServeOption {
+	return func(o *serveOptions) {
+		o.toolFilter = filter
+	}
+}
+
+// WithResourceFilter is the resources/list + resources/read counterpart
+// to WithToolFilter. See ResourceFilterFunc for predicate semantics.
+func WithResourceFilter(filter ResourceFilterFunc) ServeOption {
+	return func(o *serveOptions) {
+		o.resourceFilter = filter
+	}
+}
+
+// WithPromptFilter is the prompts/list + prompts/get counterpart to
+// WithToolFilter. See PromptFilterFunc for predicate semantics.
+func WithPromptFilter(filter PromptFilterFunc) ServeOption {
+	return func(o *serveOptions) {
+		o.promptFilter = filter
 	}
 }
 
@@ -582,8 +638,11 @@ var (
 
 // requestHandler adapts Server to transport.Handler
 type requestHandler struct {
-	srv        *Server
-	handleFunc middleware.HandlerFunc
+	srv            *Server
+	handleFunc     middleware.HandlerFunc
+	toolFilter     ToolFilterFunc
+	resourceFilter ResourceFilterFunc
+	promptFilter   PromptFilterFunc
 }
 
 func newRequestHandler(srv *Server, opts ...ServeOption) *requestHandler {
@@ -592,7 +651,12 @@ func newRequestHandler(srv *Server, opts ...ServeOption) *requestHandler {
 		opt(options)
 	}
 
-	h := &requestHandler{srv: srv}
+	h := &requestHandler{
+		srv:            srv,
+		toolFilter:     options.toolFilter,
+		resourceFilter: options.resourceFilter,
+		promptFilter:   options.promptFilter,
+	}
 
 	// Build the handler function
 	baseHandler := middleware.HandlerFunc(h.handle)
@@ -688,11 +752,14 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	return protocol.NewResponse(req.ID, result), nil
 }
 
-func (h *requestHandler) handleToolsList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	tools := h.srv.Tools()
 
 	toolList := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
+		if h.toolFilter != nil && !h.toolFilter(ctx, t.Name) {
+			continue
+		}
 		item := map[string]any{
 			fieldName:     t.Name,
 			"description": t.Description,
@@ -727,9 +794,14 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
 
-	// Get tool
+	// Get tool. A filter that hides the tool from tools/list must also
+	// block tools/call — otherwise the filter is a display layer, not
+	// the authorisation contract callers rely on.
 	tool, ok := h.srv.GetTool(params.Name)
 	if !ok {
+		return nil, protocol.NewNotFound("tool not found: " + params.Name)
+	}
+	if h.toolFilter != nil && !h.toolFilter(ctx, params.Name) {
 		return nil, protocol.NewNotFound("tool not found: " + params.Name)
 	}
 
@@ -849,11 +921,14 @@ func applyStructuredResult(response map[string]any, v *server.StructuredResult) 
 	}
 }
 
-func (h *requestHandler) handleResourcesList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handleResourcesList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	resources := h.srv.Resources()
 
 	resourceList := make([]map[string]any, 0, len(resources))
 	for _, r := range resources {
+		if h.resourceFilter != nil && !h.resourceFilter(ctx, r.URITemplate, r.Name) {
+			continue
+		}
 		item := map[string]any{
 			"uri":     r.URITemplate,
 			fieldName: r.Name,
@@ -886,9 +961,14 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
 
-	// Find resource that matches the URI
+	// Find resource that matches the URI. Hidden resources stay
+	// hidden — resources/read on a filtered resource looks identical
+	// to one that was never registered.
 	resource, ok := h.srv.FindResourceForURI(params.URI)
 	if !ok {
+		return nil, protocol.NewNotFound("resource not found: " + params.URI)
+	}
+	if h.resourceFilter != nil && !h.resourceFilter(ctx, resource.URITemplate(), resource.Name()) {
 		return nil, protocol.NewNotFound("resource not found: " + params.URI)
 	}
 
@@ -920,11 +1000,14 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 	return protocol.NewResponse(req.ID, result), nil
 }
 
-func (h *requestHandler) handlePromptsList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	prompts := h.srv.Prompts()
 
 	promptList := make([]map[string]any, 0, len(prompts))
 	for _, p := range prompts {
+		if h.promptFilter != nil && !h.promptFilter(ctx, p.Name) {
+			continue
+		}
 		item := map[string]any{
 			fieldName: p.Name,
 		}
@@ -968,9 +1051,14 @@ func (h *requestHandler) handlePromptsGet(ctx context.Context, req *protocol.Req
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
 
-	// Get prompt
+	// Get prompt. Filter blocks hidden prompts from prompts/get the
+	// same way it blocks tools/call — the contract is "if you can't
+	// see it, you can't reach it".
 	prompt, ok := h.srv.GetPrompt(params.Name)
 	if !ok {
+		return nil, protocol.NewNotFound("prompt not found: " + params.Name)
+	}
+	if h.promptFilter != nil && !h.promptFilter(ctx, params.Name) {
 		return nil, protocol.NewNotFound("prompt not found: " + params.Name)
 	}
 

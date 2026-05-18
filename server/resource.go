@@ -35,6 +35,14 @@ type Resource struct {
 	paramNames []string
 }
 
+// URITemplate returns the URI template the resource was registered
+// under (e.g. "data://info" or "users://{id}").
+func (r *Resource) URITemplate() string { return r.uriTemplate }
+
+// Name returns the resource's human-readable name. Empty when the
+// builder never set one.
+func (r *Resource) Name() string { return r.name }
+
 // ResourceInfo represents metadata about a registered resource.
 type ResourceInfo struct {
 	URITemplate string
