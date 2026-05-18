@@ -298,6 +298,12 @@ var (
 	ContextWithIdentity      = middleware.ContextWithIdentity
 )
 
+// ToolFilter re-exports for identity-aware tools/list filtering.
+// See middleware.ToolFilter doc + issue #90 for the rationale.
+type ToolPredicate = middleware.ToolPredicate
+
+var ToolFilter = middleware.ToolFilter
+
 // BearerAuth returns a Middleware that requires clients to present one
 // of the given tokens as a Bearer credential in the Authorization
 // header.
