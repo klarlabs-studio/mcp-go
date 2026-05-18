@@ -2,11 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.13.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.12.0...v1.13.0)
 
 ### Features
 
-#### Identity-aware list filtering for tools, resources, and prompts (#90)
+#### Identity-aware list filtering for tools, resources, and prompts (#90, #91)
 - Added `mcp.WithToolFilter(func(ctx, name) bool) ServeOption` — predicate gates `tools/list` visibility AND `tools/call` execution, so the filter is the authoritative contract rather than a display layer
 - Added `mcp.WithResourceFilter(func(ctx, uri, name) bool) ServeOption` — gates `resources/list` + `resources/read`
 - Added `mcp.WithPromptFilter(func(ctx, name) bool) ServeOption` — gates `prompts/list` + `prompts/get`
