@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Features
+
+#### Identity-aware list filtering for tools, resources, and prompts (#90)
+- Added `mcp.WithToolFilter(func(ctx, name) bool) ServeOption` — predicate gates `tools/list` visibility AND `tools/call` execution, so the filter is the authoritative contract rather than a display layer
+- Added `mcp.WithResourceFilter(func(ctx, uri, name) bool) ServeOption` — gates `resources/list` + `resources/read`
+- Added `mcp.WithPromptFilter(func(ctx, name) bool) ServeOption` — gates `prompts/list` + `prompts/get`
+- Predicates receive the request context — pair with `IdentityFromContext` for identity-aware authz (e.g. admin-only tools hidden from read-only clients)
+- Filters apply during typed list construction, so they're immune to the schema-coupling problem of post-response middleware approaches (response-map walking breaks silently when the response shape evolves)
+- Added `(*server.Resource).URITemplate()` and `(*server.Resource).Name()` accessors so resource filter predicates can be implemented without poking at unexported fields
+
 ## [1.12.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.11.2...v1.12.0)
 
 ### Features
