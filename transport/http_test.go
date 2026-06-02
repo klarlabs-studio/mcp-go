@@ -367,3 +367,36 @@ func TestHTTP_Serve(t *testing.T) {
 		cancel()
 	})
 }
+
+func TestHTTP_RequestContextFn(t *testing.T) {
+	type ctxKey string
+	const subjectKey ctxKey = "subject"
+
+	var seen string
+	handler := HandlerFunc(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+		if v, ok := ctx.Value(subjectKey).(string); ok {
+			seen = v
+		}
+		return protocol.NewResponse(req.ID, map[string]string{"status": "ok"}), nil
+	})
+
+	transport := NewHTTP(":0", WithRequestContextFn(func(ctx context.Context, r *http.Request) context.Context {
+		return context.WithValue(ctx, subjectKey, r.Header.Get("X-Cert-Subject"))
+	}))
+	httpHandler := transport.createHandler(handler)
+
+	req := protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "test/method"}
+	reqBytes, _ := json.Marshal(req)
+	httpReq := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(reqBytes))
+	httpReq.Header.Set("X-Cert-Subject", "CN=svc-a")
+	rec := httptest.NewRecorder()
+
+	httpHandler.ServeHTTP(rec, httpReq)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if seen != "CN=svc-a" {
+		t.Errorf("handler ctx subject = %q, want %q", seen, "CN=svc-a")
+	}
+}

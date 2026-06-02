@@ -18,15 +18,16 @@ import (
 const healthStatusField = "status"
 
 type HTTP struct {
-	addr            string
-	readTimeout     time.Duration
-	writeTimeout    time.Duration
-	shutdownTimeout time.Duration
-	drainDelay      time.Duration
-	corsConfig      *CORSConfig
-	sessionStore    SessionStore
-	discovery       *ServerDiscovery
-	tlsConfig       *tls.Config
+	addr             string
+	readTimeout      time.Duration
+	writeTimeout     time.Duration
+	shutdownTimeout  time.Duration
+	drainDelay       time.Duration
+	corsConfig       *CORSConfig
+	sessionStore     SessionStore
+	discovery        *ServerDiscovery
+	tlsConfig        *tls.Config
+	requestContextFn func(context.Context, *http.Request) context.Context
 
 	mu         sync.RWMutex
 	listenAddr string
@@ -77,6 +78,36 @@ func WithDiscovery(discovery *ServerDiscovery) HTTPOption {
 func WithTLSConfig(cfg *tls.Config) HTTPOption {
 	return func(h *HTTP) {
 		h.tlsConfig = cfg
+	}
+}
+
+// WithRequestContextFn registers a function that runs once per HTTP
+// request, before mcp-go unwraps the JSON-RPC payload into a
+// protocol.Request. The returned context propagates through the
+// handler and middleware chain via normal context semantics.
+//
+// This is the place to derive request-scoped identity from transport
+// details that middleware (operating on the unwrapped protocol.Request)
+// cannot see. The canonical use is mTLS: read the verified client
+// certificate and stash a derived identity for downstream authz.
+//
+//	NewHTTP(addr,
+//	    WithTLSConfig(mtlsCfg),
+//	    WithRequestContextFn(func(ctx context.Context, r *http.Request) context.Context {
+//	        if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+//	            cn := r.TLS.PeerCertificates[0].Subject.CommonName
+//	            ctx = mcp.ContextWithIdentity(ctx, &mcp.Identity{ID: cn, Name: cn})
+//	        }
+//	        return ctx
+//	    }),
+//	)
+//
+// The function must return a non-nil context derived from the one
+// passed in; returning a context unrelated to the request breaks
+// cancellation and deadlines.
+func WithRequestContextFn(fn func(context.Context, *http.Request) context.Context) HTTPOption {
+	return func(h *HTTP) {
+		h.requestContextFn = fn
 	}
 }
 
@@ -223,6 +254,11 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 
 	w.Header().Set("Content-Type", "application/json")
 
+	ctx := r.Context()
+	if h.requestContextFn != nil {
+		ctx = h.requestContextFn(ctx, r)
+	}
+
 	var req protocol.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		resp := protocol.NewErrorResponse(nil, protocol.NewParseError("Invalid JSON"))
@@ -230,7 +266,7 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 		return
 	}
 
-	resp, err := handler.HandleRequest(r.Context(), &req)
+	resp, err := handler.HandleRequest(ctx, &req)
 	if err != nil {
 		resp = protocol.NewErrorResponse(req.ID, protocol.NewInternalError(err.Error()))
 	}
