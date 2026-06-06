@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // Sentinel errors for client operations.

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/transport"
 )
 
 func TestCORSHandler(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mcp-go/middleware"
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp"
+	"go.klarlabs.de/mcp/middleware"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // BenchmarkToolExecution measures tool execution performance.

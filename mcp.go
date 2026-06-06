@@ -35,11 +35,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/middleware"
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/server"
-	"github.com/felixgeelhaar/mcp-go/transport"
-	grpctransport "github.com/felixgeelhaar/mcp-go/transport/grpc"
+	"go.klarlabs.de/mcp/middleware"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
+	"go.klarlabs.de/mcp/transport"
+	grpctransport "go.klarlabs.de/mcp/transport/grpc"
 )
 
 // JSON field names used in MCP protocol payloads. Extracted as constants

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 type TaskStatus string

@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/client"
+	"go.klarlabs.de/mcp/client"
 )
 
 func TestValidateCommand(t *testing.T) {

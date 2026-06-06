@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/client"
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/client"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // echoServer accepts a single JSON-RPC POST and replies with a fixed

@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // StdioTransport connects to an MCP server via subprocess stdio.

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mcp-go/server"
-	"github.com/felixgeelhaar/mcp-go/testutil"
+	"go.klarlabs.de/mcp"
+	"go.klarlabs.de/mcp/server"
+	"go.klarlabs.de/mcp/testutil"
 )
 
 func TestTestClient_Tools(t *testing.T) {

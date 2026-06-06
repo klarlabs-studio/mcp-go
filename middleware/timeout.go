@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // Timeout returns middleware that enforces a request deadline.

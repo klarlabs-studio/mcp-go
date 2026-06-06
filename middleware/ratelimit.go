@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/felixgeelhaar/fortify/ratelimit"
+	"go.klarlabs.de/fortify/ratelimit"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // RateLimitOption configures the rate limiter.

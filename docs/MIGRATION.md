@@ -216,7 +216,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 type GreetInput struct {
@@ -466,7 +466,7 @@ import (
     "context"
     "os"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 type SearchInput struct {
@@ -592,7 +592,7 @@ return nil, fmt.Errorf("invalid request")  // Automatically converted to MCP err
 
 ## Getting Help
 
-- [mcp-go Documentation](https://pkg.go.dev/github.com/felixgeelhaar/mcp-go)
+- [mcp-go Documentation](https://pkg.go.dev/go.klarlabs.de/mcp)
 - [Comparison Guide](./COMPARISON.md)
 - [Examples](../examples/)
-- [Issues](https://github.com/felixgeelhaar/mcp-go/issues)
+- [Issues](https://github.com/klarlabs-studio/mcp-go/issues)

@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mcp-go/server"
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp"
+	"go.klarlabs.de/mcp/server"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // CalculateInput is the input for the calculate tool.

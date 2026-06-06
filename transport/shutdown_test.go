@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/transport"
 )
 
 func TestShutdownManager(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestRequestID(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestTaskManager(t *testing.T) {

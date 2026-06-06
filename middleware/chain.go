@@ -4,7 +4,7 @@ package middleware
 import (
 	"context"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // HandlerFunc is the signature for request handlers.

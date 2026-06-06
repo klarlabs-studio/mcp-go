@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/felixgeelhaar/mcp-go"
+	"go.klarlabs.de/mcp"
 )
 
 // SearchInput is the input for the search tool.

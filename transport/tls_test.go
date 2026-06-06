@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // generateTestCert builds an in-memory ECDSA cert + key valid for

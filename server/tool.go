@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/schema"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/schema"
 )
 
 // StructuredResult allows tool handlers to return structured content

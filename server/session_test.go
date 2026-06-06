@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // mockRequestSender is a mock implementation of RequestSender for testing.

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/felixgeelhaar/mcp-go/server"
+	"go.klarlabs.de/mcp/server"
 )
 
 type ServerInfo struct {

@@ -11,11 +11,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 const (
-	instrumentationName = "github.com/felixgeelhaar/mcp-go"
+	instrumentationName = "go.klarlabs.de/mcp"
 )
 
 // OTelOption configures the OpenTelemetry middleware.

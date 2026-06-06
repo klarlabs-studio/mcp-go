@@ -81,7 +81,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/felixgeelhaar/mcp-go
+        - go.klarlabs.de/mcp
 
 issues:
   max-issues-per-linter: 0

@@ -1,9 +1,9 @@
 # mcp-go
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/felixgeelhaar/mcp-go.svg)](https://pkg.go.dev/github.com/felixgeelhaar/mcp-go)
-[![Go Report Card](https://goreportcard.com/badge/github.com/felixgeelhaar/mcp-go)](https://goreportcard.com/report/github.com/felixgeelhaar/mcp-go)
-[![CI](https://github.com/felixgeelhaar/mcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/felixgeelhaar/mcp-go/actions/workflows/ci.yml)
-![Coverage](https://raw.githubusercontent.com/felixgeelhaar/mcp-go/badges/.badges/main/coverage.svg)
+[![Go Reference](https://pkg.go.dev/badge/go.klarlabs.de/mcp.svg)](https://pkg.go.dev/go.klarlabs.de/mcp)
+[![Go Report Card](https://goreportcard.com/badge/go.klarlabs.de/mcp)](https://goreportcard.com/report/go.klarlabs.de/mcp)
+[![CI](https://github.com/klarlabs-studio/mcp-go/actions/workflows/ci.yml/badge.svg)](https://github.com/klarlabs-studio/mcp-go/actions/workflows/ci.yml)
+![Coverage](https://raw.githubusercontent.com/klarlabs-studio/mcp-go/badges/.badges/main/coverage.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **A Go framework for building Model Context Protocol (MCP) servers — like Gin, but for MCP.**
@@ -39,7 +39,7 @@ import (
     "context"
     "log"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 func main() {
@@ -259,7 +259,7 @@ Want to add your project? Open a PR!
 ## Installation
 
 ```bash
-go get github.com/felixgeelhaar/mcp-go
+go get go.klarlabs.de/mcp
 ```
 
 Requires Go 1.25 or later.
@@ -268,7 +268,7 @@ Requires Go 1.25 or later.
 
 ## Documentation
 
-- [API Reference](https://pkg.go.dev/github.com/felixgeelhaar/mcp-go)
+- [API Reference](https://pkg.go.dev/go.klarlabs.de/mcp)
 - [Getting Started](./docs/GETTING_STARTED.md)
 - [Migration from mark3labs/mcp-go](./docs/MIGRATION.md)
 - [Comparison: MCP SDK vs mark3labs vs mcp-go](./docs/COMPARISON.md)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // Identity represents an authenticated identity.

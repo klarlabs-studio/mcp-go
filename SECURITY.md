@@ -14,7 +14,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to: security@example.com
+Instead, please report them via email to: security@klarlabs.de
 
 Include the following information:
 - Type of vulnerability

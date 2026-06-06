@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 func TestNewServer(t *testing.T) {

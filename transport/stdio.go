@@ -9,7 +9,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // Stdio implements MCP transport over stdin/stdout.

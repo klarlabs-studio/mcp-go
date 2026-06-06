@@ -91,7 +91,7 @@ This document describes the technical architecture and implementation details fo
 ### 2.3 Package Structure (DDD-Aligned)
 
 ```
-github.com/felixgeelhaar/mcp-go/
+go.klarlabs.de/mcp/
 │
 ├── mcp.go                    # Public API facade (exports)
 │

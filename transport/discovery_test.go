@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/server"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
 )
 
 func TestServerDiscovery(t *testing.T) {

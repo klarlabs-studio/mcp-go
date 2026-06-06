@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/felixgeelhaar/mcp-go"
+	"go.klarlabs.de/mcp"
 )
 
 func main() {

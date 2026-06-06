@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/felixgeelhaar/mcp-go"
+	"go.klarlabs.de/mcp"
 )
 
 // ExampleNewServer demonstrates creating an MCP server with tools, resources, and prompts.

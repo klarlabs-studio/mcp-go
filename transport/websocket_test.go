@@ -9,8 +9,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 func TestWebSocket(t *testing.T) {

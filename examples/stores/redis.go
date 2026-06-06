@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/transport"
 )
 
 type RedisStore struct {

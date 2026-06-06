@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // TestMCPCompliance_Initialize tests the initialize handshake.

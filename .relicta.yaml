@@ -30,8 +30,8 @@ changelog:
     includedate: true
     linkcommits: true
     linkissues: true
-    repositoryurl: https://github.com/felixgeelhaar/mcp-go
-    issueurl: https://github.com/felixgeelhaar/mcp-go/issues
+    repositoryurl: https://github.com/klarlabs-studio/mcp-go
+    issueurl: https://github.com/klarlabs-studio/mcp-go/issues
     exclude:
         - chore
         - ci

@@ -29,9 +29,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/server"
-	"github.com/felixgeelhaar/mcp-go/transport"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // JSON field names used in testutil request/response payloads.

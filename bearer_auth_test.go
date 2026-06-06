@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	mcp "github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mcp-go/middleware"
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	mcp "go.klarlabs.de/mcp"
+	"go.klarlabs.de/mcp/middleware"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // callWith invokes the middleware with the given request + bearer token.

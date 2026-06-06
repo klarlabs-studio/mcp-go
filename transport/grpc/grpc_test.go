@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/transport"
-	pb "github.com/felixgeelhaar/mcp-go/transport/grpc/mcpv1"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
+	pb "go.klarlabs.de/mcp/transport/grpc/mcpv1"
 )
 
 func TestGRPC_Addr(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // healthStatusField is the JSON field name used in /health and /healthz

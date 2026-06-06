@@ -17,7 +17,7 @@ mcp-go is a Go framework for building [Model Context Protocol (MCP)](https://mod
 ## Installation
 
 ```bash
-go get github.com/felixgeelhaar/mcp-go
+go get go.klarlabs.de/mcp
 ```
 
 ---
@@ -33,7 +33,7 @@ import (
     "context"
     "log"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 // GreetInput defines the typed input for our tool.
@@ -108,7 +108,7 @@ import (
     "log"
     "time"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 type GreetInput struct {

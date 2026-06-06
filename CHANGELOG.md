@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.13.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.12.0...v1.13.0)
+## [1.13.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.12.0...v1.13.0)
 
 ### Features
 
@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - Filters apply during typed list construction, so they're immune to the schema-coupling problem of post-response middleware approaches (response-map walking breaks silently when the response shape evolves)
 - Added `(*server.Resource).URITemplate()` and `(*server.Resource).Name()` accessors so resource filter predicates can be implemented without poking at unexported fields
 
-## [1.12.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.11.2...v1.12.0)
+## [1.12.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.11.2...v1.12.0)
 
 ### Features
 
@@ -32,7 +32,7 @@ All notable changes to this project will be documented in this file.
 - `*tls.Config` is the only surface — operators bring their own cert loading + rotation strategy (`LoadX509KeyPair`, autocert, SPIFFE workload API, etc.)
 - Set `ClientCAs` + `ClientAuth` on the config for mTLS — common in service-mesh + regulated single-binary deployments where ops doesn't want a separate TLS-terminating proxy
 
-## [1.9.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.8.0...v1.9.0)
+## [1.9.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.8.0...v1.9.0)
 
 ### Features
 
@@ -60,7 +60,7 @@ All notable changes to this project will be documented in this file.
 - Convenience method `SendText(channel, text)` for simple text messages
 - Eliminates polling — servers can proactively push DOM changes, network events, navigation alerts
 
-## [1.8.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.7.0...v1.8.0)
+## [1.8.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.7.0...v1.8.0)
 
 ### Breaking Changes
 - Go 1.25 is now the minimum required version (previously 1.23)
@@ -76,7 +76,7 @@ All notable changes to this project will be documented in this file.
 - Updated gonum to v0.17.0 for security patches
 - Updated fortify to v1.2.1 for security patches
 
-## [1.7.0](https://github.com/felixgeelhaar/mcp-go/compare/v1.6.3...v1.7.0)
+## [1.7.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.6.3...v1.7.0)
 
 ### Features
 

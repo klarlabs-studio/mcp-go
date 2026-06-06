@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // ChannelMessage represents a message pushed to the client through a channel.

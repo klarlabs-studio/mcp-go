@@ -25,8 +25,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/felixgeelhaar/mcp-go/transport"
-	pb "github.com/felixgeelhaar/mcp-go/transport/grpc/mcpv1"
+	"go.klarlabs.de/mcp/transport"
+	pb "go.klarlabs.de/mcp/transport/grpc/mcpv1"
 )
 
 // GRPC implements MCP transport over gRPC bidirectional streaming.

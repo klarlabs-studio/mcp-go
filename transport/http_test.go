@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestNewHTTP(t *testing.T) {

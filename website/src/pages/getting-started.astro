@@ -30,7 +30,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <section>
       <h2>Installation</h2>
-      <pre><code>go get github.com/felixgeelhaar/mcp-go</code></pre>
+      <pre><code>go get go.klarlabs.de/mcp</code></pre>
     </section>
 
     <section>
@@ -42,7 +42,7 @@ import (
     "context"
     "log"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 // GreetInput defines the typed input for our tool.
@@ -112,7 +112,7 @@ import (
     "log"
     "time"
 
-    "github.com/felixgeelhaar/mcp-go"
+    "go.klarlabs.de/mcp"
 )
 
 type GreetInput struct {
@@ -206,8 +206,8 @@ mcp.ServeHTTP(ctx, srv, ":8080",
       <ul>
         <li><a href="/mcp-go/concepts">Concepts</a> — Learn about tools, resources, prompts, and middleware</li>
         <li><a href="/mcp-go/comparison">Comparison</a> — See how mcp-go differs from other MCP libraries</li>
-        <li><a href="https://github.com/felixgeelhaar/mcp-go/tree/main/examples" target="_blank" rel="noopener">Examples</a> — Browse complete example servers</li>
-        <li><a href="https://pkg.go.dev/github.com/felixgeelhaar/mcp-go" target="_blank" rel="noopener">API Reference</a> — Full Go documentation</li>
+        <li><a href="https://github.com/klarlabs-studio/mcp-go/tree/main/examples" target="_blank" rel="noopener">Examples</a> — Browse complete example servers</li>
+        <li><a href="https://pkg.go.dev/go.klarlabs.de/mcp" target="_blank" rel="noopener">API Reference</a> — Full Go documentation</li>
       </ul>
     </section>
   </article>

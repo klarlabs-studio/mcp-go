@@ -7,9 +7,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
-	"github.com/felixgeelhaar/mcp-go/transport"
-	pb "github.com/felixgeelhaar/mcp-go/transport/grpc/mcpv1"
+	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
+	pb "go.klarlabs.de/mcp/transport/grpc/mcpv1"
 )
 
 // handleStream processes messages from a bidirectional gRPC stream.

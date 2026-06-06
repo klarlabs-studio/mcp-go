@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // PanicHandler is called when a panic is recovered.

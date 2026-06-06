@@ -6,7 +6,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/felixgeelhaar/mcp-go"
+	"go.klarlabs.de/mcp"
 )
 
 // EchoInput is the input for the echo tool.

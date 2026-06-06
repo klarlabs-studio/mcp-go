@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // Icon represents an icon for UI display.

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/protocol"
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // HTTPTransport speaks JSON-RPC to an MCP server over HTTP. It mirrors

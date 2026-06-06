@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go/client"
+	"go.klarlabs.de/mcp/client"
 )
 
 func TestStdioTransport(t *testing.T) {

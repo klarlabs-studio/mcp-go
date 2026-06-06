@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/felixgeelhaar/mcp-go"
+	"go.klarlabs.de/mcp"
 )
 
 // simpleLogger implements mcp.Logger for demonstration.

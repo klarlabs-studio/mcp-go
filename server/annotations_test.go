@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/felixgeelhaar/mcp-go/server"
+	"go.klarlabs.de/mcp/server"
 )
 
 func TestToolAnnotations(t *testing.T) {
