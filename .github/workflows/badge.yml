@@ -1,0 +1,64 @@
+# Coverage badge publisher — split out of the main CI so that CI itself can
+# be the thin shared-workflow caller. Runs on push to main only and force-
+# pushes a rendered SVG to the orphan `badges` branch. It never writes to
+# main, so branch protection on main is unaffected.
+name: Coverage Badge
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: badge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: badges
+          path: badges
+        continue-on-error: true
+
+      - name: Create badges branch if not exists
+        run: |
+          if [ ! -d "badges" ]; then
+            mkdir badges
+            cd badges
+            git init -b badges
+            git remote add origin https://github.com/${{ github.repository }}.git
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Generate coverage profile
+        run: go test -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Install coverctl
+        run: go install go.klarlabs.de/coverctl@v1.17.0
+
+      - name: Generate badge
+        run: |
+          mkdir -p badges/.badges/main
+          coverctl badge --profile coverage.out --output badges/.badges/main/coverage.svg
+
+      - name: Push badge
+        run: |
+          cd badges
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .badges/
+          git commit -m "Update coverage badge" || exit 0
+          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:badges

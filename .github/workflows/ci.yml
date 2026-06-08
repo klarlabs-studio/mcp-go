@@ -1,167 +1,29 @@
+# Thin caller for the shared klarlabs-studio Go CI bar.
+# All gate logic (format, lint+gocritic, race tests, coverage gate, nox
+# security scan) lives in the reusable workflow — bump versions / add jobs
+# there, once, org-wide.
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
-
-permissions:
-  contents: write
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.25']
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Run go vet
-        run: go vet ./...
-
-      - name: Run tests
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
-
-      - name: Upload coverage
-        if: matrix.go-version == '1.25'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage
-          path: coverage.out
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: '1.25'
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
-        with:
-          version: v2.7.2
-
-  coverage-badge:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: badges
-          path: badges
-        continue-on-error: true
-
-      - name: Create badges branch if not exists
-        run: |
-          if [ ! -d "badges" ]; then
-            mkdir badges
-            cd badges
-            git init -b badges
-            git remote add origin https://github.com/${{ github.repository }}.git
-          fi
-
-      - name: Download coverage
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: coverage
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: '1.25'
-
-      - name: Install coverctl
-        run: go install go.klarlabs.de/coverctl@v1.17.0
-
-      - name: Generate badge
-        run: |
-          mkdir -p badges/.badges/main
-          coverctl badge --profile coverage.out --output badges/.badges/main/coverage.svg
-
-      - name: Push badge
-        run: |
-          cd badges
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .badges/
-          git commit -m "Update coverage badge" || exit 0
-          git push -f https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:badges
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: '1.25'
-
-      - name: Build
-        run: go build ./...
-
-      - name: Build examples
-        run: go build ./examples/...
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
+  ci:
+    uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
     permissions:
       contents: read
       security-events: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version: '1.25'
-
-      - name: Install nox
-        env:
-          NOX_VERSION: 0.10.0
-        run: |
-          curl -fsSL "https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_amd64.tar.gz" \
-            | tar xz -C /usr/local/bin nox
-
-      - name: Run nox Security Scan
-        run: nox scan . || true
-
-      - name: Upload nox results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: security-scan-results
-          path: findings.json
-        if: always()
+      pull-requests: write
+    secrets: inherit
+    with:
+      coverage: true          # repo has .coverctl.yaml thresholds (coverctl check gate)
+      cross-platform: false   # ubuntu-only; opt into macOS/Windows later if needed
