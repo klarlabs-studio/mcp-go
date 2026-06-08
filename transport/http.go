@@ -35,6 +35,40 @@ type HTTP struct {
 
 	sseClients   map[string]chan []byte
 	sseClientsMu sync.RWMutex
+
+	onDisconnect func(clientID string)
+}
+
+// SetDisconnectHook registers a callback invoked when an SSE client
+// disconnects, so the server can release per-client state (e.g. resource
+// subscriptions). Safe to call before Serve.
+func (h *HTTP) SetDisconnectHook(fn func(clientID string)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onDisconnect = fn
+}
+
+// NotifyClient delivers a JSON-RPC notification to one connected SSE client.
+// It satisfies the server's ResourceNotifier contract structurally, letting
+// the server push resources/updated to subscribers. Returns an error if the
+// client is not connected or its buffer is full.
+func (h *HTTP) NotifyClient(clientID, method string, params any) error {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return fmt.Errorf("notify %s: marshal params: %w", clientID, err)
+	}
+	msg, err := json.Marshal(protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		Method:  method,
+		Params:  raw,
+	})
+	if err != nil {
+		return fmt.Errorf("notify %s: marshal notification: %w", clientID, err)
+	}
+	if !h.SendTo(clientID, msg) {
+		return fmt.Errorf("notify %s: client not connected or buffer full", clientID)
+	}
+	return nil
 }
 
 type HTTPOption func(*HTTP)
@@ -258,6 +292,12 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	if h.requestContextFn != nil {
 		ctx = h.requestContextFn(ctx, r)
 	}
+	// Correlate this request with the client's server-push stream so handlers
+	// like resources/subscribe can target it. The client echoes the clientId
+	// it received on its SSE connection.
+	if clientID := r.URL.Query().Get("clientId"); clientID != "" {
+		ctx = ContextWithClientID(ctx, clientID)
+	}
 
 	var req protocol.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -298,6 +338,12 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 		h.sseClientsMu.Lock()
 		delete(h.sseClients, clientID)
 		h.sseClientsMu.Unlock()
+		h.mu.RLock()
+		hook := h.onDisconnect
+		h.mu.RUnlock()
+		if hook != nil {
+			hook(clientID)
+		}
 	}()
 
 	w.Header().Set("Content-Type", "text/event-stream")
