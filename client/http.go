@@ -161,7 +161,7 @@ func buildHTTPClient(o httpTransportOptions) *http.Client {
 	if o.caBundle != nil || o.insecure {
 		tr.TLSClientConfig = &tls.Config{
 			RootCAs:            o.caBundle,
-			InsecureSkipVerify: o.insecure, //nolint:gosec // Opt-in via WithInsecureSkipVerify.
+			InsecureSkipVerify: o.insecure,
 			MinVersion:         tls.VersionTLS12,
 		}
 	}

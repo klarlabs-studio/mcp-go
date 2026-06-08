@@ -93,7 +93,7 @@ func TestHTTP_ServesOverTLSWhenConfigured(t *testing.T) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 		Timeout: 2 * time.Second,
 	}

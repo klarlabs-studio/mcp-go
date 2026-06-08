@@ -56,7 +56,7 @@ func NewUnsafeStdioTransport(command string, args ...string) (*StdioTransport, e
 }
 
 func newStdioTransport(command string, args []string) (*StdioTransport, error) {
-	cmd := exec.Command(command, args...) //nolint:gosec // Caller is responsible for validation.
+	cmd := exec.Command(command, args...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
