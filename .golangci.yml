@@ -7,19 +7,26 @@ run:
 linters:
   default: standard
   enable:
+    # --- klarlabs-studio org golden bar (keep these) ---
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - unparam
+    - gocritic     # org engineering bar — do not drop
+    - gosec
+    # --- repo-specific opt-ins ---
     - bodyclose
     - dogsled
     - errorlint
     - goconst
-    - gocritic
     - gocyclo
-    - gosec
-    - misspell
     - nakedret
     - prealloc
     - predeclared
-    - unconvert
-    - unparam
     - whitespace
 
   settings:

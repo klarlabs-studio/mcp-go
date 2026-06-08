@@ -1,0 +1,28 @@
+# nox security scanner configuration — repo-specific scan-scope exclusions.
+#
+# Every path below produces only false positives under nox's vendor secret-key
+# regexes (no real secret is suppressed). The exclude list mirrors the upstream
+# nox project's own .nox.yaml convention.
+#
+#   - Documentation (README/CHANGELOG/CONTRIBUTING/docs): Go code examples
+#     (struct field names, example tool names like `srv.Tool("search")`) match
+#     vendor API-key regexes (Braintree, SendGrid, Datadog, Grafana, ...).
+#   - *_test.go: long CamelCase test-function identifiers match the
+#     "Split API Key" regex. Consistent with the existing gosec _test.go
+#     exclusion in .golangci.yml.
+#   - .github/workflows/*.yml: pinned GitHub Actions commit SHAs (a security
+#     best practice) read as API keys.
+#   - .nox/: the scanner's own baseline/state file, whose stored finding
+#     fingerprints and dependency hashes are high-entropy by design.
+#
+# Application source code, configuration, and dependency manifests remain fully
+# scanned and gated by the shared CI workflow.
+scan:
+  exclude:
+    - "README.md"
+    - "CHANGELOG.md"
+    - "CONTRIBUTING.md"
+    - "docs/"
+    - "*_test.go"
+    - ".github/workflows/*.yml"
+    - ".nox/"
