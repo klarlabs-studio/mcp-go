@@ -1,0 +1,17 @@
+# nox security scanner configuration — repo-specific scan exclusions.
+#
+# The documentation files below contain Go code examples (struct field names,
+# example tool names like `srv.Tool("search")`) that the secret-detection
+# regexes match as API keys (Braintree, SendGrid, Datadog, Grafana, NuGet,
+# Maven, DigitalOcean) — all false positives, not real secrets.
+#
+# Excluding documentation from scanning mirrors the upstream nox project's own
+# .nox.yaml convention ("Documentation files contain example code snippets with
+# token references"). Source code, IaC, workflows, and dependencies remain
+# fully scanned and gated.
+scan:
+  exclude:
+    - "README.md"
+    - "CHANGELOG.md"
+    - "CONTRIBUTING.md"
+    - "docs/"
