@@ -41,9 +41,10 @@ type Client struct {
 	transport Transport
 	opts      clientOptions
 
-	mu         sync.RWMutex
-	serverInfo *ServerInfo
-	requestID  atomic.Int64
+	mu                      sync.RWMutex
+	serverInfo              *ServerInfo
+	resourceUpdatedHandlers []func(uri string)
+	requestID               atomic.Int64
 }
 
 // Icon represents an icon for UI display.

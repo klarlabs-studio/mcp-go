@@ -3,8 +3,10 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +31,9 @@ type HTTPTransport struct {
 	endpoint   string
 	httpClient *http.Client
 	headers    http.Header
+	// clientID correlates this transport's POSTs with its server-push (SSE)
+	// stream so the server can target resource-updated notifications.
+	clientID string
 }
 
 // HTTPTransportOption configures an HTTPTransport.
@@ -153,7 +158,18 @@ func NewHTTPTransport(baseURL string, opts ...HTTPTransportOption) (*HTTPTranspo
 		endpoint:   endpoint,
 		httpClient: client,
 		headers:    headers,
+		clientID:   newClientID(),
 	}, nil
+}
+
+// newClientID mints a random identifier correlating POSTs with the SSE stream.
+func newClientID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// rand.Read never fails on supported platforms; fall back defensively.
+		return "client"
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func buildHTTPClient(o httpTransportOptions) *http.Client {
@@ -194,7 +210,7 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.endpoint, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.postURL(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
