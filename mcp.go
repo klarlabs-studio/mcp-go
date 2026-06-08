@@ -462,6 +462,7 @@ func ServeStdio(ctx context.Context, srv *Server, opts ...ServeOption) error {
 // This blocks until the context is canceled or an error occurs.
 func ServeHTTP(ctx context.Context, srv *Server, addr string, opts ...HTTPOption) error {
 	t := transport.NewHTTP(addr, opts...)
+	wireResourceSubscriptions(srv, t)
 	handler := newRequestHandler(srv)
 	return t.Serve(ctx, handler)
 }
@@ -469,8 +470,20 @@ func ServeHTTP(ctx context.Context, srv *Server, addr string, opts ...HTTPOption
 // ServeHTTPWithMiddleware runs the server using HTTP transport with middleware support.
 func ServeHTTPWithMiddleware(ctx context.Context, srv *Server, addr string, httpOpts []HTTPOption, serveOpts ...ServeOption) error {
 	t := transport.NewHTTP(addr, httpOpts...)
+	wireResourceSubscriptions(srv, t)
 	handler := newRequestHandler(srv, serveOpts...)
 	return t.Serve(ctx, handler)
+}
+
+// wireResourceSubscriptions connects the HTTP transport's server-push and
+// disconnect lifecycle to the server's subscription registry, so resource
+// updates reach subscribers and closed connections release their state.
+func wireResourceSubscriptions(srv *Server, t *transport.HTTP) {
+	if !srv.ResourceSubscriptionsEnabled() {
+		return
+	}
+	srv.SetResourceNotifier(t)
+	t.SetDisconnectHook(srv.RemoveClientSubscriptions)
 }
 
 // WithReadTimeout sets the read timeout for HTTP requests.
@@ -679,14 +692,16 @@ func (h *requestHandler) HandleRequest(ctx context.Context, req *protocol.Reques
 // All handlers use the same signature (ctx, req) for uniform dispatch.
 func (h *requestHandler) methodHandlers() map[string]func(context.Context, *protocol.Request) (*protocol.Response, error) {
 	return map[string]func(context.Context, *protocol.Request) (*protocol.Response, error){
-		protocol.MethodInitialize:    h.handleInitialize,
-		protocol.MethodToolsList:     h.handleToolsList,
-		protocol.MethodToolsCall:     h.handleToolsCall,
-		protocol.MethodResourcesList: h.handleResourcesList,
-		protocol.MethodResourcesRead: h.handleResourcesRead,
-		protocol.MethodPromptsList:   h.handlePromptsList,
-		protocol.MethodPromptsGet:    h.handlePromptsGet,
-		protocol.MethodPing:          h.handlePing,
+		protocol.MethodInitialize:           h.handleInitialize,
+		protocol.MethodToolsList:            h.handleToolsList,
+		protocol.MethodToolsCall:            h.handleToolsCall,
+		protocol.MethodResourcesList:        h.handleResourcesList,
+		protocol.MethodResourcesRead:        h.handleResourcesRead,
+		protocol.MethodResourcesSubscribe:   h.handleResourcesSubscribe,
+		protocol.MethodResourcesUnsubscribe: h.handleResourcesUnsubscribe,
+		protocol.MethodPromptsList:          h.handlePromptsList,
+		protocol.MethodPromptsGet:           h.handlePromptsGet,
+		protocol.MethodPing:                 h.handlePing,
 	}
 }
 
@@ -708,7 +723,11 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 		capabilities["tools"] = map[string]any{fieldListChanged: true}
 	}
 	if manifest.Capabilities.Resources || len(h.srv.Resources()) > 0 {
-		capabilities["resources"] = map[string]any{fieldListChanged: true}
+		resourceCaps := map[string]any{fieldListChanged: true}
+		if manifest.Capabilities.ResourceSubscribe {
+			resourceCaps["subscribe"] = true
+		}
+		capabilities["resources"] = resourceCaps
 	}
 	if manifest.Capabilities.Prompts || len(h.srv.Prompts()) > 0 {
 		capabilities["prompts"] = map[string]any{fieldListChanged: true}
@@ -998,6 +1017,44 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 	}
 
 	return protocol.NewResponse(req.ID, result), nil
+}
+
+func (h *requestHandler) handleResourcesSubscribe(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	if !h.srv.ResourceSubscriptionsEnabled() {
+		return nil, protocol.NewMethodNotFound(req.Method)
+	}
+	var params struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	if params.URI == "" {
+		return nil, protocol.NewInvalidParams("subscribe requires a uri")
+	}
+	clientID := transport.ClientIDFromContext(ctx)
+	if clientID == "" {
+		return nil, protocol.NewInvalidParams("resources/subscribe requires a client stream (connect to /mcp/sse first)")
+	}
+	h.srv.SubscribeResource(clientID, params.URI)
+	return protocol.NewResponse(req.ID, map[string]any{}), nil
+}
+
+func (h *requestHandler) handleResourcesUnsubscribe(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	if !h.srv.ResourceSubscriptionsEnabled() {
+		return nil, protocol.NewMethodNotFound(req.Method)
+	}
+	var params struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	clientID := transport.ClientIDFromContext(ctx)
+	if clientID != "" {
+		h.srv.UnsubscribeResource(clientID, params.URI)
+	}
+	return protocol.NewResponse(req.ID, map[string]any{}), nil
 }
 
 func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {

@@ -40,6 +40,10 @@ type Capabilities struct {
 	Resources   bool
 	Prompts     bool
 	Completions bool
+	// ResourceSubscribe advertises resources.subscribe: clients may subscribe
+	// to a resource URI and receive notifications/resources/updated when it
+	// changes. Requires a transport with server push (HTTP+SSE).
+	ResourceSubscribe bool
 }
 
 // Manifest represents the server manifest returned to clients.
@@ -80,15 +84,17 @@ type Server struct {
 	middleware   []Middleware
 	completions  *completionRegistry
 	tasks        *TaskManager
+	resourceSubs *resourceSubscriptions
 }
 
 // New creates a new MCP server with the given info and options.
 func New(info Info, opts ...Option) *Server {
 	s := &Server{
-		info:      info,
-		tools:     make(map[string]*Tool),
-		resources: make(map[string]*Resource),
-		prompts:   make(map[string]*Prompt),
+		info:         info,
+		tools:        make(map[string]*Tool),
+		resources:    make(map[string]*Resource),
+		prompts:      make(map[string]*Prompt),
+		resourceSubs: newResourceSubscriptions(),
 	}
 
 	for _, opt := range opts {
@@ -96,6 +102,42 @@ func New(info Info, opts ...Option) *Server {
 	}
 
 	return s
+}
+
+// ResourceSubscriptionsEnabled reports whether the server advertises and
+// handles resource subscriptions.
+func (s *Server) ResourceSubscriptionsEnabled() bool {
+	return s.info.Capabilities.ResourceSubscribe
+}
+
+// SetResourceNotifier wires the transport's server-push mechanism so the
+// server can deliver resources/updated notifications to subscribed clients.
+// Transports with server push (HTTP+SSE) call this during Serve.
+func (s *Server) SetResourceNotifier(n ResourceNotifier) {
+	s.resourceSubs.setNotifier(n)
+}
+
+// SubscribeResource records that a client is interested in a resource URI.
+func (s *Server) SubscribeResource(clientID, uri string) {
+	s.resourceSubs.subscribe(clientID, uri)
+}
+
+// UnsubscribeResource drops a client's interest in a resource URI.
+func (s *Server) UnsubscribeResource(clientID, uri string) {
+	s.resourceSubs.unsubscribe(clientID, uri)
+}
+
+// RemoveClientSubscriptions drops every subscription a client held — call it
+// when the client's connection closes.
+func (s *Server) RemoveClientSubscriptions(clientID string) {
+	s.resourceSubs.removeClient(clientID)
+}
+
+// NotifyResourceUpdated pushes a notifications/resources/updated to every
+// client subscribed to uri. Safe to call from any goroutine (e.g. a file
+// watcher). A no-op when no notifier is wired.
+func (s *Server) NotifyResourceUpdated(uri string) error {
+	return s.resourceSubs.notifyUpdated(uri)
 }
 
 // WithInstructions sets the server instructions that provide context to AI models
