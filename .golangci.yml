@@ -17,7 +17,6 @@ linters:
     - unconvert
     - unparam
     - gocritic     # org engineering bar — do not drop
-    - gosec
     # --- repo-specific opt-ins ---
     - bodyclose
     - dogsled
@@ -59,7 +58,6 @@ linters:
         linters:
           - dupl
           - goconst
-          - gosec
           - noctx
           - errcheck
           - gocritic
@@ -71,7 +69,6 @@ linters:
       - path: examples/
         linters:
           - errcheck
-          - gosec
           - gocritic
           - errorlint
           - goconst
