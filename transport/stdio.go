@@ -68,6 +68,9 @@ func (s *Stdio) Addr() string {
 // Serve starts processing requests from stdin.
 func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
 	scanner := bufio.NewScanner(s.in)
+	// Raise the read buffer above bufio's 64KB default so large request bodies
+	// are not rejected with ErrTooLong (mirrors the client stdio reader).
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
 	// Channel for scanner results
 	lines := make(chan string)

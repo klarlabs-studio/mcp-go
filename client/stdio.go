@@ -85,6 +85,10 @@ func newStdioTransport(command string, args []string) (*StdioTransport, error) {
 		respChan: make(map[int64]chan *protocol.Response),
 		scanner:  bufio.NewScanner(stdout),
 	}
+	// Raise the read buffer above bufio's 64KB default: large tool responses
+	// (e.g. a browser-automation annotated_screenshot, ~66KB+) overflow it,
+	// the scan returns ErrTooLong, and the response is never delivered.
+	t.scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
 	// Start reading responses
 	t.readWG.Add(1)
