@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+#### Top-level client API surface
+- Added `mcp.NewClient(url, ...mcp.ClientOption)` and `mcp.WithHTTPClient(*http.Client)`
+  for constructing an HTTP/SSE client. The injected `http.Client` is the only
+  auth hook — mcp-go never handles tokens or credentials.
+- Added `mcp.NewStdioClient(cmd, args...)` for CLI-based MCP servers.
+- Added `mcp.Call[In, Out](ctx, client, name, in)` and
+  `mcp.NewClientTool[In, Out](client, name)` — the typed, recommended client API.
+- Added `(*client.Client).CallRaw(ctx, name, json.RawMessage)` and the `mcp.Tool`
+  interface (`mcp.NewDynamicTool`) as the dynamic/untyped escape hatch. NOT
+  recommended — prefer the typed API.
+- Added `(*Server).ListTools()` introspection alias of `Tools()`.
+
+### Changed
+
+#### Client `Tool` naming
+- The client struct `Tool` (tool metadata) is renamed to `client.ToolInfo`
+  (returned by `ListTools`), freeing the name `Tool` for the dynamic escape-hatch
+  interface (formerly `DynamicTool`). `DynamicTool` remains as a deprecated alias.
+
 ### Changed
 
 #### Input schema validation is now on by default
