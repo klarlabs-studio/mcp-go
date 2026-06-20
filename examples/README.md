@@ -55,7 +55,7 @@ go run ./examples/session
 ```
 
 ### [typed-client](./typed-client/)
-The typed client API: `client.Call`, reusable `NewClientTool` handles, and the
+The typed client API: `client.Call`, reusable `NewTypedTool` handles, and the
 `DynamicTool` raw-JSON escape hatch, against an in-process server.
 
 ```bash

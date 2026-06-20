@@ -4,7 +4,7 @@
 // invokes a tool three ways:
 //
 //   - client.Call: the recommended one-shot typed call.
-//   - client.NewClientTool: a reusable, pre-bound typed handle.
+//   - client.NewTypedTool: a reusable, pre-bound typed handle.
 //   - client.NewDynamicTool: the raw JSON escape hatch (not recommended).
 //
 // Run it with:
@@ -62,13 +62,13 @@ func main() {
 	fmt.Printf("Call:          %s (length %d)\n", out.Message, out.Length)
 
 	// 2. Reusable, pre-bound typed handle.
-	greet := client.NewClientTool[GreetInput, GreetOutput](c, "greet")
+	greet := client.NewTypedTool[GreetInput, GreetOutput](c, "greet")
 	for _, name := range []string{"Grace", "Linus"} {
 		out, err := greet.Call(ctx, GreetInput{Name: name})
 		if err != nil {
 			log.Fatalf("handle call: %v", err)
 		}
-		fmt.Printf("NewClientTool: %s (length %d)\n", out.Message, out.Length)
+		fmt.Printf("NewTypedTool: %s (length %d)\n", out.Message, out.Length)
 	}
 
 	// 3. Escape hatch: raw JSON in, raw JSON out. Prefer the typed APIs above.

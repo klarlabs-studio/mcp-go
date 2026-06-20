@@ -16,7 +16,7 @@ import (
 // This mirrors how the server serializes typed tool results.
 //
 // Call is the recommended primary API for invoking tools. For a reusable,
-// pre-bound handle, see NewClientTool.
+// pre-bound handle, see NewTypedTool.
 //
 // Example:
 //
@@ -89,40 +89,40 @@ func firstTextContent(result *ToolResult) (string, bool) {
 	return "", false
 }
 
-// ClientTool is a reusable, typed handle bound to a single tool on a client.
-// Create one with NewClientTool and invoke it repeatedly via Call.
-type ClientTool[In, Out any] struct {
+// TypedTool is a reusable, typed handle bound to a single tool on a client.
+// Create one with NewTypedTool and invoke it repeatedly via Call.
+type TypedTool[In, Out any] struct {
 	client *Client
 	name   string
 }
 
-// NewClientTool returns a reusable typed handle for the named tool. Each Call
+// NewTypedTool returns a reusable typed handle for the named tool. Each Call
 // on the handle delegates to the package-level Call, so the handle is safe to
 // reuse for the lifetime of the client.
 //
 // Example:
 //
-//	greet := client.NewClientTool[GreetIn, GreetOut](c, "greet")
+//	greet := client.NewTypedTool[GreetIn, GreetOut](c, "greet")
 //	out, err := greet.Call(ctx, GreetIn{Name: "World"})
-func NewClientTool[In, Out any](c *Client, name string) *ClientTool[In, Out] {
-	return &ClientTool[In, Out]{client: c, name: name}
+func NewTypedTool[In, Out any](c *Client, name string) *TypedTool[In, Out] {
+	return &TypedTool[In, Out]{client: c, name: name}
 }
 
 // Name returns the tool name this handle is bound to.
-func (t *ClientTool[In, Out]) Name() string {
+func (t *TypedTool[In, Out]) Name() string {
 	return t.name
 }
 
 // Call invokes the bound tool with the typed input and returns the typed
 // output. It delegates to the package-level Call.
-func (t *ClientTool[In, Out]) Call(ctx context.Context, in In) (Out, error) {
+func (t *TypedTool[In, Out]) Call(ctx context.Context, in In) (Out, error) {
 	return Call[In, Out](ctx, t.client, t.name, in)
 }
 
 // DynamicTool is a dynamically typed escape hatch for invoking a tool with raw
 // JSON arguments and receiving the raw JSON result.
 //
-// Prefer the typed Call and NewClientTool APIs. DynamicTool is provided only
+// Prefer the typed Call and NewTypedTool APIs. DynamicTool is provided only
 // for cases where the input and output shapes are not known at compile time
 // (for example, proxying tool calls). It forgoes the compile-time guarantees
 // that make the typed API the recommended choice.
@@ -143,7 +143,7 @@ type dynamicTool struct {
 // NewDynamicTool returns a DynamicTool for the named tool.
 //
 // This is the dynamically typed escape hatch and is not recommended for
-// general use; prefer Call or NewClientTool.
+// general use; prefer Call or NewTypedTool.
 func NewDynamicTool(c *Client, name string) DynamicTool {
 	return &dynamicTool{client: c, name: name}
 }

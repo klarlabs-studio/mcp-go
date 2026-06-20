@@ -435,7 +435,7 @@ func TestCall(t *testing.T) {
 	})
 }
 
-func TestNewClientTool(t *testing.T) {
+func TestNewTypedTool(t *testing.T) {
 	t.Run("reusable handle called multiple times", func(t *testing.T) {
 		transport := &mockTransport{
 			responses: []protocol.Response{
@@ -445,7 +445,7 @@ func TestNewClientTool(t *testing.T) {
 		}
 		c := client.New(transport)
 
-		greet := client.NewClientTool[greetIn, greetOut](c, "greet")
+		greet := client.NewTypedTool[greetIn, greetOut](c, "greet")
 		if greet.Name() != "greet" {
 			t.Errorf("name = %q, want %q", greet.Name(), "greet")
 		}
@@ -483,7 +483,7 @@ func TestNewClientTool(t *testing.T) {
 		}
 		c := client.New(transport)
 
-		greet := client.NewClientTool[greetIn, greetOut](c, "missing")
+		greet := client.NewTypedTool[greetIn, greetOut](c, "missing")
 		if _, err := greet.Call(context.Background(), greetIn{Name: "x"}); err == nil {
 			t.Fatal("expected error")
 		}
