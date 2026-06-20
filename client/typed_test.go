@@ -200,8 +200,98 @@ func TestCall(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for empty content")
 		}
-		if !errors.Is(err, client.ErrNoContent) {
-			t.Errorf("error = %v, want ErrNoContent", err)
+		if !errors.Is(err, client.ErrNoToolContent) {
+			t.Errorf("error = %v, want ErrNoToolContent", err)
+		}
+	})
+
+	t.Run("content block selection", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			content     []any
+			wantMessage string
+			wantCount   int
+		}{
+			{
+				name: "image first, first text block selected",
+				content: []any{
+					map[string]any{"type": "image", "data": "deadbeef"},
+					map[string]any{"type": "text", "text": `{"message":"after-image","count":3}`},
+				},
+				wantMessage: "after-image",
+				wantCount:   3,
+			},
+			{
+				name: "multi-content, first text block selected",
+				content: []any{
+					map[string]any{"type": "text", "text": `{"message":"first-text","count":1}`},
+					map[string]any{"type": "text", "text": `{"message":"second-text","count":2}`},
+				},
+				wantMessage: "first-text",
+				wantCount:   1,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				transport := &mockTransport{
+					responses: []protocol.Response{resultResponse(map[string]any{"content": tt.content})},
+				}
+				c := client.New(transport)
+
+				out, err := client.Call[greetIn, greetOut](
+					context.Background(), c, "greet", greetIn{Name: "x"},
+				)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if out.Message != tt.wantMessage {
+					t.Errorf("message = %q, want %q", out.Message, tt.wantMessage)
+				}
+				if out.Count != tt.wantCount {
+					t.Errorf("count = %d, want %d", out.Count, tt.wantCount)
+				}
+			})
+		}
+	})
+
+	t.Run("non-text content without structuredContent returns ErrNoToolContent", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				resultResponse(map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "data": "deadbeef"},
+					},
+				}),
+			},
+		}
+		c := client.New(transport)
+
+		_, err := client.Call[greetIn, greetOut](
+			context.Background(), c, "greet", greetIn{Name: "x"},
+		)
+		if !errors.Is(err, client.ErrNoToolContent) {
+			t.Errorf("error = %v, want ErrNoToolContent", err)
+		}
+	})
+
+	t.Run("string output on non-text content returns ErrNoToolContent", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				resultResponse(map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "data": "deadbeef"},
+					},
+				}),
+			},
+		}
+		c := client.New(transport)
+
+		_, err := client.Call[greetIn, string](
+			context.Background(), c, "greet", greetIn{Name: "x"},
+		)
+		if !errors.Is(err, client.ErrNoToolContent) {
+			t.Errorf("error = %v, want ErrNoToolContent", err)
 		}
 	})
 
@@ -494,8 +584,54 @@ func TestDynamicTool(t *testing.T) {
 
 		tool := client.NewDynamicTool(c, "greet")
 		_, err := tool.Call(context.Background(), json.RawMessage(`{"name":"x"}`))
-		if !errors.Is(err, client.ErrNoContent) {
-			t.Errorf("error = %v, want ErrNoContent", err)
+		if !errors.Is(err, client.ErrNoToolContent) {
+			t.Errorf("error = %v, want ErrNoToolContent", err)
+		}
+	})
+
+	t.Run("selects first text block past non-text content", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				resultResponse(map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "data": "deadbeef"},
+						map[string]any{"type": "text", "text": `{"message":"raw","count":7}`},
+					},
+				}),
+			},
+		}
+		c := client.New(transport)
+
+		tool := client.NewDynamicTool(c, "greet")
+		raw, err := tool.Call(context.Background(), json.RawMessage(`{"name":"x"}`))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var out greetOut
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal raw result: %v", err)
+		}
+		if out.Message != "raw" || out.Count != 7 {
+			t.Errorf("out = %+v, want {raw 7}", out)
+		}
+	})
+
+	t.Run("non-text content returns ErrNoToolContent", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				resultResponse(map[string]any{
+					"content": []any{
+						map[string]any{"type": "image", "data": "deadbeef"},
+					},
+				}),
+			},
+		}
+		c := client.New(transport)
+
+		tool := client.NewDynamicTool(c, "greet")
+		_, err := tool.Call(context.Background(), json.RawMessage(`{"name":"x"}`))
+		if !errors.Is(err, client.ErrNoToolContent) {
+			t.Errorf("error = %v, want ErrNoToolContent", err)
 		}
 	})
 

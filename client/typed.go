@@ -50,14 +50,21 @@ func Call[In, Out any](ctx context.Context, c *Client, name string, in In) (Out,
 		return out, nil
 	}
 
-	if len(result.Content) == 0 {
-		return out, fmt.Errorf("call tool %q: %w", name, ErrNoContent)
+	// Select the first text content block rather than blindly taking
+	// Content[0], which may be an image or other non-text block.
+	text, ok := firstTextContent(result)
+	if !ok {
+		return out, fmt.Errorf("call tool %q: %w", name, ErrNoToolContent)
 	}
-
-	text := result.Content[0].Text
 
 	// A string output receives the raw text directly so callers can opt out
 	// of JSON decoding for plain-text tools.
+	//
+	// WARNING: when the tool serialized a JSON value into the text block (the
+	// usual case for typed handlers), that block is a JSON-encoded string with
+	// surrounding quotes. Because the raw text is returned unchanged here, the
+	// quotes are included verbatim rather than JSON-decoded. Use a struct (or
+	// json.RawMessage) Out if you need decoded values.
 	if s, ok := any(&out).(*string); ok {
 		*s = text
 		return out, nil
@@ -68,6 +75,18 @@ func Call[In, Out any](ctx context.Context, c *Client, name string, in In) (Out,
 	}
 
 	return out, nil
+}
+
+// firstTextContent returns the text of the first content block whose type is
+// "text". The boolean is false when no such block exists, so callers can
+// distinguish "no text content" from a legitimately empty text body.
+func firstTextContent(result *ToolResult) (string, bool) {
+	for _, item := range result.Content {
+		if item.Type == "text" {
+			return item.Text, true
+		}
+	}
+	return "", false
 }
 
 // ClientTool is a reusable, typed handle bound to a single tool on a client.
@@ -154,11 +173,14 @@ func (t *dynamicTool) Call(ctx context.Context, in json.RawMessage) (json.RawMes
 		return nil, fmt.Errorf("call tool %q: %w: %s", t.name, ErrToolError, toolErrorText(result))
 	}
 
-	if len(result.Content) == 0 {
-		return nil, fmt.Errorf("call tool %q: %w", t.name, ErrNoContent)
+	// Select the first text content block rather than blindly taking
+	// Content[0], which may be an image or other non-text block.
+	text, ok := firstTextContent(result)
+	if !ok {
+		return nil, fmt.Errorf("call tool %q: %w", t.name, ErrNoToolContent)
 	}
 
-	return json.RawMessage(result.Content[0].Text), nil
+	return json.RawMessage(text), nil
 }
 
 // toolErrorText extracts a human-readable error message from a tool result

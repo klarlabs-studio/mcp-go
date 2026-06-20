@@ -22,6 +22,11 @@ var (
 	// ErrToolError indicates the server reported a tool execution failure via
 	// the MCP isError flag. The wrapping error carries the tool's error text.
 	ErrToolError = errors.New("tool reported an error")
+	// ErrNoToolContent indicates a typed tool call produced neither
+	// structuredContent nor a decodable text content block. It is the
+	// tool-domain counterpart to ErrNoContent (which covers resources), so
+	// callers can distinguish the two no-content cases.
+	ErrNoToolContent = errors.New("no decodable tool content")
 )
 
 // JSON field names used in MCP handshake payloads.
