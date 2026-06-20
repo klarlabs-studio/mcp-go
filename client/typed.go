@@ -156,15 +156,28 @@ func (t *dynamicTool) Name() string {
 	return t.name
 }
 
-// Call invokes the tool with raw JSON arguments. The arguments are decoded so
-// they reach the server as a structured object, and the first text content
-// block of the result is returned as raw JSON.
+// Call invokes the tool with raw JSON arguments. The raw bytes are handed to
+// the underlying call verbatim, and the first text content block of the
+// result is returned as raw JSON.
+//
+// The arguments are passed through as a json.RawMessage rather than being
+// decoded into map[string]any and re-encoded. CallTool marshals its arguments,
+// and json.Marshal of a json.RawMessage emits the bytes unchanged, so this
+// path is lossless: large int64 values keep full precision (no float64
+// rounding) and object field ordering is preserved. Decoding to a map would
+// lose both, which defeats the purpose of a raw passthrough.
 func (t *dynamicTool) Call(ctx context.Context, in json.RawMessage) (json.RawMessage, error) {
+	// A nil/empty payload must remain nil so CallTool omits the arguments
+	// field entirely rather than sending a null. A non-empty payload is still
+	// validated as well-formed JSON to fail fast on malformed input (matching
+	// the previous behavior and preserving the syntax-error detail), but the
+	// original bytes are forwarded untouched rather than the re-encoded form.
 	var args any
 	if len(in) > 0 {
-		if err := json.Unmarshal(in, &args); err != nil {
+		if err := json.Unmarshal(in, new(json.RawMessage)); err != nil {
 			return nil, fmt.Errorf("call tool %q: decode arguments: %w", t.name, err)
 		}
+		args = in
 	}
 
 	result, err := t.client.CallTool(ctx, t.name, args)

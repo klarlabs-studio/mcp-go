@@ -560,6 +560,53 @@ func TestDynamicTool(t *testing.T) {
 		}
 	})
 
+	t.Run("passes raw json through without lossy re-encoding", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{textResponse(`{"message":"ok","count":1}`)},
+		}
+		c := client.New(transport)
+
+		tool := client.NewDynamicTool(c, "compute")
+
+		// 9007199254740993 (2^53 + 1) is not exactly representable as a
+		// float64, so any round-trip through map[string]any (which decodes
+		// JSON numbers into float64) would round it to 9007199254740992.
+		// The dynamic tool path must hand the raw bytes to the transport
+		// untouched. Field ordering is deliberately non-alphabetical to
+		// assert raw fidelity rather than re-encoded ordering.
+		in := json.RawMessage(`{"id":9007199254740993,"zeta":1,"alpha":2}`)
+		if _, err := tool.Call(context.Background(), in); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(transport.requests) != 1 {
+			t.Fatalf("requests = %d, want 1", len(transport.requests))
+		}
+
+		// Pull the exact bytes the transport received for "arguments" so we
+		// can assert no precision or ordering loss occurred.
+		var params struct {
+			Arguments json.RawMessage `json:"arguments"`
+		}
+		if err := json.Unmarshal(transport.requests[0].Params, &params); err != nil {
+			t.Fatalf("unmarshal params: %v", err)
+		}
+
+		// The large integer must survive verbatim, not rounded to 2^53.
+		if !strings.Contains(string(params.Arguments), "9007199254740993") {
+			t.Errorf("arguments = %s, want the int64 9007199254740993 intact (no float64 rounding)", params.Arguments)
+		}
+		if strings.Contains(string(params.Arguments), "9007199254740992") {
+			t.Errorf("arguments = %s, lost int64 precision (rounded to 2^53)", params.Arguments)
+		}
+
+		// Raw fidelity: the bytes must match the input exactly, preserving
+		// the original field order.
+		if string(params.Arguments) != string(in) {
+			t.Errorf("arguments = %s, want verbatim %s", params.Arguments, in)
+		}
+	})
+
 	t.Run("propagates server error", func(t *testing.T) {
 		transport := &mockTransport{
 			responses: []protocol.Response{
