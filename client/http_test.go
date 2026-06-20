@@ -106,9 +106,26 @@ func TestHTTPTransport_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestHTTPTransport_BearerTokenForwarded(t *testing.T) {
-	srv := &echoServer{
+// bearerTransport injects an Authorization header. mcp-go ships no auth; this
+// is the caller-owned transport pattern the library mandates — auth lives
+// entirely in the supplied http.Client.
+type bearerTransport struct {
+	token string
+	base  http.RoundTripper
+}
 
+func (b *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	base := b.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
+}
+
+func TestHTTPTransport_AuthViaInjectedHTTPClient(t *testing.T) {
+	srv := &echoServer{
 		response: map[string]any{
 			"jsonrpc": "2.0", "id": 1, "result": map[string]any{},
 		},
@@ -116,7 +133,8 @@ func TestHTTPTransport_BearerTokenForwarded(t *testing.T) {
 	ts := httptest.NewServer(srv.handler(t))
 	defer ts.Close()
 
-	tr, err := client.NewHTTPTransport(ts.URL, client.WithBearerToken("s3cret"))
+	hc := &http.Client{Transport: &bearerTransport{token: "s3cret"}}
+	tr, err := client.NewHTTPTransport(ts.URL, client.WithHTTPClient(hc))
 	if err != nil {
 		t.Fatalf("NewHTTPTransport: %v", err)
 	}

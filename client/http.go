@@ -42,26 +42,20 @@ type HTTPTransportOption func(*httpTransportOptions)
 type httpTransportOptions struct {
 	httpClient *http.Client
 	headers    http.Header
-	bearer     string
 	caBundle   *x509.CertPool
 	insecure   bool
 	timeout    time.Duration
 	endpoint   string
 }
 
-// WithHTTPClient overrides the http.Client used for requests. When
-// supplied, WithBearerToken / WithCABundle / WithInsecureSkipVerify /
-// WithRequestTimeout become no-ops on the transport TLS configuration —
-// the caller is expected to have set those on the supplied client.
+// WithHTTPClient overrides the http.Client used for requests. This is the only
+// auth hook: mcp-go never handles tokens or credentials, so inject your auth
+// transport (API key, bearer, mTLS) on the supplied client. When supplied,
+// WithCABundle / WithInsecureSkipVerify / WithRequestTimeout become no-ops on
+// the transport TLS configuration — the caller is expected to have set those on
+// the supplied client.
 func WithHTTPClient(c *http.Client) HTTPTransportOption {
 	return func(o *httpTransportOptions) { o.httpClient = c }
-}
-
-// WithBearerToken attaches Authorization: Bearer <token> to every
-// outbound request. Empty token is a no-op so callers can pass it
-// unconditionally.
-func WithBearerToken(token string) HTTPTransportOption {
-	return func(o *httpTransportOptions) { o.bearer = token }
 }
 
 // WithHTTPHeader attaches a static header to every outbound request.
@@ -150,9 +144,6 @@ func NewHTTPTransport(baseURL string, opts ...HTTPTransportOption) (*HTTPTranspo
 	}
 	headers.Set("Content-Type", "application/json")
 	headers.Set("Accept", "application/json")
-	if options.bearer != "" {
-		headers.Set("Authorization", "Bearer "+options.bearer)
-	}
 
 	return &HTTPTransport{
 		endpoint:   endpoint,

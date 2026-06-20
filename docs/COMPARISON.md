@@ -203,10 +203,11 @@ srv.Use(
     middleware.RequestID(),
     middleware.Timeout(5*time.Second),
     middleware.Logging(logger),
-    middleware.Auth(func(ctx context.Context, r *mcp.Request) (*mcp.Principal, error) {
-        return verifyBearer(ctx, r.Headers.Get("Authorization"))
-    }),
+    middleware.RateLimit(rps),
 )
+// Auth is out of scope: mcp-go never handles tokens or credentials.
+// Inject auth via the client's http.Client transport, or terminate it
+// at the transport/proxy layer or in your own middleware.
 ```
 
 ---
@@ -409,7 +410,8 @@ srv.Prompt("summarize_incident").
 | URI template resources | ❌ | ❌ | ✅ |
 | Structured prompts | ❌ | ❌ | ✅ |
 | Middleware | ❌ | ❌ | ✅ |
-| Auth / rate limit hooks | ❌ | ❌ | ✅ |
+| Rate limit / size limit hooks | ❌ | ❌ | ✅ |
+| Auth handling | n/a | n/a | Out of scope (inject via http.Client) |
 | Transport abstraction | ❌ | Limited | Pluggable |
 | Production defaults | ❌ | ❌ | ✅ |
 | Best for | SDK authors | SDK users | App developers |

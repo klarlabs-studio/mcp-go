@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Removed (BREAKING)
+
+#### In-library authentication removed — auth is out of scope
+mcp-go never handles tokens, OAuth flows, or credentials. All in-library auth
+has been deleted:
+
+- Deleted `middleware/auth.go` and every symbol it exported: `Auth`,
+  `Authenticator`, `AuthOption`, `Identity`, `APIKeyAuthenticator`,
+  `BearerTokenAuthenticator`, `StaticAPIKeys`, `StaticTokens`,
+  `ChainAuthenticators`, `OAuth2Authenticator`, `JWTValidator`,
+  `IdentityFromContext`, `ContextWithIdentity`, and the `WithAuth*` options.
+- Removed the top-level re-exports in `mcp.go` (including `mcp.BearerAuth`,
+  `mcp.Identity`, `mcp.IdentityFromContext`, `mcp.ContextWithIdentity`, and the
+  `mcp.Auth*` family).
+- Removed `client.WithBearerToken`.
+
+**Migration:**
+- **Client:** inject auth via the caller-supplied `http.Client` transport.
+  Replace `client.WithBearerToken(tok)` with a custom `http.RoundTripper` set on
+  `mcp.WithHTTPClient(&http.Client{Transport: myAuthTransport})`. For API keys,
+  bearer tokens, or mTLS, configure them on that transport.
+- **Server:** terminate auth at the transport/proxy layer (API gateway, mTLS) or
+  in your own middleware; mcp-go ships none. To vary behaviour by caller in a
+  filter predicate, attach your own value to the request context (e.g. via
+  `transport.WithRequestContextFn` for mTLS peer certs) and read it back — there
+  is no longer an `Identity` type.
+
 ### Added
 
 #### Top-level client API surface

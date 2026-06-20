@@ -123,14 +123,18 @@ func WithTLSConfig(cfg *tls.Config) HTTPOption {
 // This is the place to derive request-scoped identity from transport
 // details that middleware (operating on the unwrapped protocol.Request)
 // cannot see. The canonical use is mTLS: read the verified client
-// certificate and stash a derived identity for downstream authz.
+// certificate and stash a caller-defined value for downstream authz.
+// mcp-go ships no Identity type and never handles auth — use your own
+// context key.
+//
+//	type callerKey struct{}
 //
 //	NewHTTP(addr,
 //	    WithTLSConfig(mtlsCfg),
 //	    WithRequestContextFn(func(ctx context.Context, r *http.Request) context.Context {
 //	        if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 //	            cn := r.TLS.PeerCertificates[0].Subject.CommonName
-//	            ctx = mcp.ContextWithIdentity(ctx, &mcp.Identity{ID: cn, Name: cn})
+//	            ctx = context.WithValue(ctx, callerKey{}, cn)
 //	        }
 //	        return ctx
 //	    }),

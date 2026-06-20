@@ -254,14 +254,19 @@ mcp.ServeStdio(ctx, srv, mcp.WithMiddleware(stack...))`}</code></pre>
         <li><code>RequestID()</code> — Inject unique request IDs for tracing</li>
         <li><code>Timeout(d)</code> — Enforce request deadlines</li>
         <li><code>Logging(logger)</code> — Structured request logging</li>
-        <li><code>Auth(validator)</code> — API key and Bearer token authentication</li>
         <li><code>RateLimit(rps)</code> — Request throttling</li>
         <li><code>SizeLimit(bytes)</code> — Request size limits</li>
         <li><code>OTel()</code> — OpenTelemetry tracing and metrics</li>
         <li><code>Audit()</code> — Request/response audit logging</li>
         <li><code>Tracing()</code> — Correlation and trace ID propagation</li>
-        <li><code>OAuth2()</code> — JWT-based OAuth 2.0 authentication</li>
       </ul>
+      <p>
+        <strong>Authentication is out of scope.</strong> mcp-go never handles
+        tokens, OAuth flows, or credentials. On the client, inject auth via the
+        supplied <code>http.Client</code> transport
+        (<code>mcp.WithHTTPClient</code>); on the server, terminate auth at the
+        transport/proxy layer or in your own middleware.
+      </p>
     </section>
 
     <section>
