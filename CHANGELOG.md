@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+#### Input schema validation is now on by default
+- Tool input is validated against the generated JSON Schema (required / minimum /
+  maximum / enum) **before** the handler runs, so invalid-per-schema input is
+  rejected with an `InvalidParams` error and never reaches business logic.
+- Added `(*ToolBuilder).SkipValidation()` as the opt-out for tools that need to
+  accept inputs the generated schema would reject.
+- `(*ToolBuilder).ValidateInput()` is now a no-op (validation is the default) and
+  is deprecated. Existing calls keep compiling and keep validation enabled.
+
+**Migration:** No action needed for tools whose handlers already expect
+schema-valid input. If a tool deliberately accepts inputs that violate its
+generated schema, add `.SkipValidation()` to its builder chain.
+
 ## [1.13.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.12.0...v1.13.0)
 
 ### Features

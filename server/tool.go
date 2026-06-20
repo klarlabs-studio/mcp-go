@@ -24,17 +24,17 @@ type StructuredResult struct {
 
 // Tool represents a callable function exposed via MCP.
 type Tool struct {
-	name          string
-	description   string
-	inputType     reflect.Type
-	inputSchema   any
-	outputSchema  any
-	validatable   *schema.Schema
-	validateInput bool
-	handler       any
-	hasContext    bool
-	annotations   *ToolAnnotations
-	meta          map[string]any
+	name           string
+	description    string
+	inputType      reflect.Type
+	inputSchema    any
+	outputSchema   any
+	validatable    *schema.Schema
+	skipValidation bool
+	handler        any
+	hasContext     bool
+	annotations    *ToolAnnotations
+	meta           map[string]any
 }
 
 // ToolBuilder provides a fluent API for building tools.
@@ -70,14 +70,28 @@ func (b *ToolBuilder) OutputSchema(example any) *ToolBuilder {
 	return b
 }
 
-// ValidateInput enables runtime schema validation of tool inputs.
-// When enabled, inputs are validated against the JSON Schema before
-// the handler is called. Invalid inputs result in an InvalidParams error.
+// ValidateInput is a no-op retained for backward compatibility. Input
+// validation against the generated JSON Schema now runs by default before
+// every handler invocation, so this method has no effect beyond documenting
+// intent. To opt out of validation, use SkipValidation.
+//
+// Deprecated: validation is on by default; calling ValidateInput is
+// unnecessary. Use SkipValidation to disable validation.
 func (b *ToolBuilder) ValidateInput() *ToolBuilder {
+	return b
+}
+
+// SkipValidation disables runtime JSON Schema validation of tool inputs for
+// this tool. By default, inputs are validated against the generated schema
+// (required/min/max/enum) before the handler is called, and invalid inputs
+// are rejected with an InvalidParams error so they never reach business
+// logic. SkipValidation is an escape hatch for tools that need to accept
+// inputs the generated schema would reject; it is not recommended.
+func (b *ToolBuilder) SkipValidation() *ToolBuilder {
 	if b.err != nil {
 		return b
 	}
-	b.tool.validateInput = true
+	b.tool.skipValidation = true
 	return b
 }
 
@@ -193,8 +207,10 @@ func (t *Tool) OutputSchema() any {
 
 // Execute runs the tool handler with the given JSON input.
 func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (any, error) {
-	// Validate input against schema if enabled
-	if t.validateInput && t.validatable != nil {
+	// Validate input against the generated schema before the handler runs,
+	// so invalid-per-schema input never reaches business logic. Validation is
+	// on by default; SkipValidation opts a tool out.
+	if !t.skipValidation && t.validatable != nil {
 		if err := t.validatable.Validate(input); err != nil {
 			return nil, protocol.NewInvalidParams(fmt.Sprintf("input validation failed: %v", err))
 		}
