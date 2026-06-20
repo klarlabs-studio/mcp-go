@@ -442,10 +442,19 @@ type mockTransport struct {
 	responses []protocol.Response
 	requests  []protocol.Request
 	idx       int
+	// lastCtx records the context of the most recent Send so tests can assert
+	// that the caller's context propagates through to the transport.
+	lastCtx context.Context
 }
 
 func (m *mockTransport) Send(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	m.lastCtx = ctx
 	m.requests = append(m.requests, *req)
+	// Honor context cancellation/deadline so tests can assert that a
+	// cancelled context surfaces through the typed call layer.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if m.idx >= len(m.responses) {
 		return nil, context.DeadlineExceeded
 	}

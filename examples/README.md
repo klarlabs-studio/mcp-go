@@ -54,6 +54,14 @@ v1.1 features: sampling (LLM requests), roots (workspace awareness), and logging
 go run ./examples/session
 ```
 
+### [typed-client](./typed-client/)
+The typed client API: `client.Call`, reusable `NewTypedTool` handles, and the
+`DynamicTool` raw-JSON escape hatch, against an in-process server.
+
+```bash
+go run ./examples/typed-client
+```
+
 ## Running Examples
 
 All examples use stdio transport by default (except `http`). To test with Claude Desktop or other MCP clients:

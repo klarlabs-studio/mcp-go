@@ -19,6 +19,14 @@ var (
 	ErrInvalidResult = errors.New("invalid result type")
 	// ErrNoContent indicates the server returned no content for a resource.
 	ErrNoContent = errors.New("no content")
+	// ErrToolError indicates the server reported a tool execution failure via
+	// the MCP isError flag. The wrapping error carries the tool's error text.
+	ErrToolError = errors.New("tool reported an error")
+	// ErrNoToolContent indicates a typed tool call produced neither
+	// structuredContent nor a decodable text content block. It is the
+	// tool-domain counterpart to ErrNoContent (which covers resources), so
+	// callers can distinguish the two no-content cases.
+	ErrNoToolContent = errors.New("no decodable tool content")
 )
 
 // JSON field names used in MCP handshake payloads.
@@ -91,6 +99,11 @@ type Tool struct {
 type ToolResult struct {
 	Content []ContentItem `json:"content"`
 	IsError bool          `json:"isError,omitempty"`
+	// StructuredContent is the canonical typed channel a server emits for
+	// tools that declare an output schema. When present it holds the typed
+	// result as raw JSON; typed decoders should prefer it over the display
+	// text content. It is nil when the server emits no structuredContent.
+	StructuredContent json.RawMessage `json:"structuredContent,omitempty"`
 }
 
 // ContentItem represents a content item in a tool result.
@@ -359,6 +372,17 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*Too
 
 	if isErr, ok := result["isError"].(bool); ok {
 		toolResult.IsError = isErr
+	}
+
+	// structuredContent is the canonical typed channel. Re-marshal the
+	// decoded object so typed callers can unmarshal it into their output
+	// type directly, preferring it over the display text content.
+	if sc, ok := result["structuredContent"]; ok && sc != nil {
+		structured, err := json.Marshal(sc)
+		if err != nil {
+			return nil, fmt.Errorf("call tool %q: marshal structuredContent: %w", name, err)
+		}
+		toolResult.StructuredContent = structured
 	}
 
 	if content, ok := result["content"].([]any); ok {
