@@ -27,9 +27,13 @@ jobs:
     with:
       coverage: true          # repo has .coverctl.yaml thresholds (coverctl check gate)
       cross-platform: false   # ubuntu-only; opt into macOS/Windows later if needed
-      # Pin nox to the version this repo's reviewed .nox/baseline.json was
-      # generated with (the prior CI used 0.10.0). The shared default (0.8.1)
-      # is older and produces secret-scanner false positives on Go struct
-      # fields, long test-function names, and the baseline file itself.
-      nox-version: "0.10.0"
-      nox-sha256: "8d9eadff006893a190227452734320b090bdcb2fc0b8e43fba1a610ec23e7ef6"
+      # Pin nox to a version this repo's reviewed .nox/baseline.json is
+      # compatible with. Must be >= 1.1.2: earlier nox (e.g. the prior
+      # 0.10.0 pin) shipped a deriveChecksumsURL that only stripped
+      # ".sig.bundle", so it could not verify the taint-analysis plugin's
+      # ".sigstore.json" cosign bundle — cosign was handed the bundle as
+      # the artifact and failed with "invalid signature when validating
+      # ASN.1 encoded signature", leaving the plugin "unverified" and
+      # breaking `nox scan`. v1.1.2+ strips ".sigstore.json" correctly.
+      nox-version: "1.2.0"
+      nox-sha256: "75262d80314e879d7e755edeacab4c0bb8df83519322b82589b0745ccab489d5"
