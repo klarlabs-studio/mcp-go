@@ -33,7 +33,10 @@ func Call[In, Out any](ctx context.Context, c *Client, name string, in In) (Out,
 
 	result, err := c.CallTool(ctx, name, in)
 	if err != nil {
-		return out, err
+		// Add a frame for the typed-call layer so the error path is as
+		// self-describing as the decode path below; %w keeps the wrapped
+		// transport/server error inspectable via errors.As/errors.Is.
+		return out, fmt.Errorf("typed call tool %q: %w", name, err)
 	}
 
 	if result.IsError {

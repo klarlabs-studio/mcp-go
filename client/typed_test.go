@@ -163,6 +163,13 @@ func TestCall(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
+		var mcpErr *protocol.Error
+		if !errors.As(err, &mcpErr) {
+			t.Fatalf("expected *protocol.Error, got %T: %v", err, err)
+		}
+		if mcpErr.Code != -32000 {
+			t.Errorf("error code = %d, want -32000", mcpErr.Code)
+		}
 	})
 
 	t.Run("output unmarshal mismatch returns error", func(t *testing.T) {
@@ -433,6 +440,32 @@ func TestCall(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("cancelled context surfaces through the transport", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{textResponse(`{"message":"ok","count":1}`)},
+		}
+		c := client.New(transport)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel before the call so the transport sees a dead context
+
+		_, err := client.Call[greetIn, greetOut](ctx, c, "greet", greetIn{Name: "x"})
+		if err == nil {
+			t.Fatal("expected error for cancelled context")
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("error = %v, want context.Canceled", err)
+		}
+
+		// The cancelled context must reach the transport, not be swallowed.
+		if transport.lastCtx == nil {
+			t.Fatal("transport never observed a context")
+		}
+		if transport.lastCtx.Err() == nil {
+			t.Error("transport observed a live context, want cancelled")
+		}
+	})
 }
 
 func TestNewTypedTool(t *testing.T) {
@@ -540,8 +573,13 @@ func TestDynamicTool(t *testing.T) {
 		c := client.New(transport)
 
 		tool := client.NewDynamicTool(c, "greet")
-		if _, err := tool.Call(context.Background(), json.RawMessage(`{}`)); err == nil {
+		_, err := tool.Call(context.Background(), json.RawMessage(`{}`))
+		if err == nil {
 			t.Fatal("expected error")
+		}
+		var mcpErr *protocol.Error
+		if !errors.As(err, &mcpErr) {
+			t.Fatalf("expected *protocol.Error, got %T: %v", err, err)
 		}
 	})
 
