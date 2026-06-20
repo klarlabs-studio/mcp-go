@@ -100,6 +100,31 @@ func TestServer_Tool(t *testing.T) {
 	})
 }
 
+func TestServer_ListTools(t *testing.T) {
+	t.Run("ListTools matches Tools", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type SearchInput struct {
+			Query string `json:"query"`
+		}
+		srv.Tool("search").
+			Description("Search for items").
+			Handler(func(input SearchInput) (string, error) { return "result", nil })
+
+		listed := srv.ListTools()
+		direct := srv.Tools()
+		if len(listed) != len(direct) {
+			t.Fatalf("ListTools len = %d, Tools len = %d", len(listed), len(direct))
+		}
+		if len(listed) != 1 {
+			t.Fatalf("expected 1 tool, got %d", len(listed))
+		}
+		if listed[0].Name != "search" {
+			t.Errorf("tool name = %q, want %q", listed[0].Name, "search")
+		}
+	})
+}
+
 func TestServer_Middleware(t *testing.T) {
 	t.Run("registers middleware", func(t *testing.T) {
 		srv := New(Info{Name: "test", Version: "1.0.0"})

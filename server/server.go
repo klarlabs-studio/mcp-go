@@ -236,6 +236,12 @@ func (s *Server) Tools() []ToolInfo {
 	return result
 }
 
+// ListTools returns info about all registered tools. It is an alias of Tools
+// matching the MCP introspection name used by the client side.
+func (s *Server) ListTools() []ToolInfo {
+	return s.Tools()
+}
+
 // Manifest returns the server manifest for MCP initialization.
 func (s *Server) Manifest() Manifest {
 	s.mu.RLock()
