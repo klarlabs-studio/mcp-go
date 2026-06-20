@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"go.klarlabs.de/mcp/client"
@@ -37,6 +38,29 @@ func textResponse(text string) protocol.Response {
 			},
 		},
 	}
+}
+
+// resultResponse builds a mock JSON-RPC response from a raw tool result map,
+// allowing tests to exercise structuredContent, isError, and arbitrary
+// content shapes that the convenience helpers do not cover.
+func resultResponse(result map[string]any) protocol.Response {
+	return protocol.Response{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Result:  result,
+	}
+}
+
+// errorResultResponse builds a mock tool result with isError set and a single
+// text content block carrying the error message, mirroring how the server
+// serializes a failed typed handler.
+func errorResultResponse(text string) protocol.Response {
+	return resultResponse(map[string]any{
+		"isError": true,
+		"content": []any{
+			map[string]any{"type": "text", "text": text},
+		},
+	})
 }
 
 func TestCall(t *testing.T) {
@@ -178,6 +202,31 @@ func TestCall(t *testing.T) {
 		}
 		if !errors.Is(err, client.ErrNoContent) {
 			t.Errorf("error = %v, want ErrNoContent", err)
+		}
+	})
+
+	t.Run("isError result surfaces as ErrToolError", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				errorResultResponse("tool blew up: bad input"),
+			},
+		}
+		c := client.New(transport)
+
+		out, err := client.Call[greetIn, greetOut](
+			context.Background(), c, "greet", greetIn{Name: "x"},
+		)
+		if err == nil {
+			t.Fatal("expected error for isError result")
+		}
+		if !errors.Is(err, client.ErrToolError) {
+			t.Errorf("error = %v, want ErrToolError", err)
+		}
+		if (out != greetOut{}) {
+			t.Errorf("out = %+v, want zero value on error", out)
+		}
+		if !strings.Contains(err.Error(), "tool blew up: bad input") {
+			t.Errorf("error %q does not carry the tool error text", err.Error())
 		}
 	})
 
@@ -393,6 +442,27 @@ func TestDynamicTool(t *testing.T) {
 		_, err := tool.Call(context.Background(), json.RawMessage(`{"name":"x"}`))
 		if !errors.Is(err, client.ErrNoContent) {
 			t.Errorf("error = %v, want ErrNoContent", err)
+		}
+	})
+
+	t.Run("isError result surfaces as ErrToolError", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				errorResultResponse("dynamic boom"),
+			},
+		}
+		c := client.New(transport)
+
+		tool := client.NewDynamicTool(c, "greet")
+		raw, err := tool.Call(context.Background(), json.RawMessage(`{"name":"x"}`))
+		if !errors.Is(err, client.ErrToolError) {
+			t.Errorf("error = %v, want ErrToolError", err)
+		}
+		if raw != nil {
+			t.Errorf("raw = %s, want nil on error", raw)
+		}
+		if !strings.Contains(err.Error(), "dynamic boom") {
+			t.Errorf("error %q does not carry the tool error text", err.Error())
 		}
 	})
 }

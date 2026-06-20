@@ -36,6 +36,10 @@ func Call[In, Out any](ctx context.Context, c *Client, name string, in In) (Out,
 		return out, err
 	}
 
+	if result.IsError {
+		return out, fmt.Errorf("call tool %q: %w: %s", name, ErrToolError, toolErrorText(result))
+	}
+
 	if len(result.Content) == 0 {
 		return out, fmt.Errorf("call tool %q: %w", name, ErrNoContent)
 	}
@@ -136,9 +140,25 @@ func (t *dynamicTool) Call(ctx context.Context, in json.RawMessage) (json.RawMes
 		return nil, err
 	}
 
+	if result.IsError {
+		return nil, fmt.Errorf("call tool %q: %w: %s", t.name, ErrToolError, toolErrorText(result))
+	}
+
 	if len(result.Content) == 0 {
 		return nil, fmt.Errorf("call tool %q: %w", t.name, ErrNoContent)
 	}
 
 	return json.RawMessage(result.Content[0].Text), nil
+}
+
+// toolErrorText extracts a human-readable error message from a tool result
+// flagged with isError. It returns the first text content block, falling back
+// to a generic phrase when the server provided no text.
+func toolErrorText(result *ToolResult) string {
+	for _, item := range result.Content {
+		if item.Type == "text" && item.Text != "" {
+			return item.Text
+		}
+	}
+	return "no error detail provided"
 }

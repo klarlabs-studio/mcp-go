@@ -19,6 +19,9 @@ var (
 	ErrInvalidResult = errors.New("invalid result type")
 	// ErrNoContent indicates the server returned no content for a resource.
 	ErrNoContent = errors.New("no content")
+	// ErrToolError indicates the server reported a tool execution failure via
+	// the MCP isError flag. The wrapping error carries the tool's error text.
+	ErrToolError = errors.New("tool reported an error")
 )
 
 // JSON field names used in MCP handshake payloads.
