@@ -88,8 +88,10 @@ type Capabilities struct {
 	Prompts   bool
 }
 
-// Tool represents a tool exposed by the server.
-type Tool struct {
+// ToolInfo describes a tool exposed by the server, as returned by ListTools.
+// It is metadata only; to invoke a tool use the typed Call / NewTypedTool
+// APIs (or, for dynamic use, the Tool interface escape hatch).
+type ToolInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	InputSchema any    `json:"inputSchema"`
@@ -310,7 +312,7 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 }
 
 // ListTools returns the list of tools available on the server.
-func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
+func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	resp, err := c.call(ctx, protocol.MethodToolsList, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list tools: %w", err)
@@ -326,14 +328,14 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 		return nil, fmt.Errorf("list tools: %w", ErrInvalidResult)
 	}
 
-	tools := make([]Tool, 0, len(toolsRaw))
+	tools := make([]ToolInfo, 0, len(toolsRaw))
 	for _, tr := range toolsRaw {
 		tm, ok := tr.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		tool := Tool{}
+		tool := ToolInfo{}
 		if name, ok := tm["name"].(string); ok {
 			tool.Name = name
 		}
