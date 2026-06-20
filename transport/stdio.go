@@ -19,6 +19,11 @@ type Stdio struct {
 
 	framerMu sync.Mutex
 	framer   *NewlineFramer
+	// fallback is a single write-only framer over s.out, constructed lazily and
+	// reused for every out-of-Serve write (SendNotification/writeResponse before
+	// or after Serve). Reusing one framer means all such writes share the same
+	// mutex and therefore never interleave on s.out. Guarded by framerMu.
+	fallback *NewlineFramer
 }
 
 // StdioOption configures a Stdio transport.
@@ -126,10 +131,15 @@ func (s *Stdio) currentFramer() *NewlineFramer {
 	if s.framer != nil {
 		return s.framer
 	}
-	// Serve has not been called (or has returned): fall back to a write-only
-	// framer over the configured output so SendNotification/writeResponse stay
-	// usable in tests and out-of-band sends.
-	return NewNewlineFramer(nil, s.out)
+	// Serve has not been called (or has returned): fall back to a single
+	// write-only framer over the configured output so SendNotification/
+	// writeResponse stay usable in tests and out-of-band sends. The fallback is
+	// cached and reused so all out-of-Serve writes share one mutex and never
+	// interleave on s.out.
+	if s.fallback == nil {
+		s.fallback = NewNewlineFramer(nil, s.out)
+	}
+	return s.fallback
 }
 
 // SendNotification sends a JSON-RPC notification to the client.

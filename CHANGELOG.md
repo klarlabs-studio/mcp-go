@@ -59,12 +59,24 @@ has been deleted:
   recommended — prefer the typed API.
 - Added `(*Server).ListTools()` introspection alias of `Tools()`.
 
-### Changed
+### Changed (BREAKING)
 
-#### Client `Tool` naming
-- The client struct `Tool` (tool metadata) is renamed to `client.ToolInfo`
-  (returned by `ListTools`), freeing the name `Tool` for the dynamic escape-hatch
-  interface (formerly `DynamicTool`). `DynamicTool` remains as a deprecated alias.
+#### `client.Tool` flips from a metadata struct to an interface
+- **BREAKING:** `client.Tool` is no longer the tool-metadata struct — it is now
+  the dynamic escape-hatch **interface** (formerly `DynamicTool`). The metadata
+  struct that `ListTools` returns is now named `client.ToolInfo`. This is a hard
+  semantic change, not just a rename: code that did `t.Name` / `t.Description` /
+  `t.InputSchema` on a `client.Tool` **value** no longer compiles, because `Tool`
+  is now an interface type. `DynamicTool` remains as a deprecated alias of the
+  new interface.
+
+**Migration:**
+- Anywhere you held a `client.Tool` for its metadata fields (e.g. the elements of
+  the `ListTools` result, or `t.Name`), change the type to `client.ToolInfo`.
+  Field access (`t.Name`, `t.Description`, `t.InputSchema`) is unchanged once the
+  type is `ToolInfo`.
+- Code using the old `DynamicTool` interface can keep compiling via the alias, or
+  switch to `client.Tool`.
 
 ### Changed
 
