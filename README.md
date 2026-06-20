@@ -114,7 +114,7 @@ srv.Use(
 
 **Use cases:**
 
-- auth / principals
+- caller-supplied authz (mcp-go ships no auth — terminate it in your own middleware/transport)
 - rate limiting
 - tracing
 - metrics
@@ -468,13 +468,16 @@ Built-in middleware:
 - `RequestID()` - Inject unique request IDs
 - `Timeout(d)` - Enforce request deadlines
 - `Logging(logger)` - Structured request logging
-- `Auth()` - API key and Bearer token authentication
 - `RateLimit()` - Request throttling
 - `SizeLimit()` - Request size limits
 - `OTel()` - OpenTelemetry tracing and metrics
 - `Audit()` - Request/response audit logging
 - `Tracing()` - Correlation and trace ID propagation
-- `OAuth2()` - JWT-based OAuth 2.0 authentication
+
+> **Authentication is out of scope.** mcp-go never handles tokens, OAuth
+> flows, or credentials. On the client, inject auth via the supplied
+> `http.Client` transport (`mcp.WithHTTPClient`). On the server, terminate auth
+> at the transport/proxy layer or in your own middleware.
 
 ### Enterprise Features
 

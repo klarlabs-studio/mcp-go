@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -217,6 +219,85 @@ func TestStdio_Serve(t *testing.T) {
 			t.Errorf("expected no output for notification, got %q", out.String())
 		}
 	})
+}
+
+// interleaveProneWriter models an unsynchronized sink such as os.Stdout: a
+// single Write is performed as several smaller underlying operations with a
+// goroutine yield between them, so two concurrent Write calls can interleave
+// their bytes byte-for-byte. The final bytes are recorded under a mutex so the
+// test can inspect the result, but the per-Write splitting deliberately does NOT
+// hold that mutex across the whole Write — interleaving protection must come
+// from the caller serializing Writes through a single framer.
+type interleaveProneWriter struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (w *interleaveProneWriter) Write(p []byte) (int, error) {
+	// Split each Write into individual bytes with a yield between them. If the
+	// caller does not serialize Writes, concurrent calls interleave and produce
+	// corrupted, unparseable frames.
+	for i := 0; i < len(p); i++ {
+		w.mu.Lock()
+		w.buf.WriteByte(p[i])
+		w.mu.Unlock()
+		runtime.Gosched()
+	}
+	return len(p), nil
+}
+
+func (w *interleaveProneWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// TestStdio_ConcurrentSendNotificationBeforeServe verifies that out-of-Serve
+// writes (SendNotification fired before Serve is active) are serialized through
+// a single shared framer. Two concurrent senders sharing the same output must
+// not interleave their bytes, and every emitted line must be a well-formed,
+// complete NDJSON frame. Run with -race to catch the data race directly.
+func TestStdio_ConcurrentSendNotificationBeforeServe(t *testing.T) {
+	out := &interleaveProneWriter{}
+	transport := NewStdio(WithStdout(out))
+
+	const senders = 16
+	const perSender = 50
+
+	var wg sync.WaitGroup
+	wg.Add(senders)
+	for s := 0; s < senders; s++ {
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < perSender; i++ {
+				if err := transport.SendNotification("notifications/progress", map[string]int{
+					"sender": id,
+					"seq":    i,
+				}); err != nil {
+					t.Errorf("SendNotification: %v", err)
+					return
+				}
+			}
+		}(s)
+	}
+	wg.Wait()
+
+	// Every line must be a complete, parseable JSON-RPC notification. If two
+	// writes interleaved, at least one line would fail to unmarshal.
+	output := out.String()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if got, want := len(lines), senders*perSender; got != want {
+		t.Fatalf("got %d lines, want %d (interleaving splits or merges frames)", got, want)
+	}
+	for i, line := range lines {
+		var n Notification
+		if err := json.Unmarshal([]byte(line), &n); err != nil {
+			t.Fatalf("line %d is not a well-formed frame: %v\nline=%q", i, err, line)
+		}
+		if n.Method != "notifications/progress" {
+			t.Fatalf("line %d method = %q, want notifications/progress", i, n.Method)
+		}
+	}
 }
 
 // blockingReader is a reader that blocks until context is done

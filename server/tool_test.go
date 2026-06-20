@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestToolBuilder(t *testing.T) {
@@ -263,6 +265,107 @@ func TestTool_Execute(t *testing.T) {
 		}
 		if sr.StructuredContent["headers"] == nil {
 			t.Error("expected structuredContent to have headers")
+		}
+	})
+}
+
+func TestTool_Execute_ValidationByDefault(t *testing.T) {
+	t.Run("rejects input missing required field by default", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct {
+			Name string `json:"name" jsonschema:"required"`
+		}
+
+		handlerCalled := false
+		srv.Tool("greet").
+			Handler(func(input Input) (string, error) {
+				handlerCalled = true
+				return "hi " + input.Name, nil
+			})
+
+		tool, _ := srv.GetTool("greet")
+		_, err := tool.Execute(context.Background(), []byte(`{}`))
+		if err == nil {
+			t.Fatal("expected validation error for missing required field, got nil")
+		}
+		if handlerCalled {
+			t.Fatal("handler must not be called when input is invalid per schema")
+		}
+
+		var mcpErr *protocol.Error
+		if !errors.As(err, &mcpErr) {
+			t.Fatalf("expected *protocol.Error, got %T: %v", err, err)
+		}
+		if mcpErr.Code != protocol.CodeInvalidParams {
+			t.Errorf("error code = %d, want %d (InvalidParams)", mcpErr.Code, protocol.CodeInvalidParams)
+		}
+	})
+
+	t.Run("accepts valid input by default", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct {
+			Name string `json:"name" jsonschema:"required"`
+		}
+
+		srv.Tool("greet").
+			Handler(func(input Input) (string, error) {
+				return "hi " + input.Name, nil
+			})
+
+		tool, _ := srv.GetTool("greet")
+		result, err := tool.Execute(context.Background(), []byte(`{"name":"World"}`))
+		if err != nil {
+			t.Fatalf("unexpected error for valid input: %v", err)
+		}
+		if result != "hi World" {
+			t.Errorf("result = %q, want %q", result, "hi World")
+		}
+	})
+
+	t.Run("SkipValidation opt-out lets invalid-per-schema input reach handler", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct {
+			Name string `json:"name" jsonschema:"required"`
+		}
+
+		handlerCalled := false
+		srv.Tool("greet").
+			SkipValidation().
+			Handler(func(input Input) (string, error) {
+				handlerCalled = true
+				return "hi " + input.Name, nil
+			})
+
+		tool, _ := srv.GetTool("greet")
+		_, err := tool.Execute(context.Background(), []byte(`{}`))
+		if err != nil {
+			t.Fatalf("unexpected error with SkipValidation: %v", err)
+		}
+		if !handlerCalled {
+			t.Fatal("handler should be called when SkipValidation is set")
+		}
+	})
+
+	t.Run("ValidateInput remains a no-op compatibility alias", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+
+		type Input struct {
+			Name string `json:"name" jsonschema:"required"`
+		}
+
+		srv.Tool("greet").
+			ValidateInput().
+			Handler(func(input Input) (string, error) {
+				return "hi " + input.Name, nil
+			})
+
+		tool, _ := srv.GetTool("greet")
+		_, err := tool.Execute(context.Background(), []byte(`{}`))
+		if err == nil {
+			t.Fatal("expected validation error; ValidateInput must keep validation on")
 		}
 	})
 }

@@ -1,14 +1,16 @@
 package client
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // NotificationHandler receives a server-initiated JSON-RPC notification: a
@@ -65,28 +67,31 @@ func (t *HTTPTransport) Stream(ctx context.Context, handler NotificationHandler)
 		return fmt.Errorf("open stream: unexpected status %d", resp.StatusCode)
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
+	// Use the shared SSE reader so the event grammar matches the server's
+	// shared SSE writer (no duplicated "data: " parsing).
+	reader := transport.NewSSEReader(resp.Body)
+	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		line := scanner.Text()
-		data, ok := strings.CutPrefix(line, "data: ")
-		if !ok || data == "" {
-			continue // event lines, comments, blank separators, the connected frame
+		data, err := reader.ReadData()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("read stream: %w", err)
 		}
 		var msg protocol.Request
-		if err := json.Unmarshal([]byte(data), &msg); err != nil {
+		if err := json.Unmarshal(data, &msg); err != nil {
 			continue // not a JSON-RPC frame (e.g. the {"clientId":...} hello)
 		}
 		// Only notifications (method, no id) are dispatched here.
 		if msg.Method != "" && msg.IsNotification() {
 			handler(msg.Method, msg.Params)
 		}
-	}
-	if err := scanner.Err(); err != nil && ctx.Err() == nil {
-		return fmt.Errorf("read stream: %w", err)
 	}
 	return ctx.Err()
 }

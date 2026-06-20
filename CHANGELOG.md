@@ -2,6 +2,97 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed (BREAKING)
+
+#### In-library authentication removed — auth is out of scope
+mcp-go never handles tokens, OAuth flows, or credentials. All in-library auth
+has been deleted:
+
+- Deleted `middleware/auth.go` and every symbol it exported: `Auth`,
+  `Authenticator`, `AuthOption`, `Identity`, `APIKeyAuthenticator`,
+  `BearerTokenAuthenticator`, `StaticAPIKeys`, `StaticTokens`,
+  `ChainAuthenticators`, `OAuth2Authenticator`, `JWTValidator`,
+  `IdentityFromContext`, `ContextWithIdentity`, and the `WithAuth*` options.
+- Removed the top-level re-exports in `mcp.go` (including `mcp.BearerAuth`,
+  `mcp.Identity`, `mcp.IdentityFromContext`, `mcp.ContextWithIdentity`, and the
+  `mcp.Auth*` family).
+- Removed `client.WithBearerToken`.
+
+**Migration:**
+- **Client:** inject auth via the caller-supplied `http.Client` transport.
+  Replace `client.WithBearerToken(tok)` with a custom `http.RoundTripper` set on
+  `mcp.WithHTTPClient(&http.Client{Transport: myAuthTransport})`. For API keys,
+  bearer tokens, or mTLS, configure them on that transport.
+- **Server:** terminate auth at the transport/proxy layer (API gateway, mTLS) or
+  in your own middleware; mcp-go ships none. To vary behaviour by caller in a
+  filter predicate, attach your own value to the request context (e.g. via
+  `transport.WithRequestContextFn` for mTLS peer certs) and read it back — there
+  is no longer an `Identity` type.
+
+### Changed
+
+#### Client and server now share transport framing (no duplication)
+- Added `transport.NewlineFramer` (newline-delimited JSON) and
+  `transport.SSEWriter` / `transport.SSEReader` (Server-Sent Events) as the
+  single framing primitives.
+- The stdio client (`client.StdioTransport`) and stdio server
+  (`transport.Stdio`) now both frame messages via `transport.NewlineFramer`,
+  eliminating their duplicate `bufio.Scanner` + `json.Marshal`+`\n` framers and
+  unifying the 16MB read-buffer limit.
+- The SSE server emitter (`transport.HTTP`) and SSE client reader
+  (`client.HTTPTransport.Stream`) now share the `transport.SSEWriter` /
+  `transport.SSEReader` grammar, removing the duplicated `data: ` framing.
+
+### Added
+
+#### Top-level client API surface
+- Added `mcp.NewClient(url, ...mcp.ClientOption)` and `mcp.WithHTTPClient(*http.Client)`
+  for constructing an HTTP/SSE client. The injected `http.Client` is the only
+  auth hook — mcp-go never handles tokens or credentials.
+- Added `mcp.NewStdioClient(cmd, args...)` for CLI-based MCP servers.
+- Added `mcp.Call[In, Out](ctx, client, name, in)` and
+  `mcp.NewClientTool[In, Out](client, name)` — the typed, recommended client API.
+- Added `(*client.Client).CallRaw(ctx, name, json.RawMessage)` and the `mcp.Tool`
+  interface (`mcp.NewDynamicTool`) as the dynamic/untyped escape hatch. NOT
+  recommended — prefer the typed API.
+- Added `(*Server).ListTools()` introspection alias of `Tools()`.
+
+### Changed (BREAKING)
+
+#### `client.Tool` flips from a metadata struct to an interface
+- **BREAKING:** `client.Tool` is no longer the tool-metadata struct — it is now
+  the dynamic escape-hatch **interface** (formerly `DynamicTool`). The metadata
+  struct that `ListTools` returns is now named `client.ToolInfo`. This is a hard
+  semantic change, not just a rename: code that did `t.Name` / `t.Description` /
+  `t.InputSchema` on a `client.Tool` **value** no longer compiles, because `Tool`
+  is now an interface type. `DynamicTool` remains as a deprecated alias of the
+  new interface.
+
+**Migration:**
+- Anywhere you held a `client.Tool` for its metadata fields (e.g. the elements of
+  the `ListTools` result, or `t.Name`), change the type to `client.ToolInfo`.
+  Field access (`t.Name`, `t.Description`, `t.InputSchema`) is unchanged once the
+  type is `ToolInfo`.
+- Code using the old `DynamicTool` interface can keep compiling via the alias, or
+  switch to `client.Tool`.
+
+### Changed
+
+#### Input schema validation is now on by default
+- Tool input is validated against the generated JSON Schema (required / minimum /
+  maximum / enum) **before** the handler runs, so invalid-per-schema input is
+  rejected with an `InvalidParams` error and never reaches business logic.
+- Added `(*ToolBuilder).SkipValidation()` as the opt-out for tools that need to
+  accept inputs the generated schema would reject.
+- `(*ToolBuilder).ValidateInput()` is now a no-op (validation is the default) and
+  is deprecated. Existing calls keep compiling and keep validation enabled.
+
+**Migration:** No action needed for tools whose handlers already expect
+schema-valid input. If a tool deliberately accepts inputs that violate its
+generated schema, add `.SkipValidation()` to its builder chain.
+
 ## [1.13.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.12.0...v1.13.0)
 
 ### Features

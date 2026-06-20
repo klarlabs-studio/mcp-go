@@ -523,6 +523,67 @@ func TestNewTypedTool(t *testing.T) {
 	})
 }
 
+func TestClient_CallRaw(t *testing.T) {
+	t.Run("invokes tool with raw json and returns raw result", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{textResponse(`{"message":"raw","count":7}`)},
+		}
+		c := client.New(transport)
+
+		raw, err := c.CallRaw(context.Background(), "greet", json.RawMessage(`{"name":"World"}`))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var out greetOut
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatalf("unmarshal raw result: %v", err)
+		}
+		if out.Message != "raw" || out.Count != 7 {
+			t.Errorf("out = %+v, want {raw 7}", out)
+		}
+	})
+}
+
+func TestNewClientTool(t *testing.T) {
+	t.Run("typed handle calls tool", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{textResponse(`{"message":"hi","count":1}`)},
+		}
+		c := client.New(transport)
+
+		tool := client.NewClientTool[greetIn, greetOut](c, "greet")
+		if tool.Name() != "greet" {
+			t.Errorf("name = %q, want %q", tool.Name(), "greet")
+		}
+		out, err := tool.Call(context.Background(), greetIn{Name: "World"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out.Message != "hi" {
+			t.Errorf("message = %q, want %q", out.Message, "hi")
+		}
+	})
+}
+
+// assertToolInterface documents that the dynamic escape hatch satisfies the
+// spec's Tool interface name (Name + Call(ctx, RawMessage) -> RawMessage).
+func assertToolInterface(c *client.Client) client.Tool {
+	return client.NewDynamicTool(c, "greet")
+}
+
+func TestTool_InterfaceName(t *testing.T) {
+	transport := &mockTransport{
+		responses: []protocol.Response{textResponse(`{"message":"ok","count":1}`)},
+	}
+	c := client.New(transport)
+
+	tool := assertToolInterface(c)
+	if tool.Name() != "greet" {
+		t.Errorf("name = %q, want %q", tool.Name(), "greet")
+	}
+}
+
 func TestDynamicTool(t *testing.T) {
 	t.Run("raw escape hatch round-trips json", func(t *testing.T) {
 		transport := &mockTransport{

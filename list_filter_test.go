@@ -144,13 +144,18 @@ func TestWithToolFilter_HidesRejected(t *testing.T) {
 	}
 }
 
+// callerKey is a caller-defined context key. mcp-go no longer ships an
+// Identity type; callers attach whatever they need (resolved from their own
+// http.Client auth transport, mTLS peer cert, etc.) to the request context and
+// read it back in filter predicates.
+type callerKey struct{}
+
 func TestWithToolFilter_SeesContext(t *testing.T) {
 	srv := listTestServer(t)
 	handler := newRequestHandler(srv, WithToolFilter(func(ctx context.Context, name string) bool {
-		// Predicate respects the identity attached to ctx — same
-		// pattern callers will use with IdentityFromContext.
-		id := IdentityFromContext(ctx)
-		if id != nil && id.Name == "admin" {
+		// Predicate reads a caller-attached value from ctx — the pattern
+		// callers use after resolving identity in their own transport.
+		if caller, _ := ctx.Value(callerKey{}).(string); caller == "admin" {
 			return true
 		}
 		return name == "public_search"
@@ -169,7 +174,7 @@ func TestWithToolFilter_SeesContext(t *testing.T) {
 	}
 
 	// Admin caller — both tools come back.
-	adminCtx := ContextWithIdentity(context.Background(), &Identity{ID: "admin", Name: "admin"})
+	adminCtx := context.WithValue(context.Background(), callerKey{}, "admin")
 	respAdmin, err := handler.HandleRequest(adminCtx, &protocol.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodToolsList,
 	})

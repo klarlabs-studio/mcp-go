@@ -278,53 +278,13 @@ const (
 	MB = middleware.MB
 )
 
-// Auth re-exports for convenience.
-type Identity = middleware.Identity
-type AuthOption = middleware.AuthOption
-type Authenticator = middleware.Authenticator
-
-var (
-	Auth                     = middleware.Auth
-	WithAuthLogger           = middleware.WithAuthLogger
-	WithAuthSkipMethods      = middleware.WithAuthSkipMethods
-	WithAuthRealm            = middleware.WithAuthRealm
-	WithAuthErrorMessage     = middleware.WithAuthErrorMessage
-	APIKeyAuthenticator      = middleware.APIKeyAuthenticator
-	BearerTokenAuthenticator = middleware.BearerTokenAuthenticator
-	StaticAPIKeys            = middleware.StaticAPIKeys
-	StaticTokens             = middleware.StaticTokens
-	ChainAuthenticators      = middleware.ChainAuthenticators
-	IdentityFromContext      = middleware.IdentityFromContext
-	ContextWithIdentity      = middleware.ContextWithIdentity
-)
-
-// BearerAuth returns a Middleware that requires clients to present one
-// of the given tokens as a Bearer credential in the Authorization
-// header.
-//
-// The map's keys are the secret tokens to accept; the values become
-// the Identity.ID + Identity.Name surfaced in the request context via
-// IdentityFromContext. Pass a friendly client name as the value.
-//
-// Handshake methods ("initialize", "notifications/initialized", and
-// "ping") are exempted from authentication automatically — clients
-// can't present a token until the handshake completes. Additional
-// opts (WithAuthRealm, WithAuthSkipMethods, etc.) compose with the
-// defaults.
-//
-// Use the full Auth + BearerTokenAuthenticator + StaticTokens API
-// directly if you need per-token metadata, scopes, or multi-tenant
-// identity routing.
-func BearerAuth(tokens map[string]string, opts ...AuthOption) middleware.Middleware {
-	identities := make(map[string]*Identity, len(tokens))
-	for token, name := range tokens {
-		identities[token] = &Identity{ID: name, Name: name}
-	}
-	authOpts := append([]AuthOption{
-		WithAuthSkipMethods(protocol.MethodInitialized),
-	}, opts...)
-	return Auth(BearerTokenAuthenticator(StaticTokens(identities)), authOpts...)
-}
+// mcp-go does not provide authentication. By design, the library never handles
+// tokens, OAuth flows, or credentials. On the client side, inject auth via the
+// caller-supplied http.Client transport (see mcp.WithHTTPClient). On the server
+// side, terminate auth at the transport/proxy layer or in caller-provided
+// middleware; mcp-go ships none. To vary behavior by caller in a filter
+// predicate, attach your own value to the request context and read it back —
+// the library no longer ships an Identity type.
 
 // HTTPOption configures the HTTP transport.
 type HTTPOption = transport.HTTPOption
@@ -380,8 +340,9 @@ func WithLogger(l Logger) ServeOption {
 // not-found error, so the filter is the authoritative contract
 // rather than a display-only layer.
 //
-// Use IdentityFromContext(ctx) to read the authenticated caller when
-// the predicate needs to vary by client.
+// When the predicate needs to vary by client, attach a caller value to the
+// request context in your own middleware/transport and read it back here —
+// mcp-go ships no Identity type and never handles auth.
 type ToolFilterFunc func(ctx context.Context, name string) bool
 
 // ResourceFilterFunc decides whether a resource should be visible to

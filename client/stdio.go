@@ -2,7 +2,6 @@
 package client
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // StdioTransport connects to an MCP server via subprocess stdio.
@@ -20,9 +20,13 @@ type StdioTransport struct {
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 
+	// framer carries the newline-delimited JSON wire format shared with the
+	// server side (transport.Stdio), so client and server never duplicate or
+	// drift on framing and buffer limits.
+	framer *transport.NewlineFramer
+
 	mu       sync.Mutex
 	respChan map[int64]chan *protocol.Response
-	scanner  *bufio.Scanner
 	closed   bool
 
 	readWG sync.WaitGroup
@@ -83,12 +87,11 @@ func newStdioTransport(command string, args []string) (*StdioTransport, error) {
 		stdout:   stdout,
 		stderr:   stderr,
 		respChan: make(map[int64]chan *protocol.Response),
-		scanner:  bufio.NewScanner(stdout),
+		// The shared framer raises the read buffer above bufio's 64KB default:
+		// large tool responses (e.g. a browser-automation annotated_screenshot,
+		// ~66KB+) would otherwise overflow it and never be delivered.
+		framer: transport.NewNewlineFramer(stdout, stdin),
 	}
-	// Raise the read buffer above bufio's 64KB default: large tool responses
-	// (e.g. a browser-automation annotated_screenshot, ~66KB+) overflow it,
-	// the scan returns ErrTooLong, and the response is never delivered.
-	t.scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 
 	// Start reading responses
 	t.readWG.Add(1)
@@ -124,16 +127,9 @@ func (t *StdioTransport) Send(ctx context.Context, req *protocol.Request) (*prot
 		t.mu.Unlock()
 	}()
 
-	// Send request
-	data, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	t.mu.Lock()
-	_, err = t.stdin.Write(append(data, '\n'))
-	t.mu.Unlock()
-	if err != nil {
+	// Send request via the shared framer (newline-delimited JSON). The framer
+	// serializes concurrent writes, so no separate stdin lock is needed.
+	if err := t.framer.WriteMessage(req); err != nil {
 		return nil, fmt.Errorf("write request: %w", err)
 	}
 
@@ -173,11 +169,14 @@ func (t *StdioTransport) Close() error {
 func (t *StdioTransport) readResponses() {
 	defer t.readWG.Done()
 
-	for t.scanner.Scan() {
-		line := t.scanner.Text()
+	for {
+		line, err := t.framer.ReadMessage()
+		if err != nil {
+			return // EOF or read error: stop dispatching.
+		}
 
 		var resp protocol.Response
-		if err := json.Unmarshal([]byte(line), &resp); err != nil {
+		if err := json.Unmarshal(line, &resp); err != nil {
 			continue // Skip malformed responses
 		}
 

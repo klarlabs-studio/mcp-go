@@ -202,7 +202,7 @@ handler = withLogging(logger, handler)`}</code></pre>
     middleware.RequestID(),
     middleware.Timeout(5*time.Second),
     middleware.Logging(logger),
-    middleware.Auth(authValidator),
+    middleware.RateLimit(rps),
 )`}</code></pre>
     </section>
 

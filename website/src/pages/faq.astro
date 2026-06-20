@@ -61,23 +61,23 @@ mcp.ServeStdio(ctx, srv)`}</code></pre>
     </section>
 
     <section class="faq-item">
-      <h2>Does it support authentication?</h2>
+      <h2>Does it handle authentication?</h2>
       <p>
-        Yes. mcp-go includes built-in authentication middleware:
+        No — by design. mcp-go never handles tokens, OAuth flows, or
+        credentials. Auth lives entirely outside the library.
       </p>
-      <pre><code>{`// API key authentication
-srv.Use(middleware.APIKey("X-API-Key", validKeys))
-
-// Bearer token authentication
-srv.Use(middleware.BearerToken(tokenValidator))
-
-// Custom authentication
-srv.Use(middleware.Auth(func(ctx context.Context, req *protocol.Request) (*Principal, error) {
-    // Your auth logic here
-    return &Principal{ID: "user-123"}, nil
+      <p>
+        On the <strong>client</strong>, inject auth via the supplied
+        <code>http.Client</code> transport:
+      </p>
+      <pre><code>{`// API key, bearer, mTLS — your transport, your rules
+client, _ := mcp.NewClient(url, mcp.WithHTTPClient(&http.Client{
+    Transport: myAuthTransport,
 }))`}</code></pre>
       <p>
-        For HTTP transport, you can also use standard HTTP middleware for OAuth, JWT, or other auth schemes.
+        On the <strong>server</strong>, terminate auth at the transport/proxy
+        layer (e.g. an API gateway or mTLS) or in your own middleware — mcp-go
+        ships none.
       </p>
     </section>
 
