@@ -40,6 +40,16 @@ func Call[In, Out any](ctx context.Context, c *Client, name string, in In) (Out,
 		return out, fmt.Errorf("call tool %q: %w: %s", name, ErrToolError, toolErrorText(result))
 	}
 
+	// Prefer the canonical typed channel: when the server emits
+	// structuredContent, decode that rather than the display text. This also
+	// covers results that carry structuredContent with empty Content.
+	if len(result.StructuredContent) > 0 {
+		if err := json.Unmarshal(result.StructuredContent, &out); err != nil {
+			return out, fmt.Errorf("call tool %q: decode structuredContent: %w", name, err)
+		}
+		return out, nil
+	}
+
 	if len(result.Content) == 0 {
 		return out, fmt.Errorf("call tool %q: %w", name, ErrNoContent)
 	}

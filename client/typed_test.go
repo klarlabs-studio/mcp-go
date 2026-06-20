@@ -230,6 +230,60 @@ func TestCall(t *testing.T) {
 		}
 	})
 
+	t.Run("structuredContent is the typed channel", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			result      map[string]any
+			wantMessage string
+			wantCount   int
+		}{
+			{
+				name: "structuredContent only, empty content",
+				result: map[string]any{
+					"content":           []any{},
+					"structuredContent": map[string]any{"message": "from-sc", "count": 9},
+				},
+				wantMessage: "from-sc",
+				wantCount:   9,
+			},
+			{
+				name: "structuredContent preferred over display text",
+				result: map[string]any{
+					// Display text is intentionally different from the
+					// canonical typed channel to prove which one wins.
+					"content": []any{
+						map[string]any{"type": "text", "text": `{"message":"display-only","count":1}`},
+					},
+					"structuredContent": map[string]any{"message": "from-sc", "count": 9},
+				},
+				wantMessage: "from-sc",
+				wantCount:   9,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				transport := &mockTransport{
+					responses: []protocol.Response{resultResponse(tt.result)},
+				}
+				c := client.New(transport)
+
+				out, err := client.Call[greetIn, greetOut](
+					context.Background(), c, "greet", greetIn{Name: "x"},
+				)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if out.Message != tt.wantMessage {
+					t.Errorf("message = %q, want %q", out.Message, tt.wantMessage)
+				}
+				if out.Count != tt.wantCount {
+					t.Errorf("count = %d, want %d", out.Count, tt.wantCount)
+				}
+			})
+		}
+	})
+
 	t.Run("input marshal edge cases", func(t *testing.T) {
 		type nested struct {
 			Tags  []string       `json:"tags"`
