@@ -31,6 +31,20 @@ has been deleted:
   `transport.WithRequestContextFn` for mTLS peer certs) and read it back — there
   is no longer an `Identity` type.
 
+### Changed
+
+#### Client and server now share transport framing (no duplication)
+- Added `transport.NewlineFramer` (newline-delimited JSON) and
+  `transport.SSEWriter` / `transport.SSEReader` (Server-Sent Events) as the
+  single framing primitives.
+- The stdio client (`client.StdioTransport`) and stdio server
+  (`transport.Stdio`) now both frame messages via `transport.NewlineFramer`,
+  eliminating their duplicate `bufio.Scanner` + `json.Marshal`+`\n` framers and
+  unifying the 16MB read-buffer limit.
+- The SSE server emitter (`transport.HTTP`) and SSE client reader
+  (`client.HTTPTransport.Stream`) now share the `transport.SSEWriter` /
+  `transport.SSEReader` grammar, removing the duplicated `data: ` framing.
+
 ### Added
 
 #### Top-level client API surface

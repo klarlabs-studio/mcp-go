@@ -359,9 +359,11 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Link", fmt.Sprintf(`<%s/mcp/sse?clientId=%s>; rel="stream"`, h.Addr(), clientID))
 	}
 
+	// Use the shared SSE writer so the event grammar matches the client's
+	// shared SSE reader (no duplicated "data: " framing).
+	sse := NewSSEWriter(w, flusher)
 	escapedClientID, _ := json.Marshal(clientID)
-	fmt.Fprintf(w, "event: connected\ndata: {\"clientId\":%s}\n\n", string(escapedClientID))
-	flusher.Flush()
+	_ = sse.WriteEvent("connected", []byte(fmt.Sprintf(`{"clientId":%s}`, string(escapedClientID))))
 
 	for {
 		select {
@@ -371,8 +373,7 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", msg)
-			flusher.Flush()
+			_ = sse.WriteData(msg)
 		}
 	}
 }

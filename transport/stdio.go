@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,7 +17,8 @@ type Stdio struct {
 	out    io.Writer
 	errOut io.Writer
 
-	mu sync.Mutex
+	framerMu sync.Mutex
+	framer   *NewlineFramer
 }
 
 // StdioOption configures a Stdio transport.
@@ -65,29 +65,38 @@ func (s *Stdio) Addr() string {
 	return "stdio"
 }
 
-// Serve starts processing requests from stdin.
+// Serve starts processing requests from stdin. It frames messages as
+// newline-delimited JSON via the shared transport.NewlineFramer, the same
+// primitive the stdio client uses, so the wire format never drifts between the
+// two sides.
 func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
-	scanner := bufio.NewScanner(s.in)
-	// Raise the read buffer above bufio's 64KB default so large request bodies
-	// are not rejected with ErrTooLong (mirrors the client stdio reader).
-	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	framer := NewNewlineFramer(s.in, s.out)
+	s.setFramer(framer)
+	defer s.setFramer(nil)
 
 	// Channel for scanner results
-	lines := make(chan string)
+	lines := make(chan []byte)
 	scanErr := make(chan error, 1)
 
 	go func() {
-		for scanner.Scan() {
+		for {
+			line, err := framer.ReadMessage()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					scanErr <- err
+				}
+				close(lines)
+				return
+			}
+			// Copy: the framer reuses its buffer between reads.
+			buf := make([]byte, len(line))
+			copy(buf, line)
 			select {
-			case lines <- scanner.Text():
+			case lines <- buf:
 			case <-ctx.Done():
 				return
 			}
 		}
-		if err := scanner.Err(); err != nil {
-			scanErr <- err
-		}
-		close(lines)
 	}()
 
 	for {
@@ -105,39 +114,42 @@ func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
 	}
 }
 
+func (s *Stdio) setFramer(f *NewlineFramer) {
+	s.framerMu.Lock()
+	s.framer = f
+	s.framerMu.Unlock()
+}
+
+func (s *Stdio) currentFramer() *NewlineFramer {
+	s.framerMu.Lock()
+	defer s.framerMu.Unlock()
+	if s.framer != nil {
+		return s.framer
+	}
+	// Serve has not been called (or has returned): fall back to a write-only
+	// framer over the configured output so SendNotification/writeResponse stay
+	// usable in tests and out-of-band sends.
+	return NewNewlineFramer(nil, s.out)
+}
+
 // SendNotification sends a JSON-RPC notification to the client.
 func (s *Stdio) SendNotification(method string, params any) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	paramsData, err := json.Marshal(params)
 	if err != nil {
 		return err
 	}
 
-	notif := Notification{
+	return s.currentFramer().WriteMessage(Notification{
 		JSONRPC: JSONRPCVersion,
 		Method:  method,
 		Params:  paramsData,
-	}
-
-	data, err := json.Marshal(notif)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.out.Write(data)
-	if err != nil {
-		return err
-	}
-	_, err = s.out.Write([]byte("\n"))
-	return err
+	})
 }
 
-func (s *Stdio) handleLine(ctx context.Context, handler Handler, line string) {
+func (s *Stdio) handleLine(ctx context.Context, handler Handler, line []byte) {
 	// Parse request
 	var req protocol.Request
-	if err := json.Unmarshal([]byte(line), &req); err != nil {
+	if err := json.Unmarshal(line, &req); err != nil {
 		// Send parse error
 		resp := protocol.NewErrorResponse(nil, protocol.NewParseError(err.Error()))
 		s.writeResponse(resp)
@@ -171,14 +183,5 @@ func (s *Stdio) handleLine(ctx context.Context, handler Handler, line string) {
 }
 
 func (s *Stdio) writeResponse(resp *protocol.Response) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-
-	_, _ = s.out.Write(data)
-	_, _ = s.out.Write([]byte("\n"))
+	_ = s.currentFramer().WriteMessage(resp)
 }
