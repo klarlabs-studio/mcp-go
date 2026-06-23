@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -34,6 +35,12 @@ type HTTPTransport struct {
 	// clientID correlates this transport's POSTs with its server-push (SSE)
 	// stream so the server can target resource-updated notifications.
 	clientID string
+
+	// Streamable-HTTP session state (MCP 2025-03-26). A server may assign a
+	// session id on the initialize response (Mcp-Session-Id) which subsequent
+	// requests must echo. Guarded by mu since Send may be called concurrently.
+	mu        sync.Mutex
+	sessionID string
 }
 
 // HTTPTransportOption configures an HTTPTransport.
@@ -143,7 +150,9 @@ func NewHTTPTransport(baseURL string, opts ...HTTPTransportOption) (*HTTPTranspo
 		headers = http.Header{}
 	}
 	headers.Set("Content-Type", "application/json")
-	headers.Set("Accept", "application/json")
+	// Streamable-HTTP requires advertising both content types: a server may reply
+	// with a single JSON object or an SSE stream carrying the JSON-RPC response.
+	headers.Set("Accept", "application/json, text/event-stream")
 
 	return &HTTPTransport{
 		endpoint:   endpoint,
@@ -210,6 +219,13 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 			httpReq.Header.Add(k, v)
 		}
 	}
+	// Echo the session id on every request after the server assigns one.
+	t.mu.Lock()
+	sid := t.sessionID
+	t.mu.Unlock()
+	if sid != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sid)
+	}
 
 	resp, err := t.httpClient.Do(httpReq)
 	if err != nil {
@@ -230,11 +246,78 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 		}
 	}
 
+	// Capture a server-assigned streamable-HTTP session id (set on initialize).
+	if got := resp.Header.Get("Mcp-Session-Id"); got != "" {
+		t.mu.Lock()
+		t.sessionID = got
+		t.mu.Unlock()
+	}
+
+	// A streamable-HTTP server may answer with a single JSON object or an SSE
+	// stream whose data frames carry the JSON-RPC response.
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		out, err := responseFromSSE(respBody, req.ID)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
 	var out protocol.Response
 	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &out, nil
+}
+
+// responseFromSSE extracts the JSON-RPC response from an SSE body. It scans
+// `data:` frames (concatenating multi-line data per event) and returns the first
+// frame that decodes to a Response matching the request id (or, failing an id
+// match, the first frame that carries a result/error).
+func responseFromSSE(body []byte, reqID json.RawMessage) (*protocol.Response, error) {
+	want := strings.TrimSpace(string(reqID))
+	var fallback *protocol.Response
+	var data strings.Builder
+	flush := func() (*protocol.Response, bool) {
+		defer data.Reset()
+		payload := strings.TrimSpace(data.String())
+		if payload == "" {
+			return nil, false
+		}
+		var r protocol.Response
+		if json.Unmarshal([]byte(payload), &r) != nil {
+			return nil, false
+		}
+		if r.Result == nil && r.Error == nil {
+			return nil, false
+		}
+		if want != "" && strings.TrimSpace(string(r.ID)) == want {
+			return &r, true
+		}
+		if fallback == nil {
+			rr := r
+			fallback = &rr
+		}
+		return nil, false
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimRight(line, "\r")
+		switch {
+		case strings.HasPrefix(line, "data:"):
+			data.WriteString(strings.TrimSpace(line[len("data:"):]))
+		case line == "": // event boundary
+			if r, ok := flush(); ok {
+				return r, nil
+			}
+		}
+	}
+	if r, ok := flush(); ok {
+		return r, nil
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
 }
 
 // Close releases idle connections held by the underlying http.Client.

@@ -34,6 +34,9 @@ const (
 	fieldName            = "name"
 	fieldVersion         = "version"
 	fieldProtocolVersion = "protocolVersion"
+
+	// jsonrpcVersion is the JSON-RPC version every request/response carries.
+	jsonrpcVersion = "2.0"
 )
 
 // Transport defines the interface for client-side transport.
@@ -637,7 +640,7 @@ func (c *Client) call(ctx context.Context, method string, params any) (*protocol
 		return nil, fmt.Errorf("marshal request ID: %w", err)
 	}
 	req := &protocol.Request{
-		JSONRPC: "2.0",
+		JSONRPC: jsonrpcVersion,
 		ID:      idRaw,
 		Method:  method,
 		Params:  paramsRaw,
