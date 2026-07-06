@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"go.klarlabs.de/mcp/middleware"
@@ -617,6 +618,9 @@ type requestHandler struct {
 	toolFilter     ToolFilterFunc
 	resourceFilter ResourceFilterFunc
 	promptFilter   PromptFilterFunc
+	// cancellations tracks in-flight requests so an incoming
+	// notifications/cancelled can actually cancel a running handler's context.
+	cancellations *server.CancellationManager
 }
 
 func newRequestHandler(srv *Server, opts ...ServeOption) *requestHandler {
@@ -630,6 +634,7 @@ func newRequestHandler(srv *Server, opts ...ServeOption) *requestHandler {
 		toolFilter:     options.toolFilter,
 		resourceFilter: options.resourceFilter,
 		promptFilter:   options.promptFilter,
+		cancellations:  server.NewCancellationManager(),
 	}
 
 	// Build the handler function
@@ -676,14 +681,66 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodPromptsList:          h.handlePromptsList,
 		protocol.MethodPromptsGet:           h.handlePromptsGet,
 		protocol.MethodPing:                 h.handlePing,
+		protocol.MethodCancelled:            h.handleCancelled,
 	}
 }
 
 func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	// Track in-flight requests (those with an ID) so a notifications/cancelled
+	// for this ID cancels the derived context mid-flight. The deferred cancel
+	// also untracks on normal completion. Notifications have no ID and are not
+	// tracked (a cancelled notification must not try to cancel itself).
+	if !req.IsNotification() {
+		var cancel context.CancelFunc
+		ctx, cancel = h.cancellations.Track(ctx, string(req.ID))
+		defer cancel()
+	}
+
+	resp, err := h.dispatch(ctx, req)
+	if err != nil {
+		return nil, h.publicError(req, err)
+	}
+	return resp, nil
+}
+
+func (h *requestHandler) dispatch(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	if handler, ok := h.methodHandlers()[req.Method]; ok {
 		return handler(ctx, req)
 	}
 	return nil, protocol.NewMethodNotFound(req.Method)
+}
+
+// publicError is the single chokepoint that decides what error detail reaches
+// the peer. Deliberate protocol errors (InvalidParams, MethodNotFound,
+// NotFound, …) carry an intended-public message and pass through verbatim. Any
+// other error is an internal failure whose message may embed paths, state, or
+// secret-adjacent detail: it is logged server-side (stderr — never stdout,
+// which would corrupt stdio framing) and replaced with a generic -32603 so
+// nothing leaks. Because this sits at the shared handler boundary it covers
+// every transport uniformly.
+func (h *requestHandler) publicError(req *protocol.Request, err error) error {
+	var mcpErr *protocol.Error
+	if errors.As(err, &mcpErr) {
+		return mcpErr
+	}
+	method := ""
+	if req != nil {
+		method = req.Method
+	}
+	log.Printf("mcp: internal error handling %q: %v", method, err)
+	return protocol.NewInternalError("internal error")
+}
+
+// handleCancelled processes a notifications/cancelled by cancelling the tracked
+// in-flight request with the given id. It is a notification, so it returns no
+// response body.
+func (h *requestHandler) handleCancelled(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var notif server.CancelledNotification
+	if err := json.Unmarshal(req.Params, &notif); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	h.cancellations.Cancel(string(notif.RequestID))
+	return nil, nil
 }
 
 func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
@@ -818,15 +875,16 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		}
 	}
 
-	// Execute tool
+	// Execute tool. A deliberate protocol error passes through verbatim; any
+	// other error is returned raw so publicError can sanitize it (no leaking
+	// internal detail to the peer).
 	result, err := tool.Execute(ctx, params.Arguments)
 	if err != nil {
-		// Check if it's already an MCP error
 		var mcpErr *protocol.Error
 		if errors.As(err, &mcpErr) {
 			return nil, mcpErr
 		}
-		return nil, protocol.NewInternalError(err.Error())
+		return nil, err
 	}
 
 	// Format result based on type
@@ -965,14 +1023,15 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 		return nil, protocol.NewNotFound("resource not found: " + params.URI)
 	}
 
-	// Read resource
+	// Read resource. Protocol errors pass through; other errors are returned
+	// raw for publicError to sanitize.
 	content, err := resource.Read(ctx, params.URI)
 	if err != nil {
 		var mcpErr *protocol.Error
 		if errors.As(err, &mcpErr) {
 			return nil, mcpErr
 		}
-		return nil, protocol.NewInternalError(err.Error())
+		return nil, err
 	}
 
 	result := map[string]any{
@@ -1093,14 +1152,16 @@ func (h *requestHandler) handlePromptsGet(ctx context.Context, req *protocol.Req
 		return nil, protocol.NewNotFound("prompt not found: " + params.Name)
 	}
 
-	// Execute prompt
+	// Execute prompt. Protocol errors pass through; other errors are returned
+	// raw for publicError to sanitize (a handler failure is internal, not a
+	// client params error).
 	result, err := prompt.Get(ctx, params.Arguments)
 	if err != nil {
 		var mcpErr *protocol.Error
 		if errors.As(err, &mcpErr) {
 			return nil, mcpErr
 		}
-		return nil, protocol.NewInvalidParams(err.Error())
+		return nil, err
 	}
 
 	response := map[string]any{

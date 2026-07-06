@@ -252,6 +252,194 @@ func TestTaskRegistry(t *testing.T) {
 	})
 }
 
+// TestCancelTaskCancelsRunningContext proves CancelTask actually cancels the
+// running goroutine's context (not just flips the status flag).
+func TestCancelTaskCancelsRunningContext(t *testing.T) {
+	mgr := NewTaskManager()
+
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	mgr.RegisterTask("blocker", TaskSpec{
+		Name: "blocker",
+		Handler: func(ctx context.Context, _ map[string]any) (*TaskResult, error) {
+			close(started)
+			<-ctx.Done() // must unblock only when the context is canceled
+			close(canceled)
+			return nil, ctx.Err()
+		},
+	})
+
+	task, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "blocker"})
+	if err != nil {
+		t.Fatalf("CreateTask() error = %v", err)
+	}
+
+	<-started
+	if err := mgr.CancelTask(task.ID); err != nil {
+		t.Fatalf("CancelTask() error = %v", err)
+	}
+
+	select {
+	case <-canceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("CancelTask did not cancel the running task's context")
+	}
+
+	updated, _ := mgr.GetTask(task.ID)
+	if updated.Status != TaskStatusCanceled {
+		t.Errorf("status = %v, want canceled", updated.Status)
+	}
+}
+
+// TestTaskManagerShutdownCancelsTasks proves Shutdown tears down in-flight task
+// goroutines instead of leaking them.
+func TestTaskManagerShutdownCancelsTasks(t *testing.T) {
+	mgr := NewTaskManager()
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	mgr.RegisterTask("blocker", TaskSpec{
+		Name: "blocker",
+		Handler: func(ctx context.Context, _ map[string]any) (*TaskResult, error) {
+			close(started)
+			<-ctx.Done()
+			close(done)
+			return nil, ctx.Err()
+		},
+	})
+
+	if _, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "blocker"}); err != nil {
+		t.Fatalf("CreateTask() error = %v", err)
+	}
+
+	<-started
+	mgr.Shutdown()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not cancel the running task's context")
+	}
+}
+
+// TestTaskRetentionEviction proves terminal tasks are evicted after the
+// retention window, bounding the registry.
+func TestTaskRetentionEviction(t *testing.T) {
+	mgr := NewTaskManager(WithTaskRetention(10 * time.Millisecond))
+
+	mgr.RegisterTask("quick", TaskSpec{
+		Name: "quick",
+		Handler: func(_ context.Context, _ map[string]any) (*TaskResult, error) {
+			return &TaskResult{Data: "ok"}, nil
+		},
+	})
+
+	first, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "quick"})
+	if err != nil {
+		t.Fatalf("CreateTask() error = %v", err)
+	}
+
+	// Wait for the first task to reach a terminal state (so CompletedAt is set).
+	waitForStatus(t, mgr, first.ID, TaskStatusCompleted)
+
+	// Wait past the retention window, then a new CreateTask triggers a sweep.
+	time.Sleep(30 * time.Millisecond)
+	if _, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "quick"}); err != nil {
+		t.Fatalf("second CreateTask() error = %v", err)
+	}
+
+	if _, err := mgr.GetTask(first.ID); err == nil {
+		t.Error("expected the first (expired) task to be evicted, but it is still present")
+	}
+}
+
+// TestTaskRegistryCapRejects proves creation is rejected once the cap is full
+// of non-terminal tasks, so the map can never grow without bound.
+func TestTaskRegistryCapRejects(t *testing.T) {
+	mgr := NewTaskManager(WithMaxTasks(1), WithTaskRetention(0))
+	defer mgr.Shutdown()
+
+	started := make(chan struct{}, 1)
+	mgr.RegisterTask("hold", TaskSpec{
+		Name: "hold",
+		Handler: func(ctx context.Context, _ map[string]any) (*TaskResult, error) {
+			started <- struct{}{}
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	})
+
+	if _, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "hold"}); err != nil {
+		t.Fatalf("first CreateTask() error = %v", err)
+	}
+	<-started // ensure the task is running (non-terminal) and occupies the cap
+
+	if _, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "hold"}); err == nil {
+		t.Error("expected CreateTask to be rejected when the registry is full of active tasks")
+	}
+}
+
+// TestListTasksCursorPaging proves ListTasks returns a deterministic order and
+// honours the cursor with a Next token across pages.
+func TestListTasksCursorPaging(t *testing.T) {
+	mgr := NewTaskManager()
+	mgr.RegisterTask("t", TaskSpec{
+		Name: "t",
+		Handler: func(_ context.Context, _ map[string]any) (*TaskResult, error) {
+			return &TaskResult{}, nil
+		},
+	})
+
+	const total = 5
+	for i := 0; i < total; i++ {
+		if _, err := mgr.CreateTask(context.Background(), CreateTaskRequest{Name: "t"}); err != nil {
+			t.Fatalf("CreateTask() error = %v", err)
+		}
+		time.Sleep(time.Millisecond) // distinct CreatedAt for a stable order
+	}
+
+	seen := make(map[string]bool)
+	cursor := ""
+	pages := 0
+	for {
+		resp, err := mgr.ListTasks(2, cursor)
+		if err != nil {
+			t.Fatalf("ListTasks() error = %v", err)
+		}
+		pages++
+		for _, task := range resp.Tasks {
+			if seen[task.ID] {
+				t.Fatalf("task %s returned on more than one page", task.ID)
+			}
+			seen[task.ID] = true
+		}
+		if resp.Next == "" {
+			break
+		}
+		cursor = resp.Next
+		if pages > total+2 {
+			t.Fatal("cursor paging did not terminate")
+		}
+	}
+
+	if len(seen) != total {
+		t.Errorf("paged over %d tasks, want %d", len(seen), total)
+	}
+}
+
+func waitForStatus(t *testing.T, mgr *TaskManager, id string, want TaskStatus) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		task, err := mgr.GetTask(id)
+		if err == nil && task.Status == want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("task %s did not reach status %v", id, want)
+}
+
 func TestServer_RegisterTask(t *testing.T) {
 	srv := New(Info{
 		Name:    "test-server",

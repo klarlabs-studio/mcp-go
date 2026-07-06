@@ -4,6 +4,11 @@ import (
 	"sync"
 )
 
+// defaultMaxSubscriptionsPerClient bounds how many distinct resource URIs a
+// single client may subscribe to. Without a cap the subscription map is an
+// unbounded, client-controlled allocation — a denial-of-service vector.
+const defaultMaxSubscriptionsPerClient = 1000
+
 // SubscribeRequest is sent by the client to subscribe to resource updates.
 type SubscribeRequest struct {
 	URI string `json:"uri"`
@@ -23,24 +28,59 @@ type ResourceUpdatedNotification struct {
 type SubscriptionManager struct {
 	mu            sync.RWMutex
 	subscriptions map[string]map[string]struct{} // URI -> set of client IDs
+	perClient     map[string]int                 // client ID -> subscription count
+	maxPerClient  int
 }
 
-// NewSubscriptionManager creates a new subscription manager.
-func NewSubscriptionManager() *SubscriptionManager {
-	return &SubscriptionManager{
-		subscriptions: make(map[string]map[string]struct{}),
+// SubscriptionManagerOption configures a SubscriptionManager.
+type SubscriptionManagerOption func(*SubscriptionManager)
+
+// WithMaxSubscriptionsPerClient sets the per-client subscription cap. Values
+// <= 0 keep the default.
+func WithMaxSubscriptionsPerClient(n int) SubscriptionManagerOption {
+	return func(m *SubscriptionManager) {
+		if n > 0 {
+			m.maxPerClient = n
+		}
 	}
 }
 
-// Subscribe adds a client subscription for a resource URI.
-func (m *SubscriptionManager) Subscribe(clientID, uri string) {
+// NewSubscriptionManager creates a new subscription manager.
+func NewSubscriptionManager(opts ...SubscriptionManagerOption) *SubscriptionManager {
+	m := &SubscriptionManager{
+		subscriptions: make(map[string]map[string]struct{}),
+		perClient:     make(map[string]int),
+		maxPerClient:  defaultMaxSubscriptionsPerClient,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// Subscribe adds a client subscription for a resource URI. It returns false
+// (rejecting the subscription) when the client is already at its per-client
+// cap. Re-subscribing to an existing URI is idempotent and always accepted.
+func (m *SubscriptionManager) Subscribe(clientID, uri string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if clients := m.subscriptions[uri]; clients != nil {
+		if _, ok := clients[clientID]; ok {
+			return true // already subscribed — idempotent
+		}
+	}
+
+	if m.perClient[clientID] >= m.maxPerClient {
+		return false
+	}
 
 	if m.subscriptions[uri] == nil {
 		m.subscriptions[uri] = make(map[string]struct{})
 	}
 	m.subscriptions[uri][clientID] = struct{}{}
+	m.perClient[clientID]++
+	return true
 }
 
 // Unsubscribe removes a client subscription for a resource URI.
@@ -49,7 +89,10 @@ func (m *SubscriptionManager) Unsubscribe(clientID, uri string) {
 	defer m.mu.Unlock()
 
 	if clients, ok := m.subscriptions[uri]; ok {
-		delete(clients, clientID)
+		if _, subscribed := clients[clientID]; subscribed {
+			delete(clients, clientID)
+			m.decClientLocked(clientID)
+		}
 		if len(clients) == 0 {
 			delete(m.subscriptions, uri)
 		}
@@ -67,6 +110,17 @@ func (m *SubscriptionManager) UnsubscribeAll(clientID string) {
 			delete(m.subscriptions, uri)
 		}
 	}
+	delete(m.perClient, clientID)
+}
+
+// decClientLocked decrements a client's subscription count, dropping the entry
+// at zero. Caller must hold m.mu.
+func (m *SubscriptionManager) decClientLocked(clientID string) {
+	if m.perClient[clientID] <= 1 {
+		delete(m.perClient, clientID)
+		return
+	}
+	m.perClient[clientID]--
 }
 
 // Subscribers returns the client IDs subscribed to a resource URI.

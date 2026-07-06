@@ -182,3 +182,36 @@ func TestResourceUpdatedNotification(t *testing.T) {
 		t.Errorf("expected URI 'file:///config.json', got %q", notification.URI)
 	}
 }
+
+// TestSubscriptionManagerPerClientCap proves the per-client subscription cap is
+// enforced: subscriptions beyond the cap are rejected, re-subscribing is
+// idempotent, other clients are unaffected, and unsubscribing frees a slot.
+func TestSubscriptionManagerPerClientCap(t *testing.T) {
+	m := NewSubscriptionManager(WithMaxSubscriptionsPerClient(2))
+
+	if !m.Subscribe("c1", "u1") {
+		t.Fatal("u1 should be accepted")
+	}
+	if !m.Subscribe("c1", "u2") {
+		t.Fatal("u2 should be accepted")
+	}
+	if m.Subscribe("c1", "u3") {
+		t.Fatal("u3 should be rejected once the client is at its cap")
+	}
+
+	// Re-subscribing to an existing URI is idempotent and must not be rejected.
+	if !m.Subscribe("c1", "u1") {
+		t.Fatal("re-subscribing to u1 should be accepted")
+	}
+
+	// A different client has its own independent budget.
+	if !m.Subscribe("c2", "u3") {
+		t.Fatal("c2 should be accepted (separate per-client budget)")
+	}
+
+	// Unsubscribing frees a slot.
+	m.Unsubscribe("c1", "u1")
+	if !m.Subscribe("c1", "u3") {
+		t.Fatal("after unsubscribe, u3 should be accepted")
+	}
+}
