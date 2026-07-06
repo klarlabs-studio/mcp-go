@@ -44,10 +44,14 @@ func TracingWithHeaders(correlationHeader, traceHeader string) Middleware {
 func TracingFromHeaders(headerNames ...string) Middleware {
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			// Inbound ids are attacker-controlled: they flow into logs and
+			// downstream correlation. Adopt only well-formed values so a crafted
+			// header cannot inject newlines/control characters (log forging) or
+			// bloat the id. Malformed headers are ignored, not adopted.
 			if existing := CorrelationIDFromContext(ctx); existing == "" {
 				for _, header := range headerNames {
-					if val := getHeaderFromContext(ctx, header); val != "" {
-						ctx = ContextWithCorrelationID(ctx, val)
+					if id, ok := sanitizeTracingID(getHeaderFromContext(ctx, header)); ok {
+						ctx = ContextWithCorrelationID(ctx, id)
 						break
 					}
 				}
@@ -55,8 +59,8 @@ func TracingFromHeaders(headerNames ...string) Middleware {
 
 			if existing := TraceIDFromContext(ctx); existing == "" {
 				for _, header := range headerNames {
-					if val := getHeaderFromContext(ctx, header); val != "" {
-						ctx = ContextWithTracing(ctx, val)
+					if id, ok := sanitizeTracingID(getHeaderFromContext(ctx, header)); ok {
+						ctx = ContextWithTracing(ctx, id)
 						break
 					}
 				}
@@ -65,6 +69,32 @@ func TracingFromHeaders(headerNames ...string) Middleware {
 			return next(ctx, req)
 		}
 	}
+}
+
+// maxTracingIDLen caps the length of an adopted inbound trace/correlation id.
+const maxTracingIDLen = 128
+
+// sanitizeTracingID validates an inbound (client-supplied) trace/correlation
+// id. It accepts a non-empty value of at most maxTracingIDLen characters drawn
+// from an unreserved set (alphanumerics and '-', '_', '.', ':') so the id is
+// safe to embed in structured logs and propagate. It reports ok=false for
+// empty, over-long, or otherwise malformed values, which callers treat as
+// "no id supplied".
+func sanitizeTracingID(s string) (string, bool) {
+	if s == "" || len(s) > maxTracingIDLen {
+		return "", false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '-', r == '_', r == '.', r == ':':
+		default:
+			return "", false
+		}
+	}
+	return s, true
 }
 
 func ContextWithTracing(ctx context.Context, traceID string) context.Context {
@@ -127,11 +157,17 @@ func FormatTracingHeaders(ctx context.Context) map[string]string {
 func ParseTracingHeaders(headers map[string]string) (correlationID, traceID string) {
 	for key, val := range headers {
 		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		// These ids are inbound and untrusted; drop malformed values rather than
+		// return them for logging/propagation.
 		if strings.EqualFold(normalizedKey, CorrelationIDHeader) {
-			correlationID = val
+			if id, ok := sanitizeTracingID(val); ok {
+				correlationID = id
+			}
 		}
 		if strings.EqualFold(normalizedKey, TraceIDHeader) {
-			traceID = val
+			if id, ok := sanitizeTracingID(val); ok {
+				traceID = id
+			}
 		}
 	}
 	return

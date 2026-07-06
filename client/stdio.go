@@ -4,6 +4,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -172,7 +173,13 @@ func (t *StdioTransport) readResponses() {
 	for {
 		line, err := t.framer.ReadMessage()
 		if err != nil {
-			return // EOF or read error: stop dispatching.
+			if errors.Is(err, transport.ErrFrameTooLarge) {
+				// A single over-cap frame is recoverable: the framer already
+				// drained it. Skip it and keep the read goroutine alive so
+				// pending and future Sends are not orphaned forever.
+				continue
+			}
+			return // EOF or genuine read error: stop dispatching.
 		}
 
 		var resp protocol.Response

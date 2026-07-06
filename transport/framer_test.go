@@ -3,11 +3,60 @@ package transport
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestNewlineFramer_OverCapFrameSkippedAndResync(t *testing.T) {
+	// A frame larger than maxFrameSize must not wedge the reader. It should
+	// surface ErrFrameTooLarge (recoverable) and then resynchronize on the next
+	// newline-delimited frame instead of dying or corrupting the stream.
+	oversized := strings.Repeat("A", maxFrameSize+1024)
+	good := `{"method":"after"}`
+	stream := oversized + "\n" + good + "\n"
+
+	r := NewNewlineFramer(strings.NewReader(stream), nil)
+
+	// First read: the oversized frame is reported as a recoverable skip.
+	if _, err := r.ReadMessage(); !errors.Is(err, ErrFrameTooLarge) {
+		t.Fatalf("first ReadMessage err = %v, want ErrFrameTooLarge", err)
+	}
+
+	// Second read: the reader has drained the oversized line and resynced.
+	line, err := r.ReadMessage()
+	if err != nil {
+		t.Fatalf("second ReadMessage: %v", err)
+	}
+	if string(line) != good {
+		t.Fatalf("after skip got %q, want %q", line, good)
+	}
+
+	if _, err := r.ReadMessage(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF at end, got %v", err)
+	}
+}
+
+func TestNewlineFramer_AtCapFrameStillReads(t *testing.T) {
+	// A frame exactly at the cap must round-trip (boundary must not over-reject).
+	// Build a JSON object whose serialized length is exactly maxFrameSize.
+	prefix := `{"data":"`
+	suffix := `"}`
+	payload := prefix + strings.Repeat("x", maxFrameSize-len(prefix)-len(suffix)) + suffix
+	if len(payload) != maxFrameSize {
+		t.Fatalf("payload len = %d, want %d", len(payload), maxFrameSize)
+	}
+	r := NewNewlineFramer(strings.NewReader(payload+"\n"), nil)
+	line, err := r.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage at cap: %v", err)
+	}
+	if len(line) != maxFrameSize {
+		t.Fatalf("line len = %d, want %d", len(line), maxFrameSize)
+	}
+}
 
 func TestNewlineFramer_RoundTrip(t *testing.T) {
 	var buf bytes.Buffer

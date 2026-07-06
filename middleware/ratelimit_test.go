@@ -282,3 +282,44 @@ func TestRateLimit_Recovery(t *testing.T) {
 		}
 	})
 }
+
+func TestRateLimit_DefaultPerClientFromContext(t *testing.T) {
+	// With a client id on the context, the default bucket key isolates clients:
+	// one client exhausting its budget must not rate-limit another.
+	m := middleware.RateLimit(1, 1)
+	handler := m(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+		return protocol.NewResponse(req.ID, "ok"), nil
+	})
+	req := &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "test"}
+
+	ctxA := middleware.ContextWithClientID(context.Background(), "clientA")
+	ctxB := middleware.ContextWithClientID(context.Background(), "clientB")
+
+	if _, err := handler(ctxA, req); err != nil {
+		t.Fatalf("clientA first request: %v", err)
+	}
+	// clientB is a distinct bucket and must still be allowed.
+	if _, err := handler(ctxB, req); err != nil {
+		t.Fatalf("clientB first request should be independent: %v", err)
+	}
+	// clientA's second request is over its own budget.
+	if _, err := handler(ctxA, req); err == nil {
+		t.Fatal("expected clientA to be rate limited on its own bucket")
+	}
+}
+
+func TestRateLimit_DefaultGlobalWithoutClientID(t *testing.T) {
+	// Without a client id, the documented fallback is a single global bucket.
+	m := middleware.RateLimit(1, 1)
+	handler := m(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+		return protocol.NewResponse(req.ID, "ok"), nil
+	})
+	req := &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "test"}
+
+	if _, err := handler(context.Background(), req); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	if _, err := handler(context.Background(), req); err == nil {
+		t.Fatal("expected global bucket to rate limit the second request")
+	}
+}

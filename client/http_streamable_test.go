@@ -67,6 +67,45 @@ func TestHTTPTransportStreamableSSE(t *testing.T) {
 	}
 }
 
+// A server must not be able to answer an awaited request with an SSE frame
+// carrying a different id: that would let it deliver B's result as A's response.
+func TestResponseFromSSE_MismatchedIDRejected(t *testing.T) {
+	body := "data: {\"jsonrpc\":\"2.0\",\"id\":999,\"result\":{\"ok\":true}}\n\n"
+	if _, err := responseFromSSE([]byte(body), json.RawMessage("1")); err == nil {
+		t.Fatal("expected error for id mismatch, got nil (mismatched frame accepted)")
+	}
+}
+
+// The correct frame must be selected even when other-id frames precede it.
+func TestResponseFromSSE_MatchingIDSelected(t *testing.T) {
+	body := "data: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"n\":2}}\n\n" +
+		"data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"n\":1}}\n\n"
+	resp, err := responseFromSSE([]byte(body), json.RawMessage("1"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(string(resp.ID)) != "1" {
+		t.Fatalf("selected id %s, want 1", resp.ID)
+	}
+}
+
+// A mismatched-id SSE frame must surface as a Send error, not a wrong response.
+func TestHTTPTransport_SSEMismatchedIDSendError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		// Client will await id 1; server answers with id 42.
+		fmt.Fprint(w, "data: {\"jsonrpc\":\"2.0\",\"id\":42,\"result\":{\"ok\":true}}\n\n")
+	}))
+	defer srv.Close()
+
+	tr, _ := NewHTTPTransport(srv.URL, WithEndpointPath(""))
+	_, err := tr.Send(context.Background(), &protocol.Request{JSONRPC: jsonrpcVersion, ID: json.RawMessage("1"), Method: "x"})
+	if err == nil {
+		t.Fatal("expected error for mismatched SSE id, got nil")
+	}
+}
+
 // A plain-JSON server still works (back-compat).
 func TestHTTPTransportPlainJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

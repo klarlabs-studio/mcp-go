@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -79,4 +80,65 @@ func TestParseTracingHeaders(t *testing.T) {
 			t.Errorf("traceID = %q, want trace-456", traceID)
 		}
 	})
+}
+
+func TestTracingFromHeaders_SanitizesInboundIDs(t *testing.T) {
+	const header = "X-Correlation-ID"
+
+	t.Run("adopts a well-formed inbound id", func(t *testing.T) {
+		mw := TracingFromHeaders(header)
+		var got string
+		handler := mw(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			got = CorrelationIDFromContext(ctx)
+			return protocol.NewResponse(req.ID, nil), nil
+		})
+		ctx := ContextWithHeader(context.Background(), header, "abc-123_def.45")
+		handler(ctx, &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "ping"})
+		if got != "abc-123_def.45" {
+			t.Fatalf("correlation id = %q, want the sanitized inbound value", got)
+		}
+	})
+
+	t.Run("rejects a malformed inbound id (log injection)", func(t *testing.T) {
+		mw := TracingFromHeaders(header)
+		var got string
+		handler := mw(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			got = CorrelationIDFromContext(ctx)
+			return protocol.NewResponse(req.ID, nil), nil
+		})
+		// Newline + spaces would forge log lines / spoof correlation.
+		ctx := ContextWithHeader(context.Background(), header, "evil\nINJECTED admin=true")
+		handler(ctx, &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "ping"})
+		if got != "" {
+			t.Fatalf("malformed inbound id was adopted: %q", got)
+		}
+	})
+
+	t.Run("rejects an over-long inbound id", func(t *testing.T) {
+		mw := TracingFromHeaders(header)
+		var got string
+		handler := mw(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			got = CorrelationIDFromContext(ctx)
+			return protocol.NewResponse(req.ID, nil), nil
+		})
+		long := strings.Repeat("a", maxTracingIDLen+1)
+		ctx := ContextWithHeader(context.Background(), header, long)
+		handler(ctx, &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "ping"})
+		if got != "" {
+			t.Fatalf("over-long inbound id was adopted (len %d)", len(got))
+		}
+	})
+}
+
+func TestParseTracingHeaders_DropsMalformed(t *testing.T) {
+	corrID, traceID := ParseTracingHeaders(map[string]string{
+		"x-correlation-id": "bad\nvalue",
+		"X-Trace-ID":       "good-1",
+	})
+	if corrID != "" {
+		t.Fatalf("malformed correlation id passed through: %q", corrID)
+	}
+	if traceID != "good-1" {
+		t.Fatalf("well-formed trace id = %q, want good-1", traceID)
+	}
 }
