@@ -635,12 +635,25 @@ func newRequestHandler(srv *Server, opts ...ServeOption) *requestHandler {
 	// Build the handler function
 	baseHandler := middleware.HandlerFunc(h.handle)
 
-	// Apply middleware if any
-	if len(options.middleware) > 0 {
-		h.handleFunc = middleware.Chain(options.middleware...)(baseHandler)
-	} else {
-		h.handleFunc = baseHandler
-	}
+	// Assemble the middleware chain, outermost first:
+	//   Recover (always on) -> Server.Use() middleware -> WithMiddleware() -> handler
+	//
+	// Two correctness fixes live here:
+	//   1. Server.Use() middleware is now actually applied. Previously only
+	//      options.middleware (from WithMiddleware) was read, so everything
+	//      registered via srv.Use(...) — including Recover/SizeLimit — was
+	//      silently dropped, leaving servers unprotected while appearing hardened.
+	//   2. Recover is forced OUTERMOST and on by default, so a panic in any
+	//      middleware or handler is converted to an error instead of unwinding
+	//      the transport read-loop and crashing the whole server process. A
+	//      caller that adds its own Recover (e.g. RecoverWithHandler) still runs
+	//      inner-first, so custom panic handling is preserved.
+	serverMW := srv.Middleware()
+	chain := make([]Middleware, 0, len(serverMW)+len(options.middleware)+1)
+	chain = append(chain, middleware.Recover())
+	chain = append(chain, serverMW...)
+	chain = append(chain, options.middleware...)
+	h.handleFunc = middleware.Chain(chain...)(baseHandler)
 
 	return h
 }
