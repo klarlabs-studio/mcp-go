@@ -2,7 +2,8 @@ package middleware
 
 import (
 	"context"
-	"fmt"
+	"log"
+	"runtime/debug"
 
 	"go.klarlabs.de/mcp/protocol"
 )
@@ -31,16 +32,18 @@ func RecoverWithHandler(handler PanicHandler) Middleware {
 	}
 }
 
-// defaultPanicHandler converts a panic value to an internal error.
-func defaultPanicHandler(_ context.Context, _ *protocol.Request, panicVal any) (*protocol.Response, error) {
-	var msg string
-	switch v := panicVal.(type) {
-	case error:
-		msg = fmt.Sprintf("panic: %v", v)
-	case string:
-		msg = fmt.Sprintf("panic: %s", v)
-	default:
-		msg = fmt.Sprintf("panic: %v", v)
+// defaultPanicHandler logs the panic (with stack) server-side and returns a
+// GENERIC internal error to the peer.
+//
+// The panic value is deliberately NOT included in the response: it routinely
+// embeds internal paths, state, or secret-adjacent values, and the peer may be
+// untrusted. Detail goes to the standard logger (stderr — never stdout, which
+// would corrupt stdio framing). Use RecoverWithHandler for custom reporting.
+func defaultPanicHandler(_ context.Context, req *protocol.Request, panicVal any) (*protocol.Response, error) {
+	method := ""
+	if req != nil {
+		method = req.Method
 	}
-	return nil, protocol.NewInternalError(msg)
+	log.Printf("mcp: recovered panic handling %q: %v\n%s", method, panicVal, debug.Stack())
+	return nil, protocol.NewInternalError("internal error")
 }

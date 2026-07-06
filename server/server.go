@@ -207,6 +207,18 @@ func (s *Server) Use(middleware ...Middleware) {
 	s.middleware = append(s.middleware, middleware...)
 }
 
+// Middleware returns a copy of the middleware registered via Use. The serve
+// path composes this with any serve-scoped middleware (WithMiddleware). It is
+// exported so the handler builder can read it; previously s.middleware was
+// never consulted, silently dropping everything passed to Use.
+func (s *Server) Middleware() []Middleware {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Middleware, len(s.middleware))
+	copy(out, s.middleware)
+	return out
+}
+
 // Tool starts building a new tool with the given name.
 func (s *Server) Tool(name string) *ToolBuilder {
 	return &ToolBuilder{
