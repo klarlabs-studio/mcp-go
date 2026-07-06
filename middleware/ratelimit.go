@@ -9,19 +9,42 @@ import (
 	"go.klarlabs.de/mcp/protocol"
 )
 
+// clientIDKey carries a per-client identifier used as the default rate-limit
+// bucket key. Transports/servers can populate it via ContextWithClientID so
+// RateLimit isolates clients without any extra configuration.
+const clientIDKey contextKey = "clientID"
+
+// ContextWithClientID attaches a per-client identifier to the context. RateLimit
+// uses it as the default bucket key so one client cannot exhaust another's
+// budget. Wire this from your transport (e.g. from an authenticated principal or
+// connection id) to get per-client limiting out of the box.
+func ContextWithClientID(ctx context.Context, clientID string) context.Context {
+	return context.WithValue(ctx, clientIDKey, clientID)
+}
+
+// ClientIDFromContext returns the per-client identifier set by
+// ContextWithClientID, or "" when none is present.
+func ClientIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(clientIDKey).(string)
+	return id
+}
+
 // RateLimitOption configures the rate limiter.
 type RateLimitOption func(*rateLimitConfig)
 
 type rateLimitConfig struct {
-	keyFunc func(*protocol.Request) string
-	logger  Logger
+	// keyFn derives the bucket key from the request context and payload. It is
+	// the single internal hook; WithRateLimitKeyFunc adapts the public
+	// request-only signature onto it.
+	keyFn  func(context.Context, *protocol.Request) string
+	logger Logger
 }
 
 // WithRateLimitKeyFunc sets a function to extract a rate limit key from requests.
 // This allows per-client or per-method rate limiting.
 func WithRateLimitKeyFunc(fn func(*protocol.Request) string) RateLimitOption {
 	return func(o *rateLimitConfig) {
-		o.keyFunc = fn
+		o.keyFn = func(_ context.Context, req *protocol.Request) string { return fn(req) }
 	}
 }
 
@@ -32,12 +55,26 @@ func WithRateLimitLogger(l Logger) RateLimitOption {
 	}
 }
 
-// RateLimit returns middleware that limits request rate using a token bucket algorithm.
-// The rate is specified as requests per second.
-// Burst allows short bursts above the rate limit.
+// RateLimit returns middleware that limits request rate using a token bucket
+// algorithm. The rate is specified as requests per second; burst allows short
+// bursts above the rate limit.
+//
+// Bucket key: by default RateLimit keys per client, using the identifier from
+// ContextWithClientID when present. If no client id is on the context it falls
+// back to a single shared "global" bucket — meaning one client can then consume
+// the whole budget for everyone. Wire ContextWithClientID from your transport
+// for safe per-client limiting, use RateLimitByClient to key off the request
+// payload, or override entirely with WithRateLimitKeyFunc.
 func RateLimit(rate int, burst int, opts ...RateLimitOption) Middleware {
 	cfg := &rateLimitConfig{
-		keyFunc: func(_ *protocol.Request) string { return "global" }, // Global by default
+		// Safe default: isolate per client when a client id is on the context,
+		// otherwise fall back to a shared bucket (documented above).
+		keyFn: func(ctx context.Context, _ *protocol.Request) string {
+			if id := ClientIDFromContext(ctx); id != "" {
+				return "client:" + id
+			}
+			return "global"
+		},
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -52,7 +89,7 @@ func RateLimit(rate int, burst int, opts ...RateLimitOption) Middleware {
 
 	return func(next HandlerFunc) HandlerFunc {
 		return func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
-			key := cfg.keyFunc(req)
+			key := cfg.keyFn(ctx, req)
 
 			if !limiter.Allow(ctx, key) {
 				if cfg.logger != nil {

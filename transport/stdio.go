@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"sync"
 
 	"go.klarlabs.de/mcp/protocol"
 )
@@ -17,13 +16,12 @@ type Stdio struct {
 	out    io.Writer
 	errOut io.Writer
 
-	framerMu sync.Mutex
-	framer   *NewlineFramer
-	// fallback is a single write-only framer over s.out, constructed lazily and
-	// reused for every out-of-Serve write (SendNotification/writeResponse before
-	// or after Serve). Reusing one framer means all such writes share the same
-	// mutex and therefore never interleave on s.out. Guarded by framerMu.
-	fallback *NewlineFramer
+	// writer is the single write-only framer over s.out. EVERY write to s.out —
+	// Serve responses, out-of-band SendNotification, and pre/post-Serve
+	// writeResponse — goes through this one framer, so all of them share one
+	// mutex and can never interleave bytes on s.out. Reads use a separate
+	// read-only framer created per Serve call.
+	writer *NewlineFramer
 }
 
 // StdioOption configures a Stdio transport.
@@ -62,6 +60,10 @@ func NewStdio(opts ...StdioOption) *Stdio {
 		opt(s)
 	}
 
+	// Construct the single shared write framer after options settle s.out. All
+	// writes to s.out flow through it so there is exactly one write mutex.
+	s.writer = NewNewlineFramer(nil, s.out)
+
 	return s
 }
 
@@ -73,11 +75,11 @@ func (s *Stdio) Addr() string {
 // Serve starts processing requests from stdin. It frames messages as
 // newline-delimited JSON via the shared transport.NewlineFramer, the same
 // primitive the stdio client uses, so the wire format never drifts between the
-// two sides.
+// two sides. Reads use a dedicated read-only framer; all writes go through the
+// shared write framer (s.writer) so out-of-band notifications cannot interleave
+// with Serve responses.
 func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
-	framer := NewNewlineFramer(s.in, s.out)
-	s.setFramer(framer)
-	defer s.setFramer(nil)
+	reader := NewNewlineFramer(s.in, nil)
 
 	// Channel for scanner results
 	lines := make(chan []byte)
@@ -85,8 +87,14 @@ func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
 
 	go func() {
 		for {
-			line, err := framer.ReadMessage()
+			line, err := reader.ReadMessage()
 			if err != nil {
+				if errors.Is(err, ErrFrameTooLarge) {
+					// A single over-cap frame must not wedge the transport: the
+					// framer already drained it, so skip and keep reading.
+					s.noteSkippedFrame()
+					continue
+				}
 				if !errors.Is(err, io.EOF) {
 					scanErr <- err
 				}
@@ -119,27 +127,13 @@ func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
 	}
 }
 
-func (s *Stdio) setFramer(f *NewlineFramer) {
-	s.framerMu.Lock()
-	s.framer = f
-	s.framerMu.Unlock()
-}
-
-func (s *Stdio) currentFramer() *NewlineFramer {
-	s.framerMu.Lock()
-	defer s.framerMu.Unlock()
-	if s.framer != nil {
-		return s.framer
+// noteSkippedFrame emits a best-effort diagnostic when an over-cap frame is
+// dropped. Errors are ignored: a broken stderr must not affect request serving.
+func (s *Stdio) noteSkippedFrame() {
+	if s.errOut == nil {
+		return
 	}
-	// Serve has not been called (or has returned): fall back to a single
-	// write-only framer over the configured output so SendNotification/
-	// writeResponse stay usable in tests and out-of-band sends. The fallback is
-	// cached and reused so all out-of-Serve writes share one mutex and never
-	// interleave on s.out.
-	if s.fallback == nil {
-		s.fallback = NewNewlineFramer(nil, s.out)
-	}
-	return s.fallback
+	_, _ = io.WriteString(s.errOut, "mcp-go/transport: dropped oversized stdio frame\n")
 }
 
 // SendNotification sends a JSON-RPC notification to the client.
@@ -149,7 +143,7 @@ func (s *Stdio) SendNotification(method string, params any) error {
 		return err
 	}
 
-	return s.currentFramer().WriteMessage(Notification{
+	return s.writer.WriteMessage(Notification{
 		JSONRPC: JSONRPCVersion,
 		Method:  method,
 		Params:  paramsData,
@@ -193,5 +187,5 @@ func (s *Stdio) handleLine(ctx context.Context, handler Handler, line []byte) {
 }
 
 func (s *Stdio) writeResponse(resp *protocol.Response) {
-	_ = s.currentFramer().WriteMessage(resp)
+	_ = s.writer.WriteMessage(resp)
 }

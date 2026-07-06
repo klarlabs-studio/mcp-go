@@ -132,3 +132,71 @@ func TestInMemoryStore(t *testing.T) {
 		}
 	})
 }
+
+func TestInMemoryStore_GetSessionReturnsCopy(t *testing.T) {
+	store := NewInMemoryStore()
+	ctx := context.Background()
+
+	orig := []byte(`{"secret":"a"}`)
+	if err := store.StoreSession(ctx, "c1", orig); err != nil {
+		t.Fatalf("StoreSession: %v", err)
+	}
+
+	// Mutating the caller's slice after storing must not change stored state.
+	orig[2] = 'X'
+
+	got, err := store.GetSession(ctx, "c1")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if string(got) != `{"secret":"a"}` {
+		t.Fatalf("stored data mutated via caller alias: got %q", got)
+	}
+
+	// Mutating the returned slice must not corrupt stored state either.
+	got[2] = 'Z'
+	again, _ := store.GetSession(ctx, "c1")
+	if string(again) != `{"secret":"a"}` {
+		t.Fatalf("stored data mutated via returned alias: got %q", again)
+	}
+}
+
+func TestInMemoryStore_BoundedEviction(t *testing.T) {
+	store := NewInMemoryStore(WithMaxSessions(3))
+	ctx := context.Background()
+
+	for _, id := range []string{"a", "b", "c"} {
+		if err := store.StoreSession(ctx, id, []byte(id)); err != nil {
+			t.Fatalf("StoreSession %s: %v", id, err)
+		}
+	}
+	// Inserting a 4th new key evicts the oldest ("a").
+	if err := store.StoreSession(ctx, "d", []byte("d")); err != nil {
+		t.Fatalf("StoreSession d: %v", err)
+	}
+
+	ids, _ := store.ListSessions(ctx)
+	if len(ids) != 3 {
+		t.Fatalf("len(sessions) = %d, want 3 (bound not enforced)", len(ids))
+	}
+	if got, _ := store.GetSession(ctx, "a"); got != nil {
+		t.Fatalf("oldest entry 'a' not evicted: %q", got)
+	}
+	for _, id := range []string{"b", "c", "d"} {
+		if got, _ := store.GetSession(ctx, id); string(got) != id {
+			t.Fatalf("entry %q = %q, want retained", id, got)
+		}
+	}
+
+	// Updating an existing key must not grow the store or evict.
+	if err := store.StoreSession(ctx, "b", []byte("b2")); err != nil {
+		t.Fatalf("update b: %v", err)
+	}
+	ids, _ = store.ListSessions(ctx)
+	if len(ids) != 3 {
+		t.Fatalf("after update len = %d, want 3", len(ids))
+	}
+	if got, _ := store.GetSession(ctx, "b"); string(got) != "b2" {
+		t.Fatalf("b = %q, want b2", got)
+	}
+}

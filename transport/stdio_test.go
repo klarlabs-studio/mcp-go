@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -296,6 +298,112 @@ func TestStdio_ConcurrentSendNotificationBeforeServe(t *testing.T) {
 		}
 		if n.Method != "notifications/progress" {
 			t.Fatalf("line %d method = %q, want notifications/progress", i, n.Method)
+		}
+	}
+}
+
+// TestStdio_Serve_SurvivesOversizedFrame verifies a single over-cap frame does
+// not wedge Serve: the frame is skipped and a following valid request is still
+// handled.
+func TestStdio_Serve_SurvivesOversizedFrame(t *testing.T) {
+	oversized := strings.Repeat("A", maxFrameSize+1024)
+	good, _ := json.Marshal(protocol.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`7`),
+		Method:  "after",
+	})
+	in := bytes.NewBufferString(oversized + "\n" + string(good) + "\n")
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+
+	tr := NewStdio(WithStdin(in), WithStdout(out), WithStderr(errOut))
+	handler := HandlerFunc(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+		return protocol.NewResponse(req.ID, "handled"), nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := tr.Serve(ctx, handler); err != nil {
+		t.Fatalf("Serve returned error (read loop died): %v", err)
+	}
+
+	if !strings.Contains(out.String(), `"result":"handled"`) {
+		t.Fatalf("valid request after oversized frame was not handled; out=%q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "oversized") {
+		t.Fatalf("expected a dropped-frame diagnostic on stderr, got %q", errOut.String())
+	}
+}
+
+// TestStdio_ConcurrentFallbackAndServeWritesNoInterleave exercises the
+// fallback->Serve transition: out-of-band SendNotification writes must not
+// interleave with Serve's response writes on the same s.out. Every write flows
+// through one shared write framer (one mutex), so the interleave-prone sink
+// still yields only well-formed frames and -race stays clean.
+func TestStdio_ConcurrentFallbackAndServeWritesNoInterleave(t *testing.T) {
+	out := &interleaveProneWriter{}
+	pr, pw := io.Pipe()
+	tr := NewStdio(WithStdin(pr), WithStdout(out), WithStderr(io.Discard))
+
+	handler := HandlerFunc(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+		return protocol.NewResponse(req.ID, "ok"), nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- tr.Serve(ctx, handler) }()
+
+	const requests = 100
+	const notifiers = 8
+	const perNotifier = 25
+
+	// Drive Serve with requests so its response writes overlap the concurrent
+	// notification writes below.
+	go func() {
+		var in bytes.Buffer
+		for i := 0; i < requests; i++ {
+			b, _ := json.Marshal(protocol.Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(strconv.Itoa(i + 1)),
+				Method:  "ping",
+			})
+			in.Write(b)
+			in.WriteByte('\n')
+		}
+		_, _ = pw.Write(in.Bytes())
+		_ = pw.Close() // EOF -> Serve returns
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(notifiers)
+	for n := 0; n < notifiers; n++ {
+		go func(id int) {
+			defer wg.Done()
+			for i := 0; i < perNotifier; i++ {
+				if err := tr.SendNotification("notifications/progress", map[string]int{"n": id, "seq": i}); err != nil {
+					t.Errorf("SendNotification: %v", err)
+					return
+				}
+			}
+		}(n)
+	}
+	wg.Wait()
+
+	if err := <-serveErr; err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+
+	output := out.String()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if got, want := len(lines), requests+notifiers*perNotifier; got != want {
+		t.Fatalf("got %d lines, want %d (interleaving splits or merges frames)", got, want)
+	}
+	for i, line := range lines {
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(line), &probe); err != nil {
+			t.Fatalf("line %d is not a well-formed frame: %v\nline=%q", i, err, line)
 		}
 	}
 }

@@ -35,6 +35,10 @@ type HTTPTransport struct {
 	// clientID correlates this transport's POSTs with its server-push (SSE)
 	// stream so the server can target resource-updated notifications.
 	clientID string
+	// maxResponseBytes caps how many bytes Send reads from a response body. A
+	// malicious or malfunctioning server could otherwise stream an unbounded
+	// body and OOM the client.
+	maxResponseBytes int64
 
 	// Streamable-HTTP session state (MCP 2025-03-26). A server may assign a
 	// session id on the initialize response (Mcp-Session-Id) which subsequent
@@ -43,16 +47,22 @@ type HTTPTransport struct {
 	sessionID string
 }
 
+// DefaultMaxResponseBytes bounds a single JSON-RPC HTTP response body. It
+// matches the 16MB stdio frame cap so both transports agree on the largest
+// message they will accept. Override via WithMaxResponseBytes.
+const DefaultMaxResponseBytes int64 = 16 * 1024 * 1024
+
 // HTTPTransportOption configures an HTTPTransport.
 type HTTPTransportOption func(*httpTransportOptions)
 
 type httpTransportOptions struct {
-	httpClient *http.Client
-	headers    http.Header
-	caBundle   *x509.CertPool
-	insecure   bool
-	timeout    time.Duration
-	endpoint   string
+	httpClient       *http.Client
+	headers          http.Header
+	caBundle         *x509.CertPool
+	insecure         bool
+	timeout          time.Duration
+	endpoint         string
+	maxResponseBytes int64
 }
 
 // WithHTTPClient overrides the http.Client used for requests. This is the only
@@ -106,6 +116,14 @@ func WithEndpointPath(path string) HTTPTransportOption {
 	return func(o *httpTransportOptions) { o.endpoint = path }
 }
 
+// WithMaxResponseBytes caps how many bytes the transport reads from a server
+// response body. Responses larger than the cap fail with an error rather than
+// being read into memory, bounding a malicious server's ability to OOM the
+// client. A non-positive value restores the default (DefaultMaxResponseBytes).
+func WithMaxResponseBytes(n int64) HTTPTransportOption {
+	return func(o *httpTransportOptions) { o.maxResponseBytes = n }
+}
+
 // NewHTTPTransport constructs a transport that POSTs JSON-RPC
 // requests to the supplied base URL. The base URL must include a
 // scheme (http or https) and host; the transport appends "/mcp" by
@@ -131,11 +149,15 @@ func NewHTTPTransport(baseURL string, opts ...HTTPTransportOption) (*HTTPTranspo
 	}
 
 	options := httpTransportOptions{
-		timeout:  30 * time.Second,
-		endpoint: "/mcp",
+		timeout:          30 * time.Second,
+		endpoint:         "/mcp",
+		maxResponseBytes: DefaultMaxResponseBytes,
 	}
 	for _, o := range opts {
 		o(&options)
+	}
+	if options.maxResponseBytes <= 0 {
+		options.maxResponseBytes = DefaultMaxResponseBytes
 	}
 
 	endpoint := joinURL(u, options.endpoint)
@@ -155,10 +177,11 @@ func NewHTTPTransport(baseURL string, opts ...HTTPTransportOption) (*HTTPTranspo
 	headers.Set("Accept", "application/json, text/event-stream")
 
 	return &HTTPTransport{
-		endpoint:   endpoint,
-		httpClient: client,
-		headers:    headers,
-		clientID:   newClientID(),
+		endpoint:         endpoint,
+		httpClient:       client,
+		headers:          headers,
+		clientID:         newClientID(),
+		maxResponseBytes: options.maxResponseBytes,
 	}, nil
 }
 
@@ -182,9 +205,30 @@ func buildHTTPClient(o httpTransportOptions) *http.Client {
 		}
 	}
 	return &http.Client{
-		Timeout:   o.timeout,
-		Transport: tr,
+		Timeout:       o.timeout,
+		Transport:     tr,
+		CheckRedirect: refuseCrossHostRedirect,
 	}
+}
+
+// refuseCrossHostRedirect blocks redirects that change host. WithHTTPHeader is
+// the auth hook (e.g. X-API-Key); Go only strips Authorization/Cookie on a
+// cross-host redirect, not arbitrary custom headers, so following a
+// server-supplied 3xx to another host would leak those credentials to an
+// attacker. Same-host redirects (path/scheme upgrades) remain allowed, capped
+// at Go's default of 10 hops. Only applies to the transport's built-in client;
+// a client supplied via WithHTTPClient keeps its own CheckRedirect.
+func refuseCrossHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+	if req.URL.Host != via[0].URL.Host {
+		return fmt.Errorf("mcp-go/client: refusing cross-host redirect from %q to %q", via[0].URL.Host, req.URL.Host)
+	}
+	if len(via) >= 10 {
+		return errors.New("mcp-go/client: stopped after 10 redirects")
+	}
+	return nil
 }
 
 func joinURL(base *url.URL, path string) string {
@@ -233,9 +277,15 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	// Bound the read: an untrusted server must not be able to stream an
+	// unbounded body and OOM the client. Read one byte past the cap so an
+	// exactly-at-cap body still succeeds while an over-cap body is detected.
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, t.maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if int64(len(respBody)) > t.maxResponseBytes {
+		return nil, fmt.Errorf("mcp-go/client: response exceeds %d byte limit", t.maxResponseBytes)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -271,12 +321,14 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 }
 
 // responseFromSSE extracts the JSON-RPC response from an SSE body. It scans
-// `data:` frames (concatenating multi-line data per event) and returns the first
-// frame that decodes to a Response matching the request id (or, failing an id
-// match, the first frame that carries a result/error).
+// `data:` frames (concatenating multi-line data per event) and returns the
+// frame whose id matches the request id. A mismatched id is never accepted as
+// the response: correlating an awaited request with an unrelated server frame
+// would let a server answer request A with the result meant for B. When the
+// request carried no id (want == ""), correlation is impossible, so the first
+// result/error frame is accepted.
 func responseFromSSE(body []byte, reqID json.RawMessage) (*protocol.Response, error) {
 	want := strings.TrimSpace(string(reqID))
-	var fallback *protocol.Response
 	var data strings.Builder
 	flush := func() (*protocol.Response, bool) {
 		defer data.Reset()
@@ -291,12 +343,12 @@ func responseFromSSE(body []byte, reqID json.RawMessage) (*protocol.Response, er
 		if r.Result == nil && r.Error == nil {
 			return nil, false
 		}
-		if want != "" && strings.TrimSpace(string(r.ID)) == want {
+		if want == "" {
+			// No id to correlate on: accept the first usable frame.
 			return &r, true
 		}
-		if fallback == nil {
-			rr := r
-			fallback = &rr
+		if strings.TrimSpace(string(r.ID)) == want {
+			return &r, true
 		}
 		return nil, false
 	}
@@ -314,8 +366,8 @@ func responseFromSSE(body []byte, reqID json.RawMessage) (*protocol.Response, er
 	if r, ok := flush(); ok {
 		return r, nil
 	}
-	if fallback != nil {
-		return fallback, nil
+	if want != "" {
+		return nil, fmt.Errorf("no JSON-RPC response matching id %s in SSE stream", want)
 	}
 	return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
 }

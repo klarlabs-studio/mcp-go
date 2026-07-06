@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -356,5 +357,126 @@ func TestHTTPTransport_EndpointPathOverride(t *testing.T) {
 	defer func() { _ = tr.Close() }()
 	if _, err := tr.Send(context.Background(), mkRequest(t, 1, "ping")); err != nil {
 		t.Fatalf("Send: %v", err)
+	}
+}
+
+// A malicious server must not be able to OOM the client by streaming an
+// unbounded body: the transport caps how many bytes it reads and errors past it.
+func TestHTTPTransport_OversizedResponseCapped(t *testing.T) {
+	big := strings.Repeat("a", 4096)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"jsonrpc":"2.0","id":1,"result":{"data":%q}}`, big)
+	}))
+	defer srv.Close()
+
+	tr, err := client.NewHTTPTransport(srv.URL, client.WithMaxResponseBytes(256))
+	if err != nil {
+		t.Fatalf("NewHTTPTransport: %v", err)
+	}
+	defer func() { _ = tr.Close() }()
+
+	_, err = tr.Send(context.Background(), mkRequest(t, 1, "x"))
+	if err == nil {
+		t.Fatal("expected oversized response to be rejected, got nil")
+	}
+	if !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("error = %v, want a size-limit error", err)
+	}
+}
+
+// A response at or below the cap still succeeds (boundary not over-rejected).
+func TestHTTPTransport_ResponseWithinCapSucceeds(t *testing.T) {
+	srv := &echoServer{
+		response: map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{"ok": true}},
+	}
+	ts := httptest.NewServer(srv.handler(t))
+	defer ts.Close()
+
+	tr, err := client.NewHTTPTransport(ts.URL, client.WithMaxResponseBytes(64*1024))
+	if err != nil {
+		t.Fatalf("NewHTTPTransport: %v", err)
+	}
+	defer func() { _ = tr.Close() }()
+
+	if _, err := tr.Send(context.Background(), mkRequest(t, 1, "x")); err != nil {
+		t.Fatalf("Send within cap: %v", err)
+	}
+}
+
+// A server-supplied redirect to another host must not forward the caller's
+// custom auth header (WithHTTPHeader is the auth hook; Go only strips
+// Authorization/Cookie cross-host). The transport refuses the cross-host hop.
+func TestHTTPTransport_RefusesCrossHostRedirect(t *testing.T) {
+	var mu sync.Mutex
+	attackerCalled := false
+	leakedKey := ""
+
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attackerCalled = true
+		leakedKey = r.Header.Get("X-API-Key")
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer attacker.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, attacker.URL+"/mcp", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	tr, err := client.NewHTTPTransport(origin.URL, client.WithHTTPHeader("X-API-Key", "s3cret"))
+	if err != nil {
+		t.Fatalf("NewHTTPTransport: %v", err)
+	}
+	defer func() { _ = tr.Close() }()
+
+	_, err = tr.Send(context.Background(), mkRequest(t, 1, "x"))
+	if err == nil {
+		t.Fatal("expected cross-host redirect to be refused, got nil")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if attackerCalled {
+		t.Fatalf("attacker host received the request; custom auth header leaked: %q", leakedKey)
+	}
+}
+
+// A same-host redirect (e.g. path change) is still followed, and the custom
+// header is forwarded to the same host as expected.
+func TestHTTPTransport_AllowsSameHostRedirect(t *testing.T) {
+	var mu sync.Mutex
+	gotKeyAtFinal := ""
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotKeyAtFinal = r.Header.Get("X-API-Key")
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"ok":true}}`)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	tr, err := client.NewHTTPTransport(ts.URL, client.WithHTTPHeader("X-API-Key", "s3cret"))
+	if err != nil {
+		t.Fatalf("NewHTTPTransport: %v", err)
+	}
+	defer func() { _ = tr.Close() }()
+
+	if _, err := tr.Send(context.Background(), mkRequest(t, 1, "x")); err != nil {
+		t.Fatalf("same-host redirect Send: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gotKeyAtFinal != "s3cret" {
+		t.Fatalf("same-host redirect target key = %q, want s3cret", gotKeyAtFinal)
 	}
 }
