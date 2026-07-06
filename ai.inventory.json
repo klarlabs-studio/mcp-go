@@ -2,6 +2,16 @@
   "schema_version": "2.0.0",
   "components": [
     {
+      "name": "CLAUDE.md",
+      "type": "ai_component",
+      "path": "CLAUDE.md"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "CLAUDE.md"
+    },
+    {
       "name": "main.go",
       "type": "prompt",
       "path": "examples/prompts/main.go"
