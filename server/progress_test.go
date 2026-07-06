@@ -211,3 +211,38 @@ func TestExtractProgressToken(t *testing.T) {
 		}
 	})
 }
+
+func TestExtractProgressToken_AcceptsBothTypes(t *testing.T) {
+	t.Run("accepts integer token", func(t *testing.T) {
+		// MCP permits progressToken to be an integer; it must not be dropped.
+		params := json.RawMessage(`{"_meta": {"progressToken": 42}, "name": "test"}`)
+		token := ExtractProgressToken(params)
+		if token != "42" {
+			t.Errorf("expected token '42', got %q", token)
+		}
+	})
+
+	t.Run("accepts string token", func(t *testing.T) {
+		params := json.RawMessage(`{"_meta": {"progressToken": "abc"}}`)
+		token := ExtractProgressToken(params)
+		if token != "abc" {
+			t.Errorf("expected token 'abc', got %q", token)
+		}
+	})
+
+	t.Run("returns empty for null token", func(t *testing.T) {
+		params := json.RawMessage(`{"_meta": {"progressToken": null}}`)
+		token := ExtractProgressToken(params)
+		if token != "" {
+			t.Errorf("expected empty token, got %q", token)
+		}
+	})
+
+	t.Run("returns empty for absent token", func(t *testing.T) {
+		params := json.RawMessage(`{"_meta": {}}`)
+		token := ExtractProgressToken(params)
+		if token != "" {
+			t.Errorf("expected empty token, got %q", token)
+		}
+	})
+}

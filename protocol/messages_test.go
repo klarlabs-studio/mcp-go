@@ -193,3 +193,73 @@ func TestNewErrorResponse(t *testing.T) {
 		t.Errorf("Error.Code = %d, want %d", resp.Error.Code, CodeInternalError)
 	}
 }
+
+func TestResponse_MarshalJSON_SpecCompliance(t *testing.T) {
+	t.Run("parse-error response emits id null", func(t *testing.T) {
+		// JSON-RPC 2.0 §5: id MUST be present, null when it can't be determined.
+		resp := NewErrorResponse(nil, NewParseError("bad json"))
+
+		data, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("failed to parse marshaled response: %v", err)
+		}
+
+		idRaw, ok := raw["id"]
+		if !ok {
+			t.Fatal("id member missing from error response")
+		}
+		if string(idRaw) != "null" {
+			t.Errorf("id = %s, want null", idRaw)
+		}
+		if _, hasResult := raw["result"]; hasResult {
+			t.Error("error response must not carry a result member")
+		}
+	})
+
+	t.Run("success response always carries result", func(t *testing.T) {
+		// Even a nil result must yield an explicit result member (null).
+		resp := NewResponse(json.RawMessage(`7`), nil)
+
+		data, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("failed to parse marshaled response: %v", err)
+		}
+
+		if _, hasResult := raw["result"]; !hasResult {
+			t.Error("success response must carry a result member")
+		}
+		if _, hasErr := raw["error"]; hasErr {
+			t.Error("success response must not carry an error member")
+		}
+		if string(raw["id"]) != "7" {
+			t.Errorf("id = %s, want 7", raw["id"])
+		}
+	})
+
+	t.Run("non-empty result is preserved", func(t *testing.T) {
+		resp := NewResponse(json.RawMessage(`1`), map[string]string{"status": "ok"})
+
+		data, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatalf("failed to parse: %v", err)
+		}
+		if string(raw["result"]) != `{"status":"ok"}` {
+			t.Errorf("result = %s, want {\"status\":\"ok\"}", raw["result"])
+		}
+	})
+}

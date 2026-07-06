@@ -108,8 +108,12 @@ func handleNotification(ctx context.Context, handler transport.Handler, sender *
 func protoToRequest(msg *pb.Message) *protocol.Request {
 	var id json.RawMessage
 	if msg.RequestId != "" {
-		// Wrap string ID in quotes for JSON
-		id = json.RawMessage(`"` + msg.RequestId + `"`)
+		// Encode the request id as a JSON string with proper escaping. Manual
+		// quote-wrapping would emit malformed JSON for ids containing quotes,
+		// backslashes, or control characters.
+		if encoded, err := json.Marshal(msg.RequestId); err == nil {
+			id = encoded
+		}
 	}
 
 	return &protocol.Request{

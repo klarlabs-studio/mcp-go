@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"sync"
@@ -118,9 +119,12 @@ func ExtractProgressToken(params json.RawMessage) ProgressToken {
 		return ""
 	}
 
+	// MCP allows progressToken to be a string OR an integer, so it is decoded
+	// as a raw token and normalized rather than forced into a string (which
+	// would fail the whole unmarshal for a numeric token, silently dropping it).
 	var meta struct {
 		Meta struct {
-			ProgressToken string `json:"progressToken"`
+			ProgressToken json.RawMessage `json:"progressToken"`
 		} `json:"_meta"`
 	}
 
@@ -128,5 +132,27 @@ func ExtractProgressToken(params json.RawMessage) ProgressToken {
 		return ""
 	}
 
-	return ProgressToken(meta.Meta.ProgressToken)
+	return parseProgressToken(meta.Meta.ProgressToken)
+}
+
+// parseProgressToken converts a raw progressToken (string or number, per the
+// MCP spec) into an opaque ProgressToken. A JSON string is unquoted; a numeric
+// token is preserved verbatim as its digits. Absent, null, or malformed tokens
+// yield the empty token.
+func parseProgressToken(raw json.RawMessage) ProgressToken {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+
+	if raw[0] == '"' {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return ""
+		}
+		return ProgressToken(s)
+	}
+
+	// Numeric (or other scalar) token: keep the raw JSON as an opaque token.
+	return ProgressToken(raw)
 }
