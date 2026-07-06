@@ -515,3 +515,161 @@ func TestServer_RemovePrompt(t *testing.T) {
 		t.Error("expected RemovePrompt to return false for already removed prompt")
 	}
 }
+
+// registerTestResource registers a resource under tmpl whose handler echoes the
+// template as marker text, so tests can assert which resource matched.
+func registerTestResource(srv *Server, tmpl string) {
+	srv.Resource(tmpl).Handler(func(_ context.Context, uri string, _ map[string]string) (*ResourceContent, error) {
+		return &ResourceContent{URI: uri, Text: tmpl}, nil
+	})
+}
+
+func TestFindResourceForURI_Deterministic(t *testing.T) {
+	t.Run("exact literal beats catch-all template", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		registerTestResource(srv, "config://database")
+		registerTestResource(srv, "config://{key}")
+
+		// Map iteration order is randomized per range; run many times so a
+		// non-deterministic implementation would eventually pick the wrong one.
+		for i := 0; i < 1000; i++ {
+			r, ok := srv.FindResourceForURI("config://database")
+			if !ok {
+				t.Fatalf("iteration %d: expected a match", i)
+			}
+			if r.URITemplate() != "config://database" {
+				t.Fatalf("iteration %d: expected exact match config://database, got %q", i, r.URITemplate())
+			}
+		}
+	})
+
+	t.Run("catch-all still matches non-literal URIs", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		registerTestResource(srv, "config://database")
+		registerTestResource(srv, "config://{key}")
+
+		r, ok := srv.FindResourceForURI("config://timeout")
+		if !ok {
+			t.Fatal("expected the catch-all template to match")
+		}
+		if r.URITemplate() != "config://{key}" {
+			t.Fatalf("expected config://{key}, got %q", r.URITemplate())
+		}
+	})
+
+	t.Run("fewer-parameter template wins over broader overlap", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		// Both match "files://foo/config"; the single-param template with a
+		// literal "/config" suffix is more specific than the two-param one.
+		registerTestResource(srv, "files://{dir}/config")
+		registerTestResource(srv, "files://{dir}/{name}")
+
+		for i := 0; i < 1000; i++ {
+			r, ok := srv.FindResourceForURI("files://foo/config")
+			if !ok {
+				t.Fatalf("iteration %d: expected a match", i)
+			}
+			if r.URITemplate() != "files://{dir}/config" {
+				t.Fatalf("iteration %d: expected files://{dir}/config, got %q", i, r.URITemplate())
+			}
+		}
+		// The broader template still handles the non-overlapping case.
+		r, ok := srv.FindResourceForURI("files://foo/bar")
+		if !ok || r.URITemplate() != "files://{dir}/{name}" {
+			t.Fatalf("expected files://{dir}/{name} for files://foo/bar, got %q (ok=%v)", tmplOf(r), ok)
+		}
+	})
+
+	t.Run("no match returns false", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		registerTestResource(srv, "config://database")
+		if _, ok := srv.FindResourceForURI("other://thing"); ok {
+			t.Fatal("expected no match")
+		}
+	})
+}
+
+func tmplOf(r *Resource) string {
+	if r == nil {
+		return "<nil>"
+	}
+	return r.URITemplate()
+}
+
+func TestDuplicateRegistration(t *testing.T) {
+	t.Run("duplicate tool name is rejected and recorded", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		srv.Tool("greet").Description("first").
+			Handler(func(_ struct{}) (string, error) { return "first", nil })
+		srv.Tool("greet").Description("second").
+			Handler(func(_ struct{}) (string, error) { return "second", nil })
+
+		if err := srv.Err(); err == nil {
+			t.Fatal("expected a duplicate-registration error from Err()")
+		}
+		got, ok := srv.GetTool("greet")
+		if !ok {
+			t.Fatal("expected greet tool to exist")
+		}
+		if got.description != "first" {
+			t.Fatalf("expected the first registration to win, got description %q", got.description)
+		}
+	})
+
+	t.Run("duplicate resource template is rejected and recorded", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		registerTestResource(srv, "config://{key}")
+		registerTestResource(srv, "config://{key}")
+
+		if err := srv.Err(); err == nil {
+			t.Fatal("expected a duplicate-registration error from Err()")
+		}
+		if len(srv.Resources()) != 1 {
+			t.Fatalf("expected exactly one resource, got %d", len(srv.Resources()))
+		}
+	})
+
+	t.Run("duplicate prompt name is rejected and recorded", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		srv.Prompt("p").Description("first").
+			Handler(func(_ context.Context, _ map[string]string) (*PromptResult, error) { return &PromptResult{}, nil })
+		srv.Prompt("p").Description("second").
+			Handler(func(_ context.Context, _ map[string]string) (*PromptResult, error) { return &PromptResult{}, nil })
+
+		if err := srv.Err(); err == nil {
+			t.Fatal("expected a duplicate-registration error from Err()")
+		}
+		got, _ := srv.GetPrompt("p")
+		if got.description != "first" {
+			t.Fatalf("expected first prompt to win, got %q", got.description)
+		}
+	})
+
+	t.Run("no error when names are unique", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		registerTestResource(srv, "a://{x}")
+		registerTestResource(srv, "b://{y}")
+		if err := srv.Err(); err != nil {
+			t.Fatalf("expected no error for unique templates, got %v", err)
+		}
+	})
+
+	t.Run("remove then re-register is an intentional replace", func(t *testing.T) {
+		srv := New(Info{Name: "test", Version: "1.0.0"})
+		srv.Tool("greet").Description("first").
+			Handler(func(_ struct{}) (string, error) { return "first", nil })
+		if !srv.RemoveTool("greet") {
+			t.Fatal("expected RemoveTool to report the tool existed")
+		}
+		srv.Tool("greet").Description("second").
+			Handler(func(_ struct{}) (string, error) { return "second", nil })
+
+		if err := srv.Err(); err != nil {
+			t.Fatalf("expected no error after remove-then-replace, got %v", err)
+		}
+		got, _ := srv.GetTool("greet")
+		if got.description != "second" {
+			t.Fatalf("expected replacement to win, got %q", got.description)
+		}
+	})
+}

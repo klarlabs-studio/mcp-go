@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -85,6 +87,12 @@ type Server struct {
 	completions  *completionRegistry
 	tasks        *TaskManager
 	resourceSubs *resourceSubscriptions
+
+	// regErrs accumulates registration collisions. The fluent builder API
+	// returns the builder rather than an error, so a duplicate tool/resource/
+	// prompt name (which is rejected, not silently overwritten) is recorded
+	// here and surfaced via Err().
+	regErrs []error
 }
 
 // New creates a new MCP server with the given info and options.
@@ -272,11 +280,30 @@ func (s *Server) Manifest() Manifest {
 	}
 }
 
-// registerTool adds a tool to the server.
+// registerTool adds a tool to the server. A duplicate name is rejected (the
+// first registration wins) and recorded on the server rather than silently
+// overwriting the earlier tool; check Err() to surface the collision. To
+// intentionally replace a tool, call RemoveTool first, then re-register.
 func (s *Server) registerTool(t *Tool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.tools[t.name]; exists {
+		s.regErrs = append(s.regErrs,
+			fmt.Errorf("duplicate tool registration: %q is already registered", t.name))
+		return
+	}
 	s.tools[t.name] = t
+}
+
+// Err returns any errors accumulated while wiring up the server, joined into a
+// single error (nil when there were none). Because the fluent builder API
+// returns the builder — not an error — registration collisions (duplicate
+// tool, resource, or prompt names) are recorded and reported here. Check it
+// once after registering everything: if err := srv.Err(); err != nil { ... }.
+func (s *Server) Err() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return errors.Join(s.regErrs...)
 }
 
 // GetTool retrieves a tool by name.
@@ -326,10 +353,19 @@ func (s *Server) Resources() []ResourceInfo {
 	return result
 }
 
-// registerResource adds a resource to the server.
+// registerResource adds a resource to the server. A duplicate URI template is
+// rejected (the first registration wins) and recorded rather than silently
+// overwriting the earlier resource; check Err() to surface the collision. To
+// intentionally replace a resource, call RemoveResource first, then
+// re-register.
 func (s *Server) registerResource(r *Resource) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.resources[r.uriTemplate]; exists {
+		s.regErrs = append(s.regErrs,
+			fmt.Errorf("duplicate resource registration: URI template %q is already registered", r.uriTemplate))
+		return
+	}
 	s.resources[r.uriTemplate] = r
 }
 
@@ -352,17 +388,19 @@ func (s *Server) RemoveResource(uriTemplate string) bool {
 	return ok
 }
 
-// FindResourceForURI finds a resource that matches the given URI.
+// FindResourceForURI finds the resource that matches the given URI.
+//
+// When several registered templates match the same concrete URI (e.g. the
+// specific "config://database" and the catch-all "config://{key}"), selection
+// is deterministic and most-specific-wins: an exact literal template beats any
+// template with parameters, and among templates the one with the fewest
+// parameters (then the longest literal prefix, then lexically smallest) is
+// chosen. It never depends on Go's randomized map iteration order.
 func (s *Server) FindResourceForURI(uri string) (*Resource, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, r := range s.resources {
-		if _, ok := r.matchURI(uri); ok {
-			return r, true
-		}
-	}
-	return nil, false
+	return selectResource(s.resources, uri)
 }
 
 // Prompt starts building a new prompt with the given name.
@@ -392,10 +430,18 @@ func (s *Server) Prompts() []PromptInfo {
 	return result
 }
 
-// registerPrompt adds a prompt to the server.
+// registerPrompt adds a prompt to the server. A duplicate name is rejected
+// (the first registration wins) and recorded rather than silently overwriting
+// the earlier prompt; check Err() to surface the collision. To intentionally
+// replace a prompt, call RemovePrompt first, then re-register.
 func (s *Server) registerPrompt(p *Prompt) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.prompts[p.name]; exists {
+		s.regErrs = append(s.regErrs,
+			fmt.Errorf("duplicate prompt registration: %q is already registered", p.name))
+		return
+	}
 	s.prompts[p.name] = p
 }
 

@@ -83,13 +83,17 @@ func (r *completionRegistry) Handle(ctx context.Context, ref CompletionRef, arg 
 		handler = r.promptHandlers[ref.Name]
 	case CompletionRefResource:
 		handler = r.resourceHandlers[ref.URI]
-		// Try to match by URI template pattern if exact match fails
+		// Fall back to template matching when there is no exact match. When
+		// several templates match the same URI, selection is deterministic and
+		// most-specific-wins (see moreSpecific) rather than depending on the
+		// randomized map-iteration order.
 		if handler == nil {
-			for template, h := range r.resourceHandlers {
-				if _, ok := matchURITemplate(template, ref.URI); ok {
-					handler = h
-					break
-				}
+			templates := make([]string, 0, len(r.resourceHandlers))
+			for template := range r.resourceHandlers {
+				templates = append(templates, template)
+			}
+			if template, ok := mostSpecificMatchingTemplate(templates, ref.URI); ok {
+				handler = r.resourceHandlers[template]
 			}
 		}
 	}
