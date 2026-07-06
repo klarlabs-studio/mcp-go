@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -202,4 +205,153 @@ func (r *Resource) matchURI(uri string) (map[string]string, bool) {
 	}
 
 	return params, true
+}
+
+// countTemplateParams returns the number of {param} placeholders in a template.
+func countTemplateParams(tmpl string) int {
+	return len(templateParamRegex.FindAllStringIndex(tmpl, -1))
+}
+
+// literalPrefixLen returns the length of the literal prefix of a template —
+// the run of characters before the first {param} placeholder. A concrete URI
+// with no parameters has a prefix equal to its whole length.
+func literalPrefixLen(tmpl string) int {
+	if i := strings.IndexByte(tmpl, '{'); i >= 0 {
+		return i
+	}
+	return len(tmpl)
+}
+
+// literalLen returns the number of literal (non-placeholder) characters in a
+// template, used as a tiebreak when two templates share the same parameter
+// count and literal prefix.
+func literalLen(tmpl string) int {
+	return len(templateParamRegex.ReplaceAllString(tmpl, ""))
+}
+
+// moreSpecific reports whether template a is strictly more specific than
+// template b, giving a total, deterministic ordering for most-specific-wins
+// dispatch. An exact/literal template (no parameters) always beats a
+// parameterized one; among templates the tie-break order is: fewer parameters,
+// then longer literal prefix, then more literal characters, then the lexically
+// smaller template. The final lexical tie-break guarantees a stable result
+// regardless of registration or map-iteration order.
+func moreSpecific(a, b string) bool {
+	if pa, pb := countTemplateParams(a), countTemplateParams(b); pa != pb {
+		return pa < pb
+	}
+	if la, lb := literalPrefixLen(a), literalPrefixLen(b); la != lb {
+		return la > lb
+	}
+	if la, lb := literalLen(a), literalLen(b); la != lb {
+		return la > lb
+	}
+	return a < b
+}
+
+// selectResource returns the most specific resource whose template matches uri,
+// deterministically. It iterates a sorted copy of the template keys (never the
+// randomized map) and keeps the most specific match per moreSpecific, so
+// overlapping templates always resolve to the same resource.
+func selectResource(resources map[string]*Resource, uri string) (*Resource, bool) {
+	keys := make([]string, 0, len(resources))
+	for k := range resources {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var best *Resource
+	for _, k := range keys {
+		r := resources[k]
+		if _, ok := r.matchURI(uri); !ok {
+			continue
+		}
+		if best == nil || moreSpecific(r.uriTemplate, best.uriTemplate) {
+			best = r
+		}
+	}
+	return best, best != nil
+}
+
+// mostSpecificMatchingTemplate returns the most specific template from
+// templates that matches uri, deterministically (see moreSpecific). It is used
+// where only template strings are available (e.g. completion handlers keyed by
+// template) rather than pre-compiled resources.
+func mostSpecificMatchingTemplate(templates []string, uri string) (string, bool) {
+	sorted := make([]string, len(templates))
+	copy(sorted, templates)
+	sort.Strings(sorted)
+
+	best := ""
+	found := false
+	for _, t := range sorted {
+		if _, ok := matchURITemplate(t, uri); !ok {
+			continue
+		}
+		if !found || moreSpecific(t, best) {
+			best = t
+			found = true
+		}
+	}
+	return best, found
+}
+
+// ContainedPath safely resolves an untrusted resource parameter to a filesystem
+// path guaranteed to stay within root, for file-style resources whose {param}
+// maps onto a path under a base directory.
+//
+// IMPORTANT: resource parameters are untrusted and arrive URL-undecoded. A
+// {param} capture group forbids "/", but a value of ".." — or a percent-encoded
+// or otherwise crafted segment that a handler decodes — can still escape the
+// base directory. Handlers that turn a parameter into a path MUST route it
+// through this helper (or an equivalent check) before touching the filesystem;
+// the framework does not do so automatically.
+//
+// The parameter must be relative (an absolute value is rejected). The joined
+// path is cleaned and checked for lexical containment under root, then symlinks
+// are resolved and containment is re-checked so a symlink inside root cannot
+// point outside it. root must exist. On success it returns the cleaned,
+// symlink-resolved absolute path; on any escape it returns a non-nil error.
+func ContainedPath(root, param string) (string, error) {
+	if param == "" {
+		return "", fmt.Errorf("empty path parameter")
+	}
+	if filepath.IsAbs(param) {
+		return "", fmt.Errorf("path parameter %q must be relative to root %q", param, root)
+	}
+
+	cleaned := filepath.Clean(filepath.Join(root, param))
+	if !withinRoot(root, cleaned) {
+		return "", fmt.Errorf("path parameter %q escapes root %q", param, root)
+	}
+
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve root %q: %w", root, err)
+	}
+
+	realPath, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		// A not-yet-existing target has nothing to resolve; the lexical
+		// containment check above already guarantees it is under root.
+		if os.IsNotExist(err) {
+			return cleaned, nil
+		}
+		return "", fmt.Errorf("resolve path %q: %w", cleaned, err)
+	}
+
+	if !withinRoot(realRoot, realPath) {
+		return "", fmt.Errorf("path parameter %q escapes root %q via symlink", param, root)
+	}
+	return realPath, nil
+}
+
+// withinRoot reports whether path is root itself or lies beneath it, using a
+// lexical relative-path check (no filesystem access).
+func withinRoot(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

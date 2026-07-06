@@ -224,3 +224,35 @@ func TestResourceTemplates(t *testing.T) {
 		}
 	})
 }
+
+func TestCompletionRegistry_DeterministicResourceMatch(t *testing.T) {
+	reg := newCompletionRegistry()
+	// Overlapping templates: a specific single-param template and a broader
+	// two-param one both match "github://acme/config".
+	reg.RegisterResourceCompletion("github://{owner}/config", func(_ context.Context, _ CompletionRef, _ CompletionArgument) (*CompletionResult, error) {
+		return &CompletionResult{Values: []string{"specific"}}, nil
+	})
+	reg.RegisterResourceCompletion("github://{owner}/{repo}", func(_ context.Context, _ CompletionRef, _ CompletionArgument) (*CompletionResult, error) {
+		return &CompletionResult{Values: []string{"broad"}}, nil
+	})
+
+	ref := CompletionRef{Type: CompletionRefResource, URI: "github://acme/config"}
+	for i := 0; i < 1000; i++ {
+		res, err := reg.Handle(context.Background(), ref, CompletionArgument{Name: "x"})
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+		if len(res.Values) != 1 || res.Values[0] != "specific" {
+			t.Fatalf("iteration %d: expected most-specific handler, got %v", i, res.Values)
+		}
+	}
+
+	// The broader template still handles non-overlapping URIs.
+	res, err := reg.Handle(context.Background(), CompletionRef{Type: CompletionRefResource, URI: "github://acme/tokenops"}, CompletionArgument{Name: "x"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(res.Values) != 1 || res.Values[0] != "broad" {
+		t.Fatalf("expected broad handler, got %v", res.Values)
+	}
+}

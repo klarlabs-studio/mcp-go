@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -237,4 +239,90 @@ func TestMatchURI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContainedPath(t *testing.T) {
+	root := t.TempDir()
+	// Create a real file inside root and a directory to symlink from.
+	if err := os.WriteFile(filepath.Join(root, "data.txt"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("accepts a contained relative path", func(t *testing.T) {
+		got, err := ContainedPath(root, "data.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		wantReal, _ := filepath.EvalSymlinks(filepath.Join(root, "data.txt"))
+		if got != wantReal {
+			t.Fatalf("expected %q, got %q", wantReal, got)
+		}
+	})
+
+	t.Run("accepts a not-yet-existing contained path", func(t *testing.T) {
+		got, err := ContainedPath(root, "subdir/new.txt")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != filepath.Join(root, "subdir/new.txt") {
+			t.Fatalf("unexpected path %q", got)
+		}
+	})
+
+	t.Run("rejects dot-dot traversal", func(t *testing.T) {
+		if _, err := ContainedPath(root, "../etc/passwd"); err == nil {
+			t.Fatal("expected traversal to be rejected")
+		}
+	})
+
+	t.Run("rejects deep dot-dot traversal that escapes", func(t *testing.T) {
+		if _, err := ContainedPath(root, "a/b/../../../secret"); err == nil {
+			t.Fatal("expected escaping traversal to be rejected")
+		}
+	})
+
+	t.Run("rejects absolute path", func(t *testing.T) {
+		if _, err := ContainedPath(root, "/etc/passwd"); err == nil {
+			t.Fatal("expected absolute path to be rejected")
+		}
+	})
+
+	t.Run("rejects empty parameter", func(t *testing.T) {
+		if _, err := ContainedPath(root, ""); err == nil {
+			t.Fatal("expected empty parameter to be rejected")
+		}
+	})
+
+	t.Run("rejects symlink escape", func(t *testing.T) {
+		// A symlink inside root pointing outside it must be rejected once
+		// symlinks are resolved.
+		outside := t.TempDir()
+		if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		linkPath := filepath.Join(root, "escape")
+		if err := os.Symlink(outside, linkPath); err != nil {
+			t.Skipf("symlinks unsupported: %v", err)
+		}
+		if _, err := ContainedPath(root, "escape/secret.txt"); err == nil {
+			t.Fatal("expected symlink escape to be rejected")
+		}
+	})
+
+	t.Run("accepts symlink that stays within root", func(t *testing.T) {
+		sub := filepath.Join(root, "real")
+		if err := os.MkdirAll(sub, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sub, "inside.txt"), []byte("hi"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		linkPath := filepath.Join(root, "alias")
+		if err := os.Symlink(sub, linkPath); err != nil {
+			t.Skipf("symlinks unsupported: %v", err)
+		}
+		if _, err := ContainedPath(root, "alias/inside.txt"); err != nil {
+			t.Fatalf("expected contained symlink to be accepted, got %v", err)
+		}
+	})
 }
