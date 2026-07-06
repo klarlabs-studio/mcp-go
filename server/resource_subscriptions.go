@@ -21,13 +21,19 @@ type ResourceNotifier interface {
 // resources/subscribe request handlers and an out-of-band watcher that calls
 // NotifyResourceUpdated.
 type resourceSubscriptions struct {
-	mu       sync.RWMutex
-	byURI    map[string]map[string]struct{} // uri -> set of client ids
-	notifier ResourceNotifier
+	mu           sync.RWMutex
+	byURI        map[string]map[string]struct{} // uri -> set of client ids
+	perClient    map[string]int                 // client id -> subscription count
+	maxPerClient int
+	notifier     ResourceNotifier
 }
 
 func newResourceSubscriptions() *resourceSubscriptions {
-	return &resourceSubscriptions{byURI: make(map[string]map[string]struct{})}
+	return &resourceSubscriptions{
+		byURI:        make(map[string]map[string]struct{}),
+		perClient:    make(map[string]int),
+		maxPerClient: defaultMaxSubscriptionsPerClient,
+	}
 }
 
 func (r *resourceSubscriptions) setNotifier(n ResourceNotifier) {
@@ -36,26 +42,53 @@ func (r *resourceSubscriptions) setNotifier(n ResourceNotifier) {
 	r.notifier = n
 }
 
-func (r *resourceSubscriptions) subscribe(clientID, uri string) {
+// subscribe records a client's interest in a URI. It returns false (rejecting
+// the subscription) when the client is already at its per-client cap — the
+// registry is client-controlled and must stay bounded (Secure By Default).
+// Re-subscribing to an existing URI is idempotent and always accepted.
+func (r *resourceSubscriptions) subscribe(clientID, uri string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if set := r.byURI[uri]; set != nil {
+		if _, ok := set[clientID]; ok {
+			return true // already subscribed — idempotent
+		}
+	}
+	if r.perClient[clientID] >= r.maxPerClient {
+		return false
+	}
 	set := r.byURI[uri]
 	if set == nil {
 		set = make(map[string]struct{})
 		r.byURI[uri] = set
 	}
 	set[clientID] = struct{}{}
+	r.perClient[clientID]++
+	return true
 }
 
 func (r *resourceSubscriptions) unsubscribe(clientID, uri string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if set := r.byURI[uri]; set != nil {
-		delete(set, clientID)
+		if _, ok := set[clientID]; ok {
+			delete(set, clientID)
+			r.decClientLocked(clientID)
+		}
 		if len(set) == 0 {
 			delete(r.byURI, uri)
 		}
 	}
+}
+
+// decClientLocked decrements a client's subscription count, dropping the entry
+// at zero. Caller must hold r.mu.
+func (r *resourceSubscriptions) decClientLocked(clientID string) {
+	if r.perClient[clientID] <= 1 {
+		delete(r.perClient, clientID)
+		return
+	}
+	r.perClient[clientID]--
 }
 
 // removeClient drops every subscription a client held — called when its
@@ -69,6 +102,7 @@ func (r *resourceSubscriptions) removeClient(clientID string) {
 			delete(r.byURI, uri)
 		}
 	}
+	delete(r.perClient, clientID)
 }
 
 func (r *resourceSubscriptions) subscribers(uri string) []string {

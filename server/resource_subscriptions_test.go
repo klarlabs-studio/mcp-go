@@ -120,3 +120,38 @@ func TestResourceSubscriptionsJoinsDeliveryErrors(t *testing.T) {
 		t.Errorf("got %d notifications, want 2 (both attempted)", len(notifier.calls))
 	}
 }
+
+// TestResourceSubscriptionsPerClientCap proves the wired resource-subscription
+// registry enforces a per-client cap so a single client cannot grow it without
+// bound, and that unsubscribe / removeClient free the client's budget.
+func TestResourceSubscriptionsPerClientCap(t *testing.T) {
+	r := newResourceSubscriptions()
+	r.maxPerClient = 2
+
+	if !r.subscribe("c1", "u1") {
+		t.Fatal("u1 should be accepted")
+	}
+	if !r.subscribe("c1", "u2") {
+		t.Fatal("u2 should be accepted")
+	}
+	if r.subscribe("c1", "u3") {
+		t.Fatal("u3 should be rejected once the client is at its cap")
+	}
+
+	// Idempotent re-subscribe is always accepted.
+	if !r.subscribe("c1", "u1") {
+		t.Fatal("re-subscribing to u1 should be accepted")
+	}
+
+	// Unsubscribing frees a slot.
+	r.unsubscribe("c1", "u1")
+	if !r.subscribe("c1", "u3") {
+		t.Fatal("after unsubscribe, u3 should be accepted")
+	}
+
+	// removeClient resets the client's budget entirely.
+	r.removeClient("c1")
+	if !r.subscribe("c1", "u4") {
+		t.Fatal("after removeClient, a fresh subscription should be accepted")
+	}
+}
