@@ -3,6 +3,8 @@ package transport_test
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,6 +41,124 @@ func TestWebSocket(t *testing.T) {
 
 		// Test is covered by integration tests below
 		cancel()
+	})
+}
+
+func TestWebSocket_Security(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	newServer := func(t *testing.T, addr string, opts ...transport.WebSocketOption) {
+		t.Helper()
+		handler := transport.HandlerFunc(func(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+			return protocol.NewResponse(req.ID, "ok"), nil
+		})
+		ws := transport.NewWebSocket(addr, opts...)
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		go func() { _ = ws.Serve(ctx, handler) }()
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	t.Run("rejects cross-origin upgrade by default", func(t *testing.T) {
+		newServer(t, ":18771")
+
+		hdr := http.Header{}
+		hdr.Set("Origin", "http://evil.example")
+		conn, resp, err := websocket.DefaultDialer.Dial("ws://localhost:18771/", hdr)
+		if err == nil {
+			_ = conn.Close()
+			t.Fatal("expected cross-origin upgrade to be rejected")
+		}
+		if resp != nil {
+			if resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			if resp.StatusCode != http.StatusForbidden {
+				t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+		}
+	})
+
+	t.Run("allows no-origin (non-browser) client", func(t *testing.T) {
+		newServer(t, ":18772")
+
+		conn, resp, err := websocket.DefaultDialer.Dial("ws://localhost:18772/", nil)
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		if err != nil {
+			t.Fatalf("no-origin client should connect: %v", err)
+		}
+		_ = conn.Close()
+	})
+
+	t.Run("allows allowlisted origin", func(t *testing.T) {
+		newServer(t, ":18773", transport.WithWebSocketAllowedOrigins("http://app.example"))
+
+		hdr := http.Header{}
+		hdr.Set("Origin", "http://app.example")
+		conn, resp, err := websocket.DefaultDialer.Dial("ws://localhost:18773/", hdr)
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		if err != nil {
+			t.Fatalf("allowlisted origin should connect: %v", err)
+		}
+		_ = conn.Close()
+	})
+
+	t.Run("enforces max connections", func(t *testing.T) {
+		newServer(t, ":18774", transport.WithWebSocketMaxConnections(1))
+
+		conn1, resp1, err := websocket.DefaultDialer.Dial("ws://localhost:18774/", nil)
+		if resp1 != nil && resp1.Body != nil {
+			_ = resp1.Body.Close()
+		}
+		if err != nil {
+			t.Fatalf("first connection failed: %v", err)
+		}
+		defer conn1.Close()
+		time.Sleep(50 * time.Millisecond)
+
+		conn2, resp2, err := websocket.DefaultDialer.Dial("ws://localhost:18774/", nil)
+		if err == nil {
+			_ = conn2.Close()
+			t.Fatal("expected second connection to be rejected")
+		}
+		if resp2 != nil {
+			if resp2.Body != nil {
+				_ = resp2.Body.Close()
+			}
+			if resp2.StatusCode != http.StatusServiceUnavailable {
+				t.Errorf("status = %d, want %d", resp2.StatusCode, http.StatusServiceUnavailable)
+			}
+		}
+	})
+
+	t.Run("enforces read limit", func(t *testing.T) {
+		newServer(t, ":18775", transport.WithWebSocketMaxMessageBytes(128))
+
+		conn, resp, err := websocket.DefaultDialer.Dial("ws://localhost:18775/", nil)
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		if err != nil {
+			t.Fatalf("connection failed: %v", err)
+		}
+		defer conn.Close()
+
+		oversize := `{"jsonrpc":"2.0","id":1,"method":"test","params":{"x":"` + strings.Repeat("a", 4096) + `"}}`
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(oversize)); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+
+		// Server should close the connection once the read limit is exceeded.
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		if _, _, err := conn.ReadMessage(); err == nil {
+			t.Fatal("expected connection to be closed after oversize message")
+		}
 	})
 }
 

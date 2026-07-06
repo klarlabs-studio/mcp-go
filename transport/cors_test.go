@@ -163,6 +163,33 @@ func TestCORSHandler(t *testing.T) {
 	})
 }
 
+func TestCORSHandler_WildcardWithCredentialsNormalized(t *testing.T) {
+	echoHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	config := transport.CORSConfig{
+		AllowOrigins:     []string{"*"},
+		AllowCredentials: true,
+	}
+	handler := transport.CORSHandler(config, echoHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "http://example.com")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	// "*" + credentials is invalid; credentials must be dropped.
+	if rec.Header().Get("Access-Control-Allow-Credentials") != "" {
+		t.Errorf("wildcard origin must not be combined with credentials, got %q",
+			rec.Header().Get("Access-Control-Allow-Credentials"))
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("expected wildcard ACAO, got %q", rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
 func TestDefaultCORSConfig(t *testing.T) {
 	config := transport.DefaultCORSConfig()
 

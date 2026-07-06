@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +13,14 @@ import (
 
 	"go.klarlabs.de/mcp/protocol"
 )
+
+// defaultMaxRequestBytes bounds a single POST /mcp body. JSON-RPC requests are
+// small; the cap stops a client from exhausting memory with an unbounded body.
+const defaultMaxRequestBytes = 4 << 20 // 4 MiB
+
+// defaultMaxSSEConnections caps concurrently registered SSE push channels so a
+// flood of connections cannot exhaust server memory.
+const defaultMaxSSEConnections = 1024
 
 // healthStatusField is the JSON field name used in /health and /healthz
 // payloads.
@@ -28,6 +37,12 @@ type HTTP struct {
 	discovery        *ServerDiscovery
 	tlsConfig        *tls.Config
 	requestContextFn func(context.Context, *http.Request) context.Context
+	authorizeFn      func(*http.Request) error
+
+	allowedOrigins  []string
+	allowAllOrigins bool
+	maxRequestBytes int64
+	maxSSEClients   int
 
 	mu         sync.RWMutex
 	listenAddr string
@@ -149,12 +164,66 @@ func WithRequestContextFn(fn func(context.Context, *http.Request) context.Contex
 	}
 }
 
+// WithAuthorize registers an authorization gate that runs on both POST /mcp
+// and the SSE push stream (GET /mcp/sse) before any work is done. Returning a
+// non-nil error rejects the request with 403 Forbidden, so the same policy
+// protects the request/response path and the server-push stream — the SSE
+// stream is otherwise unauthenticated by construction. The function sees the
+// raw *http.Request (headers, TLS peer certs, etc.); mcp-go ships no identity
+// type and performs no auth of its own.
+func WithAuthorize(fn func(*http.Request) error) HTTPOption {
+	return func(h *HTTP) {
+		h.authorizeFn = fn
+	}
+}
+
+// WithAllowedOrigins restricts which browser Origins may reach POST /mcp and
+// the SSE stream. Pass exact origins (scheme://host[:port]). Requests without
+// an Origin header (non-browser clients) are always allowed; browser requests
+// from a listed origin, a same-origin Host, or a loopback address are allowed
+// by default. This is the primary defense against DNS-rebinding and cross-site
+// access to a localhost server.
+func WithAllowedOrigins(origins ...string) HTTPOption {
+	return func(h *HTTP) {
+		h.allowedOrigins = origins
+	}
+}
+
+// WithInsecureAllowAllOrigins disables Origin enforcement entirely, restoring
+// the pre-hardening behavior where any website could reach the server. Named
+// "insecure" deliberately: only use it behind a trusted gateway that performs
+// its own origin/CSRF checks.
+func WithInsecureAllowAllOrigins() HTTPOption {
+	return func(h *HTTP) {
+		h.allowAllOrigins = true
+	}
+}
+
+// WithMaxRequestBytes caps the POST /mcp request body. A non-positive value
+// disables the limit. Default: 4 MiB.
+func WithMaxRequestBytes(n int64) HTTPOption {
+	return func(h *HTTP) {
+		h.maxRequestBytes = n
+	}
+}
+
+// WithMaxSSEConnections caps the number of concurrent SSE push connections;
+// once reached, new connections receive 503. A non-positive value disables the
+// cap. Default: 1024.
+func WithMaxSSEConnections(n int) HTTPOption {
+	return func(h *HTTP) {
+		h.maxSSEClients = n
+	}
+}
+
 func NewHTTP(addr string, opts ...HTTPOption) *HTTP {
 	h := &HTTP{
 		addr:            addr,
 		readTimeout:     30 * time.Second,
 		writeTimeout:    30 * time.Second,
 		shutdownTimeout: 30 * time.Second,
+		maxRequestBytes: defaultMaxRequestBytes,
+		maxSSEClients:   defaultMaxSSEConnections,
 		sseClients:      make(map[string]chan []byte),
 		sessionStore:    NewInMemoryStore(),
 	}
@@ -289,6 +358,16 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if h.authorizeFn != nil {
+		if err := h.authorizeFn(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -303,14 +382,31 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 		ctx = ContextWithClientID(ctx, clientID)
 	}
 
+	if h.maxRequestBytes > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBytes)
+	}
+
 	var req protocol.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		resp := protocol.NewErrorResponse(nil, protocol.NewParseError("Invalid JSON"))
 		_ = json.NewEncoder(w).Encode(resp)
 		return
 	}
 
 	resp, err := handler.HandleRequest(ctx, &req)
+
+	// A JSON-RPC notification carries no id and, per spec, MUST NOT be
+	// answered with a response body. Acknowledge receipt and stop.
+	if req.IsNotification() {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
 	if err != nil {
 		resp = protocol.NewErrorResponse(req.ID, protocol.NewInternalError(err.Error()))
 	}
@@ -326,21 +422,58 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
+	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if h.authorizeFn != nil {
+		if err := h.authorizeFn(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
 
+	// Derive request-scoped identity the same way the request/response path
+	// does, so an mTLS or header-derived caller value is available for the
+	// lifetime of the push stream instead of being silently skipped.
+	ctx := r.Context()
+	if h.requestContextFn != nil {
+		ctx = h.requestContextFn(ctx, r)
+	}
+
+	// A client that uses the server-push protocol picks its own unguessable
+	// (crypto/rand) correlation id and sends it on both this SSE connection and
+	// its POSTs. We honor it for correlation but NEVER let it overwrite a live
+	// entry (see registerSSEClient) — that is what stops an attacker from
+	// picking a victim's id to steal their push channel. When no id is supplied
+	// we mint one server-side with crypto/rand rather than a guessable
+	// timestamp.
 	clientID := r.URL.Query().Get("clientId")
 	if clientID == "" {
-		clientID = fmt.Sprintf("%d", time.Now().UnixNano())
+		minted, err := newSessionID()
+		if err != nil {
+			http.Error(w, "failed to allocate session", http.StatusInternalServerError)
+			return
+		}
+		clientID = minted
 	}
 
 	messageCh := make(chan []byte, 10)
-
-	h.sseClientsMu.Lock()
-	h.sseClients[clientID] = messageCh
-	h.sseClientsMu.Unlock()
+	if !h.registerSSEClient(clientID, messageCh) {
+		// Either the connection cap is reached or the id is already registered.
+		// Refusing rather than clobbering keeps an existing client's channel
+		// intact (no hijack) and avoids orphaning it via a colliding delete.
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+		return
+	}
 
 	defer func() {
 		h.sseClientsMu.Lock()
-		delete(h.sseClients, clientID)
+		// Only remove the entry if it still points at THIS connection's
+		// channel, so a later reconnect that reused the id is not orphaned.
+		if h.sseClients[clientID] == messageCh {
+			delete(h.sseClients, clientID)
+		}
 		h.sseClientsMu.Unlock()
 		h.mu.RLock()
 		hook := h.onDisconnect
@@ -353,7 +486,6 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if h.sessionStore != nil {
 		w.Header().Set("Link", fmt.Sprintf(`<%s/mcp/sse?clientId=%s>; rel="stream"`, h.Addr(), clientID))
@@ -367,7 +499,7 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		select {
-		case <-r.Context().Done():
+		case <-ctx.Done():
 			return
 		case msg, ok := <-messageCh:
 			if !ok {
@@ -376,6 +508,23 @@ func (h *HTTP) handleSSE(w http.ResponseWriter, r *http.Request) {
 			_ = sse.WriteData(msg)
 		}
 	}
+}
+
+// registerSSEClient atomically enforces the concurrent-connection cap and
+// refuses to overwrite an id already present, then records the push channel.
+// It returns false when the cap is reached or the id collides, so the caller
+// can reject with 503.
+func (h *HTTP) registerSSEClient(clientID string, ch chan []byte) bool {
+	h.sseClientsMu.Lock()
+	defer h.sseClientsMu.Unlock()
+	if h.maxSSEClients > 0 && len(h.sseClients) >= h.maxSSEClients {
+		return false
+	}
+	if _, exists := h.sseClients[clientID]; exists {
+		return false
+	}
+	h.sseClients[clientID] = ch
+	return true
 }
 
 func (h *HTTP) Broadcast(data []byte) {
