@@ -93,6 +93,75 @@ has been deleted:
 schema-valid input. If a tool deliberately accepts inputs that violate its
 generated schema, add `.SkipValidation()` to its builder chain.
 
+## [1.21.0] - 2026-07-06
+
+Security & correctness hardening from a full deep review. The theme is
+**secure-by-default**: the framework's production defaults were unsafe and some
+of the safety knobs were broken. All defaults now fail safe, with explicit
+opt-outs. Behavior-compatible for well-behaved callers; a minor bump.
+
+### Fixed — middleware & panic safety
+
+- **`Server.Use()` was a silent no-op.** The serve path only read middleware
+  from `WithMiddleware`; middleware registered via the fluent `Use()` API —
+  including `Recover`/`SizeLimit` — was never applied, and `server.Middleware`
+  was even a distinct type from `middleware.Middleware`, so the standard
+  middleware couldn't be passed to it. Unified the types and wired `Use()` into
+  the chain.
+- **Panic recovery is now on by default.** A handler panic previously unwound
+  the stdio/WebSocket read loop and crashed the whole server process (all
+  sessions). `Recover` is now forced outermost by default; a caller's own
+  Recover still runs inner.
+- The default panic handler no longer leaks the panic value (internal
+  paths/state) to the peer — it logs detail server-side and returns a generic
+  `internal error`.
+- `Timeout` middleware now actually enforces the deadline (it previously ran the
+  handler synchronously, so a non-cooperative handler ran to completion).
+
+### Fixed — protocol
+
+- Depth-limit untrusted JSON before decoding, preventing a deeply-nested payload
+  from causing a fatal, unrecoverable stack overflow.
+- `Response` now always emits a spec-correct `id` (`null` when undeterminable)
+  and exactly one of `result`/`error`.
+- gRPC request ids are JSON-escaped (no malformed-JSON injection); numeric
+  `progressToken`s are accepted (string or integer).
+
+### Fixed — dispatch
+
+- Overlapping resource URIs now dispatch deterministically (most-specific wins,
+  sorted iteration) instead of a random map-order handler — the authorization
+  decision no longer depends on iteration order.
+- Duplicate tool/resource/prompt registration is rejected (surfaced via
+  `Server.Err()`) instead of silently shadowing.
+- Added a `ContainedPath` helper for file-style resources.
+
+### Security — transports (secure-by-default, with opt-outs)
+
+- HTTP/SSE/WebSocket now validate the `Origin` header against an allowlist and
+  reject cross-origin requests (mitigates DNS-rebinding / cross-origin
+  exfiltration). New `WithAllowedOrigins` / `WithInsecureAllowAllOrigins` and
+  WebSocket equivalents; SSE no longer hardcodes `Access-Control-Allow-Origin: *`.
+- SSE session ids can no longer be hijacked or collided (server refuses to
+  overwrite a live channel; `crypto/rand`-minted when absent); the caller auth
+  hook now runs on the SSE path.
+- Request bodies (`http.MaxBytesReader`), WebSocket reads (`SetReadLimit`), and
+  concurrent connections are now bounded by default (413/503 on exceed). HTTP
+  correctly returns `202` for notifications.
+
+### Security — framing, client & lifecycle
+
+- An over-sized transport frame is now skipped and the read loop survives
+  (previously it permanently wedged the transport); all stdio writes serialize
+  through one framer (no interleave race).
+- The client bounds responses from an untrusted server (`io.LimitReader`) and
+  refuses cross-host redirects (no custom-auth-header leak); the session store is
+  bounded and returns copies.
+- The task registry is bounded with TTL/eviction and `CancelTask` actually
+  cancels the running goroutine; `notifications/cancelled` is wired; subscription
+  counts are capped per client; internal handler errors are sanitized before
+  reaching the peer.
+
 ## [1.13.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.12.0...v1.13.0)
 
 ### Features
