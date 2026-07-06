@@ -17,6 +17,53 @@ const (
 	typeBoolean = "boolean"
 )
 
+// maxJSONDepth bounds the nesting depth of untrusted JSON before it is handed
+// to encoding/json. encoding/json decodes with unbounded recursion, so a
+// deeply nested payload (e.g. "[[[[…") can exhaust the goroutine stack and
+// crash the process with a fatal error that recover cannot catch. Rejecting
+// over-deep input up front turns that DoS into an ordinary parse error.
+const maxJSONDepth = 100
+
+// checkJSONDepth performs a fast, allocation-free pre-scan of raw JSON,
+// rejecting input whose container nesting ({ or [) exceeds maxJSONDepth.
+// Bytes inside string literals (including escaped quotes) are ignored so that
+// braces or brackets within strings do not count toward depth.
+func checkJSONDepth(data []byte) error {
+	depth := 0
+	inString := false
+	escaped := false
+
+	for _, c := range data {
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+
+		switch c {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+			if depth > maxJSONDepth {
+				return &ValidationError{
+					Message: fmt.Sprintf("invalid JSON: nesting depth exceeds maximum of %d", maxJSONDepth),
+				}
+			}
+		case '}', ']':
+			depth--
+		}
+	}
+
+	return nil
+}
+
 // ValidationError represents a schema validation error.
 type ValidationError struct {
 	Path    string // JSON path to the invalid field (e.g., "user.email")
@@ -56,6 +103,12 @@ func (e ValidationErrors) Error() string {
 // Validate validates JSON data against a schema.
 // Returns nil if valid, or ValidationErrors if invalid.
 func (s *Schema) Validate(data json.RawMessage) error {
+	// Reject pathologically nested input before encoding/json's recursive
+	// decoder can exhaust the stack (uncatchable fatal error).
+	if err := checkJSONDepth(data); err != nil {
+		return err
+	}
+
 	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
 		return &ValidationError{Message: fmt.Sprintf("invalid JSON: %s", err)}

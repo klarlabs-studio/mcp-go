@@ -480,3 +480,34 @@ func TestGRPC_GracefulShutdown(t *testing.T) {
 		t.Error("timeout waiting for shutdown")
 	}
 }
+
+func TestProtoToRequest_EscapesSpecialCharsInID(t *testing.T) {
+	tests := []struct {
+		name      string
+		requestID string
+	}{
+		{name: "quote", requestID: `a"b`},
+		{name: "backslash", requestID: `a\b`},
+		{name: "control char", requestID: "a\nb"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := protoToRequest(&pb.Message{RequestId: tt.requestID, Method: "m"})
+
+			// The id must be well-formed JSON that round-trips to the original.
+			var decoded string
+			if err := json.Unmarshal(req.ID, &decoded); err != nil {
+				t.Fatalf("request id is not valid JSON (%s): %v", req.ID, err)
+			}
+			if decoded != tt.requestID {
+				t.Errorf("decoded id = %q, want %q", decoded, tt.requestID)
+			}
+
+			// It must also survive being embedded in a full Request marshal.
+			if _, err := json.Marshal(req); err != nil {
+				t.Fatalf("marshaling request with id failed: %v", err)
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -319,4 +320,52 @@ func TestValidationErrors(t *testing.T) {
 			t.Errorf("expected empty string, got %q", errs.Error())
 		}
 	})
+}
+
+func TestCheckJSONDepth(t *testing.T) {
+	t.Run("accepts moderately nested JSON", func(t *testing.T) {
+		data := []byte(`{"a":{"b":{"c":[1,2,3]}}}`)
+		if err := checkJSONDepth(data); err != nil {
+			t.Errorf("unexpected error for shallow JSON: %v", err)
+		}
+	})
+
+	t.Run("ignores braces inside strings", func(t *testing.T) {
+		// A string full of brackets must not count toward nesting depth.
+		data := []byte(`{"note":"[[[[[[[[[[ not real nesting ]]]]]]]]]]"}`)
+		if err := checkJSONDepth(data); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("handles escaped quotes inside strings", func(t *testing.T) {
+		data := []byte(`{"q":"a \" [ b"}`)
+		if err := checkJSONDepth(data); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects input beyond max depth", func(t *testing.T) {
+		data := append(bytes.Repeat([]byte("["), maxJSONDepth+1), bytes.Repeat([]byte("]"), maxJSONDepth+1)...)
+		if err := checkJSONDepth(data); err == nil {
+			t.Fatal("expected error for over-deep JSON, got nil")
+		}
+	})
+}
+
+func TestSchema_Validate_DeepNesting(t *testing.T) {
+	// A frame of deeply nested arrays must be rejected as a parse error rather
+	// than driving encoding/json into stack exhaustion (an uncatchable fatal).
+	schema := &Schema{Type: typeObject}
+
+	deep := 5000
+	data := append(bytes.Repeat([]byte("["), deep), bytes.Repeat([]byte("]"), deep)...)
+
+	err := schema.Validate(data)
+	if err == nil {
+		t.Fatal("expected validation error for deeply nested JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "nesting depth") {
+		t.Errorf("expected nesting-depth error, got: %v", err)
+	}
 }
