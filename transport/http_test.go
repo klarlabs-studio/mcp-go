@@ -273,27 +273,95 @@ func TestHTTP_SendTo(t *testing.T) {
 	transport := NewHTTP(":0")
 	httpHandler := transport.createHandler(handler)
 
+	// Use a real server so the SSE stream is read over a synchronized network
+	// connection rather than racing on an httptest.Recorder.
+	srv := httptest.NewServer(httpHandler)
+	defer srv.Close()
+
+	// connectSSE opens an SSE stream and returns the connection plus the
+	// clientId echoed in the "connected" event. Registration happens before
+	// that event is written, so the channel is present once it returns.
+	connectSSE := func(t *testing.T, ctx context.Context, query string) (*http.Response, string) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/mcp/sse"+query, nil)
+		if err != nil {
+			t.Fatalf("build request: %v", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("connect SSE: %v", err)
+		}
+		data, err := NewSSEReader(resp.Body).ReadData()
+		if err != nil {
+			t.Fatalf("read connected event: %v", err)
+		}
+		var connected struct {
+			ClientID string `json:"clientId"`
+		}
+		if err := json.Unmarshal(data, &connected); err != nil {
+			t.Fatalf("parse connected event %q: %v", data, err)
+		}
+		return resp, connected.ClientID
+	}
+
 	t.Run("send to specific client", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-		httpReq := httptest.NewRequest(http.MethodGet, "/mcp/sse?clientId=test-client", nil).WithContext(ctx)
-		rec := httptest.NewRecorder()
+		resp, id := connectSSE(t, ctx, "?clientId=test-client")
+		defer func() { _ = resp.Body.Close() }()
+		if id != "test-client" {
+			t.Fatalf("client-supplied id should be honored for correlation, got %q", id)
+		}
 
-		go httpHandler.ServeHTTP(rec, httpReq)
-
-		time.Sleep(30 * time.Millisecond)
-
-		ok := transport.SendTo("test-client", []byte("direct message"))
-		if !ok {
+		if !transport.SendTo("test-client", []byte("direct message")) {
 			t.Error("expected SendTo to return true for existing client")
 		}
-
-		ok = transport.SendTo("non-existent", []byte("should fail"))
-		if ok {
+		if transport.SendTo("non-existent", []byte("should fail")) {
 			t.Error("expected SendTo to return false for non-existent client")
 		}
+	})
 
-		cancel()
+	t.Run("empty clientId is minted server-side, not a timestamp", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		resp, id := connectSSE(t, ctx, "")
+		defer func() { _ = resp.Body.Close() }()
+		// crypto/rand 16 bytes hex-encoded == 32 chars; a UnixNano timestamp
+		// would be ~19 numeric digits.
+		if len(id) != 32 {
+			t.Fatalf("expected 32-char random id, got %q (len %d)", id, len(id))
+		}
+	})
+
+	t.Run("duplicate clientId cannot steal a live channel", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Victim connects with a chosen id.
+		victim, id := connectSSE(t, ctx, "?clientId=victim")
+		defer func() { _ = victim.Body.Close() }()
+		if id != "victim" {
+			t.Fatalf("unexpected id %q", id)
+		}
+
+		// Attacker tries to register the same id: must be refused, not allowed
+		// to overwrite/steal the victim's channel.
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/mcp/sse?clientId=victim", nil)
+		attacker, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("attacker connect: %v", err)
+		}
+		defer func() { _ = attacker.Body.Close() }()
+		if attacker.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("duplicate id status = %d, want %d", attacker.StatusCode, http.StatusServiceUnavailable)
+		}
+
+		// The victim's channel is intact and still addressable.
+		if !transport.SendTo("victim", []byte("still mine")) {
+			t.Error("victim channel must survive a hijack attempt")
+		}
 	})
 }
 
@@ -366,6 +434,170 @@ func TestHTTP_Serve(t *testing.T) {
 
 		cancel()
 	})
+}
+
+func okHandler() Handler {
+	return HandlerFunc(func(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+		return protocol.NewResponse(req.ID, map[string]string{"status": "ok"}), nil
+	})
+}
+
+func TestHTTP_SSE_CrossOriginRejected(t *testing.T) {
+	h := NewHTTP(":0").createHandler(okHandler())
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Errorf("SSE must not emit Access-Control-Allow-Origin: *, got %q", got)
+	}
+}
+
+func TestHTTP_SSE_SameOriginAllowed(t *testing.T) {
+	h := NewHTTP(":0").createHandler(okHandler())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil).WithContext(ctx)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://localhost:8080")
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		h.ServeHTTP(rec, req)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("SSE handler did not exit")
+	}
+
+	if rec.Code == http.StatusForbidden {
+		t.Fatalf("same-origin request rejected: %d", rec.Code)
+	}
+}
+
+func TestHTTP_SSE_AllowlistedOriginAllowed(t *testing.T) {
+	h := NewHTTP(":0", WithAllowedOrigins("https://app.example")).createHandler(okHandler())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil).WithContext(ctx)
+	req.Header.Set("Origin", "https://app.example")
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		h.ServeHTTP(rec, req)
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("SSE handler did not exit")
+	}
+
+	if rec.Code == http.StatusForbidden {
+		t.Fatalf("allowlisted origin rejected: %d", rec.Code)
+	}
+}
+
+func TestHTTP_MCP_CrossOriginRejected(t *testing.T) {
+	h := NewHTTP(":0").createHandler(okHandler())
+
+	body, _ := json.Marshal(protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "test"})
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+	req.Header.Set("Origin", "http://evil.example")
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestHTTP_MCP_OversizeBodyRejected(t *testing.T) {
+	h := NewHTTP(":0", WithMaxRequestBytes(256)).createHandler(okHandler())
+
+	big := strings.Repeat("a", 4096)
+	body := `{"jsonrpc":"2.0","id":1,"method":"test","params":{"x":"` + big + `"}}`
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestHTTP_MCP_NotificationReturns202(t *testing.T) {
+	h := NewHTTP(":0").createHandler(okHandler())
+
+	// No id => notification.
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","method":"notify"}`))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	if strings.Contains(rec.Body.String(), `"result"`) {
+		t.Errorf("notification must not receive a response body, got %q", rec.Body.String())
+	}
+}
+
+func TestHTTP_Authorize_RejectsBothPaths(t *testing.T) {
+	deny := WithAuthorize(func(_ *http.Request) error { return context.Canceled })
+	h := NewHTTP(":0", deny).createHandler(okHandler())
+
+	post := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"t"}`))
+	postRec := httptest.NewRecorder()
+	h.ServeHTTP(postRec, post)
+	if postRec.Code != http.StatusForbidden {
+		t.Errorf("POST /mcp status = %d, want 403", postRec.Code)
+	}
+
+	sse := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	sseRec := httptest.NewRecorder()
+	h.ServeHTTP(sseRec, sse)
+	if sseRec.Code != http.StatusForbidden {
+		t.Errorf("GET /mcp/sse status = %d, want 403", sseRec.Code)
+	}
+}
+
+func TestHTTP_SSE_MaxConnections(t *testing.T) {
+	h := NewHTTP(":0", WithMaxSSEConnections(1)).createHandler(okHandler())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	first := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil).WithContext(ctx)
+	firstRec := httptest.NewRecorder()
+	go func() { h.ServeHTTP(firstRec, first) }()
+	time.Sleep(20 * time.Millisecond)
+
+	second := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	secondRec := httptest.NewRecorder()
+	h.ServeHTTP(secondRec, second)
+
+	if secondRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("second connection status = %d, want %d", secondRec.Code, http.StatusServiceUnavailable)
+	}
 }
 
 func TestHTTP_RequestContextFn(t *testing.T) {

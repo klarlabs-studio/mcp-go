@@ -14,6 +14,13 @@ import (
 	"go.klarlabs.de/mcp/protocol"
 )
 
+// defaultWSMaxMessageBytes bounds a single inbound WebSocket message. A
+// non-positive value disables the limit.
+const defaultWSMaxMessageBytes = 4 << 20 // 4 MiB
+
+// defaultWSMaxConnections caps concurrent WebSocket connections.
+const defaultWSMaxConnections = 1024
+
 // WebSocket implements MCP transport over WebSocket connections.
 type WebSocket struct {
 	addr     string
@@ -23,6 +30,11 @@ type WebSocket struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
 	tlsConfig    *tls.Config
+
+	allowedOrigins  []string
+	allowAllOrigins bool
+	maxMessageBytes int64
+	maxConnections  int
 
 	mu      sync.RWMutex
 	clients map[*wsClient]struct{}
@@ -51,10 +63,49 @@ func WithWebSocketWriteTimeout(d time.Duration) WebSocketOption {
 	}
 }
 
-// WithWebSocketCheckOrigin sets the origin check function for WebSocket upgrades.
+// WithWebSocketCheckOrigin sets the origin check function for WebSocket
+// upgrades, fully overriding the secure default. Return true to accept the
+// upgrade. Prefer WithWebSocketAllowedOrigins unless you need custom logic.
 func WithWebSocketCheckOrigin(fn func(r *http.Request) bool) WebSocketOption {
 	return func(ws *WebSocket) {
 		ws.upgrader.CheckOrigin = fn
+	}
+}
+
+// WithWebSocketAllowedOrigins restricts which browser Origins may complete a
+// WebSocket upgrade. Requests without an Origin header (non-browser clients)
+// are allowed; browser requests must match a listed origin, the same-origin
+// Host, or a loopback address. This is the defense against Cross-Site
+// WebSocket Hijacking.
+func WithWebSocketAllowedOrigins(origins ...string) WebSocketOption {
+	return func(ws *WebSocket) {
+		ws.allowedOrigins = origins
+	}
+}
+
+// WithWebSocketAllowAllOrigins disables origin enforcement on the upgrade,
+// restoring the pre-hardening behavior where any website could open a socket.
+// Named "insecure" behavior deliberately: only use it behind a trusted proxy.
+func WithWebSocketAllowAllOrigins() WebSocketOption {
+	return func(ws *WebSocket) {
+		ws.allowAllOrigins = true
+	}
+}
+
+// WithWebSocketMaxMessageBytes caps the size of a single inbound message. A
+// non-positive value disables the limit. Default: 4 MiB.
+func WithWebSocketMaxMessageBytes(n int64) WebSocketOption {
+	return func(ws *WebSocket) {
+		ws.maxMessageBytes = n
+	}
+}
+
+// WithWebSocketMaxConnections caps concurrent connections; once reached, new
+// upgrade attempts receive 503. A non-positive value disables the cap.
+// Default: 1024.
+func WithWebSocketMaxConnections(n int) WebSocketOption {
+	return func(ws *WebSocket) {
+		ws.maxConnections = n
 	}
 }
 
@@ -74,11 +125,20 @@ func NewWebSocket(addr string, opts ...WebSocketOption) *WebSocket {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
-			CheckOrigin:     func(r *http.Request) bool { return true }, // Allow all origins by default
 		},
-		readTimeout:  60 * time.Second,
-		writeTimeout: 10 * time.Second,
-		clients:      make(map[*wsClient]struct{}),
+		readTimeout:     60 * time.Second,
+		writeTimeout:    10 * time.Second,
+		maxMessageBytes: defaultWSMaxMessageBytes,
+		maxConnections:  defaultWSMaxConnections,
+		clients:         make(map[*wsClient]struct{}),
+	}
+
+	// Secure default: reject cross-origin upgrades (Cross-Site WebSocket
+	// Hijacking). The closure reads ws.allowedOrigins/allowAllOrigins at
+	// upgrade time, so options applied below take effect. A caller can fully
+	// override this via WithWebSocketCheckOrigin.
+	ws.upgrader.CheckOrigin = func(r *http.Request) bool {
+		return originAllowed(r, ws.allowedOrigins, ws.allowAllOrigins)
 	}
 
 	for _, opt := range opts {
@@ -135,9 +195,26 @@ func (ws *WebSocket) Serve(ctx context.Context, handler Handler) error {
 }
 
 func (ws *WebSocket) handleConnection(ctx context.Context, w http.ResponseWriter, r *http.Request, handler Handler) {
+	// Enforce the connection cap before upgrading — once the handshake
+	// completes we can no longer reply with an HTTP status.
+	if ws.maxConnections > 0 {
+		ws.mu.RLock()
+		n := len(ws.clients)
+		ws.mu.RUnlock()
+		if n >= ws.maxConnections {
+			http.Error(w, "too many connections", http.StatusServiceUnavailable)
+			return
+		}
+	}
+
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
+	}
+
+	// Bound inbound message size so a client cannot exhaust memory.
+	if ws.maxMessageBytes > 0 {
+		conn.SetReadLimit(ws.maxMessageBytes)
 	}
 
 	client := &wsClient{conn: conn}
