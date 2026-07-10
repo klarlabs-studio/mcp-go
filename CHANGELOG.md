@@ -37,6 +37,20 @@ brings mcp-go current across every MCP revision from `2024-11-05` to the
   `Session.ListRoots`, and `Elicitor.Elicit` now return the new sentinel
   `server.ErrNoRequestSender` when the transport has no bidirectional request
   sender, instead of panicking on a nil sender. One-way features are unaffected.
+- **`ContentBlock` content-block union.** `Content` is now the single canonical
+  content-block union (aliased as `ContentBlock`), extended to cover `audio`,
+  `resource_link`, and embedded `resource` blocks alongside text/image, with
+  `NewAudioContent`, `NewResourceLink`, and `NewEmbeddedResource` constructors
+  and optional content `Annotations`. Additive — text/image blocks serialize
+  unchanged. The standalone prompt `TextContent`/`ImageContent` types remain for
+  compatibility. This is the groundwork audio (Phase 1) and resource_link
+  (Phase 2) build on.
+
+### Per-revision conformance harness
+
+- `mcp_conformance_test.go` drives a fully featured reference server through
+  every method a revision defines and asserts the response shape; cases carry a
+  `minVersion` so later phases extend the same gate.
 
 ### Removed (BREAKING)
 

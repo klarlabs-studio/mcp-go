@@ -111,6 +111,12 @@ type CreateMessageResult = server.CreateMessageResult
 type ModelPreferences = server.ModelPreferences
 type ModelHint = server.ModelHint
 
+// ContentBlock is the canonical MCP content-block union (alias of Content),
+// covering text, image, audio, resource_link, and embedded resource blocks.
+type ContentBlock = server.ContentBlock
+type EmbeddedResource = server.EmbeddedResource
+type ContentAnnotations = server.ContentAnnotations
+
 // Role constants
 const (
 	RoleUser      = server.RoleUser
@@ -119,8 +125,11 @@ const (
 
 // Content constructors
 var (
-	NewTextContent  = server.NewTextContent
-	NewImageContent = server.NewImageContent
+	NewTextContent      = server.NewTextContent
+	NewImageContent     = server.NewImageContent
+	NewAudioContent     = server.NewAudioContent
+	NewResourceLink     = server.NewResourceLink
+	NewEmbeddedResource = server.NewEmbeddedResource
 )
 
 // Roots types for workspace awareness

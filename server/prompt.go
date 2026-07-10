@@ -6,12 +6,19 @@ import (
 )
 
 // TextContent represents text content in a prompt message.
+//
+// Prefer ContentBlock (via NewTextContent) in new code: ContentBlock is the
+// single canonical content-block union across tools, prompts, and sampling.
+// This standalone type is retained for backward compatibility and serializes
+// identically.
 type TextContent struct {
 	Type string `json:"type"` // Always "text"
 	Text string `json:"text"`
 }
 
 // ImageContent represents image content in a prompt message.
+//
+// Prefer ContentBlock (via NewImageContent) in new code. See TextContent.
 type ImageContent struct {
 	Type     string `json:"type"` // Always "image"
 	Data     string `json:"data"` // Base64 encoded
