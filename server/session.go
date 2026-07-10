@@ -177,6 +177,10 @@ func (s *Session) SupportsFeature(feature string) bool {
 
 // CreateMessage sends a sampling request to the client.
 // Returns an error if the client doesn't support sampling.
+//
+// Note: sampling is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should call an LLM provider API directly rather
+// than round-tripping a completion through the client.
 func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	return s.createMessage(ctx, req)
 }
@@ -247,6 +251,10 @@ func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) 
 
 // ListRoots requests the list of roots from the client.
 // Returns an error if the client doesn't support roots.
+//
+// Note: roots is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should receive directories/files via tool
+// parameters, resource URIs, or configuration instead.
 func (s *Session) ListRoots(ctx context.Context) (*ListRootsResult, error) {
 	if !s.SupportsFeature("roots") {
 		return nil, fmt.Errorf("client does not support roots")
@@ -315,6 +323,10 @@ func (s *Session) HandleRootsChanged(roots []Root) {
 }
 
 // Log sends a log message at the specified level.
+//
+// Note: logging is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should log to stderr or emit OpenTelemetry
+// instead of routing log messages through the client.
 func (s *Session) Log(level LogLevel, logger string, data any) {
 	s.mu.RLock()
 	minLevel := s.logLevel

@@ -39,6 +39,10 @@ is deliberately NOT yet in `SupportedVersions`.
   clients; legacy responses are unaffected.
 - **Modern error renumbering** — resource-not-found is `-32602` on the modern
   path (vs `-32001` on legacy), per the retirement of the `-32002` not-found code.
+- **Deprecation posture** (SEP-2577) — sampling, roots, and logging are
+  documented as deprecated in 2026-07-28 (12-month window; still fully
+  functional) with their migration paths (provider APIs / tool params / stderr
+  + OpenTelemetry).
 
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
