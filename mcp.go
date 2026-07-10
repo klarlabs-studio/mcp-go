@@ -28,12 +28,14 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 
 	"go.klarlabs.de/mcp/middleware"
@@ -1015,6 +1017,13 @@ func (h *requestHandler) handleServerDiscover(_ context.Context, req *protocol.R
 
 func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	tools := h.srv.Tools()
+
+	// Sort by name so tools/list returns a deterministic order on every call
+	// (MCP 2026-07-28). Server.Tools() is backed by a Go map, whose iteration
+	// order is randomized; without this the response would vary between calls.
+	slices.SortFunc(tools, func(a, b server.ToolInfo) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	toolList := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
