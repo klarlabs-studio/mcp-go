@@ -168,6 +168,26 @@ func (s *Session) SupportsFeature(feature string) bool {
 // CreateMessage sends a sampling request to the client.
 // Returns an error if the client doesn't support sampling.
 func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
+	return s.createMessage(ctx, req)
+}
+
+// CreateMessageWithTools sends a sampling request that offers the given tools
+// to the model (MCP 2025-11-25, SEP-1577). It sets req.Tools and req.ToolChoice
+// (overwriting any already present) and dispatches through the same request
+// path as CreateMessage, so the sampling capability gate and nil-sender guard
+// (ErrNoRequestSender) apply identically. A nil choice leaves tool selection to
+// the client/model.
+func (s *Session) CreateMessageWithTools(ctx context.Context, req *CreateMessageRequest, tools []SamplingTool, choice *SamplingToolChoice) (*CreateMessageResult, error) {
+	req.Tools = tools
+	req.ToolChoice = choice
+	return s.createMessage(ctx, req)
+}
+
+// createMessage is the shared implementation for CreateMessage and
+// CreateMessageWithTools: it enforces the sampling capability gate and
+// nil-sender guard, marshals the request, dispatches it, and decodes the
+// result.
+func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	if !s.SupportsFeature("sampling") {
 		return nil, fmt.Errorf("client does not support sampling")
 	}

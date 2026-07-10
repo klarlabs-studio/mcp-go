@@ -1,5 +1,7 @@
 package server
 
+import "encoding/json"
+
 // SamplingMessage represents a message in a sampling request.
 type SamplingMessage struct {
 	Role    Role    `json:"role"`
@@ -124,6 +126,37 @@ type CreateMessageRequest struct {
 	IncludeContext   string            `json:"includeContext,omitempty"` // "none", "thisServer", "allServers"
 	ModelPreferences *ModelPreferences `json:"modelPreferences,omitempty"`
 	Metadata         map[string]any    `json:"metadata,omitempty"`
+	// Tools advertises server-side tools the model may call during sampling
+	// (MCP 2025-11-25, SEP-1577). Omitted entirely when empty so requests to
+	// clients that predate tool-calling serialize exactly as before.
+	Tools []SamplingTool `json:"tools,omitempty"`
+	// ToolChoice constrains whether/which of Tools the model must call. Nil
+	// leaves the decision to the client/model (equivalent to "auto").
+	ToolChoice *SamplingToolChoice `json:"toolChoice,omitempty"`
+}
+
+// SamplingTool describes a tool the model may call while producing a sampling
+// completion (MCP 2025-11-25, SEP-1577). InputSchema is a JSON Schema object
+// describing the tool's arguments; it is `any` so callers can pass either a
+// generated schema value or a raw map.
+type SamplingTool struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	InputSchema any    `json:"inputSchema,omitempty"`
+}
+
+// SamplingToolChoice constrains how the model selects among the advertised
+// Tools. Type is one of:
+//
+//	"auto" → model decides whether to call a tool (default when omitted)
+//	"any"  → model must call one of the provided tools
+//	"tool" → model must call the specific tool named by Name
+//	"none" → model must not call any tool
+//
+// Name is only meaningful (and only serialized) when Type == "tool".
+type SamplingToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
 }
 
 // ModelPreferences expresses preferences for model selection.
@@ -144,7 +177,22 @@ type CreateMessageResult struct {
 	Role       Role    `json:"role"`
 	Content    Content `json:"content"`
 	Model      string  `json:"model"`
-	StopReason string  `json:"stopReason,omitempty"` // "endTurn", "stopSequence", "maxTokens"
+	StopReason string  `json:"stopReason,omitempty"` // "endTurn", "stopSequence", "maxTokens", "toolUse"
+	// ToolCalls carries the tool invocations the model requested when tools
+	// were offered (MCP 2025-11-25, SEP-1577). The Content union has no
+	// tool-use variant, so tool calls are surfaced here rather than in
+	// Content. Populated when StopReason == "toolUse"; omitted otherwise.
+	ToolCalls []SamplingToolCall `json:"toolCalls,omitempty"`
+}
+
+// SamplingToolCall is a single tool invocation the model requested during
+// sampling (MCP 2025-11-25, SEP-1577). ID correlates the call with the
+// tool-result the caller must feed back on the next turn; Arguments holds the
+// model-supplied arguments as raw JSON.
+type SamplingToolCall struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
 }
 
 // SamplingClient is an interface for clients that support sampling.
