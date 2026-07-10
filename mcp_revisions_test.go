@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -184,6 +185,67 @@ func TestResourcesTemplatesList_ReturnsTemplates(t *testing.T) {
 	}
 	if list[0]["uriTemplate"] != "users://{id}" {
 		t.Errorf("uriTemplate = %v, want users://{id}", list[0]["uriTemplate"])
+	}
+}
+
+// TestToolsList_AdvertisesIcons verifies the integration wiring: icons set on a
+// tool builder surface in the tools/list response (MCP 2025-11-25, SEP-973).
+func TestToolsList_AdvertisesIcons(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	type in struct {
+		X string `json:"x"`
+	}
+	srv.Tool("iconic").
+		Description("has an icon").
+		Icons(Icon{URI: "https://example.com/i.png", MimeType: "image/png", Size: 48}).
+		Handler(func(in in) (string, error) { return in.X, nil })
+
+	handler := newRequestHandler(srv)
+	req := &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsList, Params: json.RawMessage(`{}`)}
+	resp, err := handler.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("tools/list: %v", err)
+	}
+	tools := resp.Result.(map[string]any)["tools"].([]map[string]any)
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+	if _, ok := tools[0]["icons"]; !ok {
+		t.Errorf("expected icons advertised in tools/list, got %v", tools[0])
+	}
+}
+
+// TestToolResult_CarriesUnionContent verifies audio/resource_link content blocks
+// returned from a tool handler flow through tools/call unchanged — the payoff of
+// the ContentBlock union (Phases 1–2 content types) needing no dispatcher change.
+func TestToolResult_CarriesUnionContent(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	type in struct {
+		X string `json:"x"`
+	}
+	srv.Tool("media").
+		Description("returns audio + link").
+		Handler(func(_ in) (StructuredResult, error) {
+			return StructuredResult{Content: []ContentBlock{
+				NewAudioContent("audio/wav", "aGk="),
+				NewResourceLink("file://x", "x"),
+			}}, nil
+		})
+
+	handler := newRequestHandler(srv)
+	req := &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsCall,
+		Params: mustParams(t, map[string]any{"name": "media", "arguments": map[string]any{"x": "y"}}),
+	}
+	resp, err := handler.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	// Round-trip the response to JSON and assert the block types survived.
+	raw, _ := json.Marshal(resp.Result)
+	s := string(raw)
+	if !strings.Contains(s, `"audio"`) || !strings.Contains(s, `"resource_link"`) {
+		t.Errorf("expected audio + resource_link blocks in tool result, got %s", s)
 	}
 }
 

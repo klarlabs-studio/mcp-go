@@ -111,6 +111,12 @@ type CreateMessageResult = server.CreateMessageResult
 type ModelPreferences = server.ModelPreferences
 type ModelHint = server.ModelHint
 
+// Sampling-with-tools types (MCP 2025-11-25): a sampling request may offer
+// tools to the model and receive tool-use results.
+type SamplingTool = server.SamplingTool
+type SamplingToolChoice = server.SamplingToolChoice
+type SamplingToolCall = server.SamplingToolCall
+
 // ContentBlock is the canonical MCP content-block union (alias of Content),
 // covering text, image, audio, resource_link, and embedded resource blocks.
 type ContentBlock = server.ContentBlock
@@ -308,6 +314,9 @@ var (
 	DefaultCORSConfig = transport.DefaultCORSConfig
 	WithCORS          = transport.WithCORS
 	WithDefaultCORS   = transport.WithDefaultCORS
+	// WithStreamable enables the modern Streamable HTTP transport (MCP
+	// 2025-03-26): a single /mcp endpoint with Mcp-Session-Id and GET SSE.
+	WithStreamable = transport.WithStreamable
 )
 
 // Shutdown configuration for HTTP transports.
@@ -879,6 +888,9 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 		if t.Annotations != nil {
 			item["annotations"] = t.Annotations
 		}
+		if len(t.Icons) > 0 {
+			item["icons"] = t.Icons
+		}
 		if t.Meta != nil {
 			item["_meta"] = t.Meta
 		}
@@ -1051,6 +1063,9 @@ func (h *requestHandler) handleResourcesList(ctx context.Context, req *protocol.
 		if r.Annotations != nil {
 			item["annotations"] = r.Annotations
 		}
+		if len(r.Icons) > 0 {
+			item["icons"] = r.Icons
+		}
 		resourceList = append(resourceList, item)
 	}
 
@@ -1178,6 +1193,9 @@ func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Re
 		}
 		if p.Annotations != nil {
 			item["annotations"] = p.Annotations
+		}
+		if len(p.Icons) > 0 {
+			item["icons"] = p.Icons
 		}
 		promptList = append(promptList, item)
 	}
@@ -1312,6 +1330,9 @@ func (h *requestHandler) handleResourcesTemplatesList(ctx context.Context, req *
 		}
 		if t.Annotations != nil {
 			item["annotations"] = t.Annotations
+		}
+		if len(t.Icons) > 0 {
+			item["icons"] = t.Icons
 		}
 		list = append(list, item)
 	}

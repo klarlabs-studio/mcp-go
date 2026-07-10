@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — spec-revisions features (Phases 1–3, additive)
+
+Feature work spanning the 2025-03-26 → 2025-11-25 revisions. These are additive
+and land ahead of the formal per-revision certification (the negotiated default
+stays 2024-11-05 until each revision's remaining wire-level work — batching
+gating, `MCP-Protocol-Version` header enforcement, `tasks/*`, URL elicitation —
+is complete and conformance-gated).
+
+- **Streamable HTTP server** (2025-03-26). Opt in with `mcp.WithStreamable()` /
+  `transport.WithStreamable()`: a single `/mcp` endpoint that accepts POST
+  (JSON or SSE-framed reply, negotiated via `Accept`), GET (a standing
+  server→client SSE stream keyed by `Mcp-Session-Id`), and DELETE (session
+  teardown). `Mcp-Session-Id` is minted on `initialize` and required/echoed
+  thereafter. The legacy HTTP+SSE endpoints remain the default, unchanged.
+- **Audio & resource_link content, embedded resources** (2025-03-26/2025-06-18).
+  `NewAudioContent`, `NewResourceLink`, `NewEmbeddedResource` on the ContentBlock
+  union; they flow through tool results with no dispatcher change.
+- **Icons metadata** (2025-11-25, SEP-973). `.Icons(...)` builder on tools,
+  resources, and prompts; advertised in `tools/list`, `resources/list`,
+  `resources/templates/list`, and `prompts/list`.
+- **Sampling with tools** (2025-11-25, SEP-1577). `CreateMessageRequest` gains
+  `Tools`/`ToolChoice`; `CreateMessageResult` gains `ToolCalls`; new
+  `Session.CreateMessageWithTools`. New `SamplingTool`/`SamplingToolChoice`/
+  `SamplingToolCall` types.
+- **JSON Schema 2020-12 dialect** (2025-11-25, SEP-1613). Generated schemas
+  carry the `$schema: …/2020-12/schema` marker; `schema.Dialect2020_12` constant.
+- **OAuth/OIDC discovery metadata** (2025-06-18/2025-11-25, advertise-only). The
+  `/.well-known/mcp` document can publish RFC 9728 protected-resource metadata
+  (`authorizationServers`, `protectedResourceMetadata`, `resourceIndicator`,
+  `scopesSupported`) and an `oidcConfiguration` pointer via
+  `WithDiscoveryOAuthMetadata`. The library still performs no token handling.
+
 ### Added — spec-revisions foundation (Phase 0)
 
 First slice of the spec-revisions roadmap (`docs/revisions-roadmap.md`), which
