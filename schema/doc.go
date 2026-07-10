@@ -65,4 +65,28 @@
 // default dialect required by the MCP specification revision 2025-11-25
 // (SEP-1613). The marker is set only on the document root; nested sub-schemas
 // leave it empty per JSON Schema convention.
+//
+// # 2020-12 Referencing and Composition
+//
+// The Schema type carries the full 2020-12 referencing and composition
+// vocabulary so that inputSchema/outputSchema are not limited to the flat
+// object/array subset:
+//
+//   - $ref / $defs — Ref points at a reusable definition inside the root
+//     document's Defs map (e.g. "#/$defs/Node").
+//   - oneOf / anyOf / allOf — boolean combinators (OneOf, AnyOf, AllOf).
+//   - if / then / else — the conditional applicator (If, Then, Else).
+//
+// Generation emits $ref/$defs automatically to break recursive Go types:
+// when a struct type refers back to itself (directly or transitively) the
+// self-reference becomes a "#/$defs/<TypeName>" pointer and the type's
+// definition is hoisted into the root schema's $defs, so a recursive type no
+// longer inlines forever. The combinator and conditional keywords are
+// author-supplied (reflection cannot infer a discriminated union from a Go
+// type); the struct marshals and validates against all of them.
+//
+// The runtime validator understands every one of these keywords: it resolves
+// $ref against the root $defs, enforces allOf (all branches), anyOf (at least
+// one), oneOf (exactly one), and if/then/else. Unresolvable references are
+// treated leniently and never reject otherwise-valid input.
 package schema
