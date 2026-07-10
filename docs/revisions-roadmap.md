@@ -167,11 +167,11 @@ clients keep working, then make it the default in v2.
 - [ ] **Remove** `initialize`/`notifications/initialized`, `ping`,
   `logging/setLevel`, `notifications/roots/list_changed`,
   `resources/subscribe`/`unsubscribe`, the GET stream (all gated to this version).
-- [~] **`subscriptions/listen`** — single long-lived POST-response stream
+- [x] **`subscriptions/listen`** — single long-lived POST-response stream
   replacing the GET endpoint + subscribe/unsubscribe; clients opt into notif
   types; tag with `io.modelcontextprotocol/subscriptionId`. (Protocol method +
-  server-side registration + `subscriptionId` landed; the long-lived POST stream
-  transport realization is the remaining piece.)
+  server-side registration + `subscriptionId` + the long-lived POST-response SSE
+  stream with `subscriptionId`-tagged notifications all landed.)
 
 **Multi Round-Trip Requests (MRTR)** — replaces all server-initiated requests
 - [x] Every result carries required `resultType` (`"complete"` | `"input_required"`).
@@ -182,11 +182,12 @@ clients keep working, then make it the default in v2.
   pending `input_required`; handler is re-run each round.)
 
 **Transport**
-- [ ] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).
+- [x] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).
+  (`WithStreamableStateless()` drops the session-id lifecycle on the POST path.)
 - [ ] **Remove SSE resumability** (`Last-Event-ID`, event IDs).
-- [~] **Required routing headers** `Mcp-Method`, `Mcp-Name` on Streamable HTTP POST.
-  (Validated-when-present against the body → `-32020` on mismatch; hard-requiring
-  them is deferred, likely gated behind the Stateless option.)
+- [x] **Required routing headers** `Mcp-Method`, `Mcp-Name` on Streamable HTTP POST.
+  (Validated-when-present by default; `WithStreamableStateless()` hard-requires
+  `Mcp-Method` → `-32020` on absence/mismatch.)
 - [ ] **`CacheableResult`** — `ttlMs` + `cacheScope` on `tools/list`,
   `prompts/list`, `resources/list`, `resources/read`, `resources/templates/list`.
 - [ ] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —

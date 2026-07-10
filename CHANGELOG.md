@@ -50,15 +50,20 @@ is deliberately NOT yet in `SupportedVersions`.
   A client opts into notification types and resource `uris`; the server registers
   the URIs on the request-scoped session's SubscriptionManager and returns a
   `subscriptionId` (correlates the `io.modelcontextprotocol/subscriptionId` tag on
-  subsequent notifications). No session → `-32602`. Note: the long-lived
-  POST-response stream that carries the tagged notifications is a deferred
-  transport follow-up; this increment lands the protocol method + registration.
+  subsequent notifications). No session → `-32602`. On Streamable HTTP the method
+  is served as a **long-lived POST-response SSE stream**: the handler runs once to
+  register + return the `subscriptionId`, then the response stays open forwarding
+  notifications pushed via `HTTP.NotifySubscription` (each tagged with the
+  `subscriptionId` in `_meta`) until the client disconnects, reusing the standing-
+  stream registry for backpressure/cleanup.
 - **Streamable HTTP routing headers** — `Mcp-Method` / `Mcp-Name` on the
   streamable POST path are validated against the JSON-RPC body (method, and the
   name/uri target for `tools/call`/`prompts/get`/`resources/read`); a mismatch
   returns `-32020` HeaderMismatch (`protocol.NewHeaderMismatch`). Validation is
-  applied when the headers are present; hard-requiring them is a deferred
-  follow-up (likely gated behind the Stateless option).
+  applied when the headers are present by default; `WithStreamableStateless()`
+  additionally **hard-requires** `Mcp-Method` (absent → `-32020`) and **drops the
+  `Mcp-Session-Id` lifecycle** (no minting, no per-request requirement) — the
+  modern (MCP 2026-07-28) streamable model, opt-in until v2.
 - **Modern Icon fields** (SEP-973 evolution) — the `Icon` type gains additive
   modern fields `src` / `sizes` / `theme` alongside the legacy `uri` / `mimeType`
   / `size` (legacy JSON output is unchanged). `NewIcon(src)` + `WithMimeType` /
