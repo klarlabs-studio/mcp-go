@@ -42,6 +42,10 @@ type Capabilities struct {
 	Resources   bool
 	Prompts     bool
 	Completions bool
+	// Logging advertises the logging capability: the server accepts
+	// logging/setLevel and may emit notifications/message. Off by default so a
+	// bare server advertises no capabilities.
+	Logging bool
 	// ResourceSubscribe advertises resources.subscribe: clients may subscribe
 	// to a resource URI and receive notifications/resources/updated when it
 	// changes. Requires a transport with server push (HTTP+SSE).
@@ -69,6 +73,7 @@ type ToolInfo struct {
 	OutputSchema any
 	Annotations  *ToolAnnotations
 	Meta         map[string]any
+	Icons        []Icon
 }
 
 // Option configures a Server.
@@ -251,6 +256,7 @@ func (s *Server) Tools() []ToolInfo {
 			OutputSchema: t.outputSchema,
 			Annotations:  t.annotations,
 			Meta:         t.meta,
+			Icons:        t.icons,
 		})
 	}
 	return result
@@ -345,9 +351,11 @@ func (s *Server) Resources() []ResourceInfo {
 		result = append(result, ResourceInfo{
 			URITemplate: r.uriTemplate,
 			Name:        r.name,
+			Title:       r.title,
 			Description: r.description,
 			MimeType:    r.mimeType,
 			Annotations: r.annotations,
+			Icons:       r.icons,
 		})
 	}
 	return result
@@ -422,9 +430,11 @@ func (s *Server) Prompts() []PromptInfo {
 	for _, p := range s.prompts {
 		result = append(result, PromptInfo{
 			Name:        p.name,
+			Title:       p.title,
 			Description: p.description,
 			Arguments:   p.arguments,
 			Annotations: p.annotations,
+			Icons:       p.icons,
 		})
 	}
 	return result
@@ -497,6 +507,15 @@ func (s *Server) HandleCompletion(ctx context.Context, ref CompletionRef, arg Co
 	return completions.Handle(ctx, ref, arg)
 }
 
+// HasCompletions reports whether any prompt/resource completion handler has
+// been registered, so the server can auto-advertise the completions capability
+// even when the Capabilities.Completions flag was not set explicitly.
+func (s *Server) HasCompletions() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completions != nil
+}
+
 // ResourceTemplates returns info about all registered resource templates.
 func (s *Server) ResourceTemplates() []ResourceTemplateInfo {
 	s.mu.RLock()
@@ -509,9 +528,11 @@ func (s *Server) ResourceTemplates() []ResourceTemplateInfo {
 			result = append(result, ResourceTemplateInfo{
 				URITemplate: r.uriTemplate,
 				Name:        r.name,
+				Title:       r.title,
 				Description: r.description,
 				MimeType:    r.mimeType,
 				Annotations: r.annotations,
+				Icons:       r.icons,
 			})
 		}
 	}

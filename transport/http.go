@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,6 +44,12 @@ type HTTP struct {
 	allowAllOrigins bool
 	maxRequestBytes int64
 	maxSSEClients   int
+
+	// streamable enables the modern Streamable HTTP transport (MCP 2025-03-26):
+	// a single /mcp endpoint that accepts POST (JSON or SSE-framed replies), GET
+	// (a standing server->client SSE stream), and DELETE (session teardown),
+	// with an Mcp-Session-Id header minted on initialize and echoed thereafter.
+	streamable bool
 
 	mu         sync.RWMutex
 	listenAddr string
@@ -216,6 +223,30 @@ func WithMaxSSEConnections(n int) HTTPOption {
 	}
 }
 
+// WithStreamable enables the modern Streamable HTTP transport (MCP 2025-03-26)
+// on the /mcp endpoint, in addition to the legacy POST /mcp + GET /mcp/sse
+// endpoints, which remain available for backward compatibility.
+//
+// In streamable mode the single /mcp endpoint:
+//   - POST accepts a JSON-RPC request and replies either with a single JSON
+//     object (Content-Type: application/json) or an SSE stream
+//     (Content-Type: text/event-stream), negotiated via the request's Accept
+//     header. Notifications sent by handlers during an SSE-framed reply are
+//     streamed as SSE data frames ahead of the final response frame.
+//   - GET opens a standing server->client SSE stream, keyed by Mcp-Session-Id,
+//     for notifications delivered outside a request/response exchange.
+//   - DELETE tears down the session named by Mcp-Session-Id.
+//
+// The server mints an Mcp-Session-Id on the initialize response and requires it
+// to be echoed on every subsequent request. All existing security controls
+// (origin checks, max body size, authorize hook, request-context hook) apply to
+// the streamable paths unchanged.
+func WithStreamable() HTTPOption {
+	return func(h *HTTP) {
+		h.streamable = true
+	}
+}
+
 func NewHTTP(addr string, opts ...HTTPOption) *HTTP {
 	h := &HTTP{
 		addr:            addr,
@@ -317,9 +348,19 @@ func (h *HTTP) createHandler(handler Handler) http.Handler {
 		h.handleSSE(w, r)
 	})
 
-	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
-		h.handleMCP(w, r, handler)
-	})
+	if h.streamable {
+		// Streamable HTTP (MCP 2025-03-26): one endpoint multiplexes POST
+		// (request/reply), GET (standing server-push stream), and DELETE
+		// (session teardown). The legacy /mcp/sse endpoint above stays wired for
+		// backward compatibility.
+		mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+			h.handleStreamable(w, r, handler)
+		})
+	} else {
+		mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+			h.handleMCP(w, r, handler)
+		})
+	}
 
 	if h.corsConfig != nil {
 		return CORSHandler(*h.corsConfig, mux)
@@ -378,6 +419,14 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	// Correlate this request with the client's server-push stream so handlers
 	// like resources/subscribe can target it. The client echoes the clientId
 	// it received on its SSE connection.
+	//
+	// Unlike stdio/websocket, HTTP does not inject a per-connection
+	// server.Session here: POST requests are stateless, so a per-request
+	// session would not carry the client capabilities recorded at initialize
+	// across to later tool calls, making capability gating unreliable. Session
+	// injection for HTTP is wired in Phase 1 alongside the Streamable HTTP
+	// transport and the per-clientId session store (see
+	// docs/revisions-roadmap.md).
 	if clientID := r.URL.Query().Get("clientId"); clientID != "" {
 		ctx = ContextWithClientID(ctx, clientID)
 	}
@@ -552,4 +601,321 @@ func (h *HTTP) SendTo(clientID string, data []byte) bool {
 		}
 	}
 	return false
+}
+
+// mcpSessionHeader is the HTTP header carrying the Streamable HTTP session id.
+const mcpSessionHeader = "Mcp-Session-Id"
+
+// notifierFunc adapts a plain function to the NotificationSender interface so a
+// per-request notification sink can be injected into the handler context.
+type notifierFunc func(method string, params any) error
+
+// SendNotification implements NotificationSender.
+func (f notifierFunc) SendNotification(method string, params any) error { return f(method, params) }
+
+// marshalNotification encodes a JSON-RPC notification (a request with no id).
+func marshalNotification(method string, params any) ([]byte, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("marshal params: %w", err)
+	}
+	msg, err := json.Marshal(protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		Method:  method,
+		Params:  raw,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal notification: %w", err)
+	}
+	return msg, nil
+}
+
+// sessionStreamNotifier returns a NotificationSender that routes notifications
+// to the session's standing GET SSE stream (if one is open). Used for the
+// JSON-framed POST path, where in-handler notifications cannot ride the reply.
+func (h *HTTP) sessionStreamNotifier(sessionID string) NotificationSender {
+	return notifierFunc(func(method string, params any) error {
+		msg, err := marshalNotification(method, params)
+		if err != nil {
+			return err
+		}
+		if !h.SendTo(sessionID, msg) {
+			return fmt.Errorf("session %s: no standing stream or buffer full", sessionID)
+		}
+		return nil
+	})
+}
+
+// handleStreamable multiplexes the Streamable HTTP methods on the single /mcp
+// endpoint. Security controls (origin, authorize) are applied per-method by the
+// concrete handlers so the same policy guards every verb.
+func (h *HTTP) handleStreamable(w http.ResponseWriter, r *http.Request, handler Handler) {
+	switch r.Method {
+	case http.MethodPost:
+		h.handleStreamablePost(w, r, handler)
+	case http.MethodGet:
+		h.handleStreamableGet(w, r)
+	case http.MethodDelete:
+		h.handleStreamableDelete(w, r)
+	default:
+		w.Header().Set("Allow", "GET, POST, DELETE")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+// handleStreamablePost handles a JSON-RPC request POSTed to the streamable
+// endpoint. It mints a session id on initialize, enforces the echoed
+// Mcp-Session-Id on subsequent requests, and replies with either a single JSON
+// object or an SSE stream depending on the client's Accept header.
+// resolveStreamableSession applies the Streamable HTTP session lifecycle: it
+// mints a new Mcp-Session-Id on initialize (persisting a marker in the session
+// store) and, for every other request, requires and validates the header
+// against the store. It returns the resolved session id and ok=false when it
+// has already written an error response (the caller must then return).
+func (h *HTTP) resolveStreamableSession(w http.ResponseWriter, r *http.Request, ctx context.Context, req *protocol.Request) (string, bool) {
+	sessionID := r.Header.Get(mcpSessionHeader)
+	switch {
+	case req.Method == protocol.MethodInitialize:
+		minted, err := newSessionID()
+		if err != nil {
+			http.Error(w, "failed to allocate session", http.StatusInternalServerError)
+			return "", false
+		}
+		sessionID = minted
+		if h.sessionStore != nil {
+			// Store a marker so later requests validate against a known session.
+			if err := h.sessionStore.StoreSession(ctx, sessionID, []byte("{}")); err != nil {
+				http.Error(w, "failed to persist session", http.StatusInternalServerError)
+				return "", false
+			}
+		}
+	case h.sessionStore != nil:
+		if sessionID == "" {
+			http.Error(w, "Mcp-Session-Id header required", http.StatusBadRequest)
+			return "", false
+		}
+		data, err := h.sessionStore.GetSession(ctx, sessionID)
+		if err != nil || data == nil {
+			http.Error(w, "unknown or expired session", http.StatusNotFound)
+			return "", false
+		}
+	}
+	return sessionID, true
+}
+
+func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, handler Handler) {
+	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if h.authorizeFn != nil {
+		if err := h.authorizeFn(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	ctx := r.Context()
+	if h.requestContextFn != nil {
+		ctx = h.requestContextFn(ctx, r)
+	}
+
+	if h.maxRequestBytes > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBytes)
+	}
+
+	var req protocol.Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(nil, protocol.NewParseError("Invalid JSON")))
+		return
+	}
+
+	// Session lifecycle: mint on initialize, require+echo otherwise. On any
+	// failure the helper has already written the response.
+	sessionID, ok := h.resolveStreamableSession(w, r, ctx, &req)
+	if !ok {
+		return
+	}
+	if sessionID != "" {
+		// Echo the session id so the client can capture (initialize) or confirm it.
+		w.Header().Set(mcpSessionHeader, sessionID)
+		ctx = ContextWithClientID(ctx, sessionID)
+	}
+
+	// A notification carries no id and MUST NOT be answered with a body. Run it
+	// for side effects (routing any emitted notifications to the standing stream)
+	// and acknowledge with 202.
+	if req.IsNotification() {
+		ctx = ContextWithNotificationSender(ctx, h.sessionStreamNotifier(sessionID))
+		_, _ = handler.HandleRequest(ctx, &req)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	// Negotiate the reply framing. SSE is used only when the client accepts
+	// text/event-stream but not application/json; otherwise a single JSON object
+	// is returned. Both are spec-valid for a streamable server.
+	accept := r.Header.Get("Accept")
+	useSSE := strings.Contains(accept, "text/event-stream") && !strings.Contains(accept, "application/json")
+	flusher, flushable := w.(http.Flusher)
+	if useSSE && flushable {
+		h.streamablePostSSE(ctx, w, &req, handler, flusher)
+		return
+	}
+
+	// JSON reply. In-handler notifications ride the session's standing GET stream
+	// (if open) since a single JSON object cannot carry interleaved events.
+	w.Header().Set("Content-Type", "application/json")
+	ctx = ContextWithNotificationSender(ctx, h.sessionStreamNotifier(sessionID))
+	resp, err := handler.HandleRequest(ctx, &req)
+	if err != nil {
+		resp = protocol.NewErrorResponse(req.ID, protocol.NewInternalError(err.Error()))
+	}
+	if resp != nil {
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// streamablePostSSE answers a POST with an SSE stream: notifications emitted by
+// the handler are written as data frames, followed by the final JSON-RPC
+// response as the last data frame, then the stream is closed.
+func (h *HTTP) streamablePostSSE(ctx context.Context, w http.ResponseWriter, req *protocol.Request, handler Handler, flusher http.Flusher) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	sse := NewSSEWriter(w, flusher)
+	ctx = ContextWithNotificationSender(ctx, notifierFunc(func(method string, params any) error {
+		msg, err := marshalNotification(method, params)
+		if err != nil {
+			return err
+		}
+		return sse.WriteData(msg)
+	}))
+
+	resp, err := handler.HandleRequest(ctx, req)
+	if err != nil {
+		resp = protocol.NewErrorResponse(req.ID, protocol.NewInternalError(err.Error()))
+	}
+	if resp != nil {
+		body, mErr := json.Marshal(resp)
+		if mErr != nil {
+			body, _ = json.Marshal(protocol.NewErrorResponse(req.ID, protocol.NewInternalError(mErr.Error())))
+		}
+		_ = sse.WriteData(body)
+	}
+}
+
+// handleStreamableGet opens a standing server->client SSE stream keyed by the
+// Mcp-Session-Id header, mirroring the legacy /mcp/sse push loop but correlated
+// by session id rather than a clientId query parameter.
+func (h *HTTP) handleStreamableGet(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "SSE not supported", http.StatusInternalServerError)
+		return
+	}
+	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if h.authorizeFn != nil {
+		if err := h.authorizeFn(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	ctx := r.Context()
+	if h.requestContextFn != nil {
+		ctx = h.requestContextFn(ctx, r)
+	}
+
+	sessionID := r.Header.Get(mcpSessionHeader)
+	if sessionID == "" {
+		http.Error(w, "Mcp-Session-Id header required", http.StatusBadRequest)
+		return
+	}
+	if h.sessionStore != nil {
+		data, err := h.sessionStore.GetSession(ctx, sessionID)
+		if err != nil || data == nil {
+			http.Error(w, "unknown or expired session", http.StatusNotFound)
+			return
+		}
+	}
+
+	messageCh := make(chan []byte, 10)
+	if !h.registerSSEClient(sessionID, messageCh) {
+		// Cap reached or a stream is already open for this session. Refusing
+		// rather than clobbering keeps the existing stream intact.
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+		return
+	}
+	defer func() {
+		h.sseClientsMu.Lock()
+		if h.sseClients[sessionID] == messageCh {
+			delete(h.sseClients, sessionID)
+		}
+		h.sseClientsMu.Unlock()
+		h.mu.RLock()
+		hook := h.onDisconnect
+		h.mu.RUnlock()
+		if hook != nil {
+			hook(sessionID)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set(mcpSessionHeader, sessionID)
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	sse := NewSSEWriter(w, flusher)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-messageCh:
+			if !ok {
+				return
+			}
+			_ = sse.WriteData(msg)
+		}
+	}
+}
+
+// handleStreamableDelete tears down the session named by Mcp-Session-Id,
+// releasing its store entry. Any open standing stream closes on its own when
+// the underlying connection drops.
+func (h *HTTP) handleStreamableDelete(w http.ResponseWriter, r *http.Request) {
+	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
+		http.Error(w, "origin not allowed", http.StatusForbidden)
+		return
+	}
+	if h.authorizeFn != nil {
+		if err := h.authorizeFn(r); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+	}
+
+	sessionID := r.Header.Get(mcpSessionHeader)
+	if sessionID == "" {
+		http.Error(w, "Mcp-Session-Id header required", http.StatusBadRequest)
+		return
+	}
+	if h.sessionStore != nil {
+		_ = h.sessionStore.DeleteSession(r.Context(), sessionID)
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

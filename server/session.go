@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,13 @@ type Session struct {
 	// Client capabilities (what the client supports)
 	clientCaps ClientCapabilities
 }
+
+// ErrNoRequestSender is returned by server→client request methods (sampling,
+// elicitation, roots/list) when the session has no RequestSender — i.e. the
+// transport does not support bidirectional server-to-client requests. One-way
+// features (logging, channels, resource-updated notifications) still work
+// because they only need the notifier.
+var ErrNoRequestSender = errors.New("transport does not support server-to-client requests")
 
 // ClientCapabilities describes what features the client supports.
 type ClientCapabilities struct {
@@ -107,6 +115,35 @@ func (s *Session) SetClientCapabilities(caps ClientCapabilities) {
 	s.clientCaps = caps
 }
 
+// SetClientCapabilitiesJSON records client capabilities from the raw
+// `capabilities` object sent in an `initialize` request. MCP encodes
+// capabilities in presence form — a feature is supported when its key is
+// present (e.g. `"sampling": {}`), which does not map onto the bool/struct
+// fields directly, so the wire object is decoded here. Unknown keys are
+// ignored; malformed JSON leaves capabilities unchanged.
+func (s *Session) SetClientCapabilitiesJSON(raw json.RawMessage) {
+	var wire struct {
+		Sampling    *json.RawMessage `json:"sampling"`
+		Elicitation *json.RawMessage `json:"elicitation"`
+		Channels    *json.RawMessage `json:"channels"`
+		Roots       *struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"roots"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return
+	}
+	caps := ClientCapabilities{
+		Sampling:    wire.Sampling != nil,
+		Elicitation: wire.Elicitation != nil,
+		Channels:    wire.Channels != nil,
+	}
+	if wire.Roots != nil {
+		caps.Roots = &RootsCapability{ListChanged: wire.Roots.ListChanged}
+	}
+	s.SetClientCapabilities(caps)
+}
+
 // SupportsFeature returns true if the client supports the given feature.
 func (s *Session) SupportsFeature(feature string) bool {
 	s.mu.RLock()
@@ -131,8 +168,31 @@ func (s *Session) SupportsFeature(feature string) bool {
 // CreateMessage sends a sampling request to the client.
 // Returns an error if the client doesn't support sampling.
 func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
+	return s.createMessage(ctx, req)
+}
+
+// CreateMessageWithTools sends a sampling request that offers the given tools
+// to the model (MCP 2025-11-25, SEP-1577). It sets req.Tools and req.ToolChoice
+// (overwriting any already present) and dispatches through the same request
+// path as CreateMessage, so the sampling capability gate and nil-sender guard
+// (ErrNoRequestSender) apply identically. A nil choice leaves tool selection to
+// the client/model.
+func (s *Session) CreateMessageWithTools(ctx context.Context, req *CreateMessageRequest, tools []SamplingTool, choice *SamplingToolChoice) (*CreateMessageResult, error) {
+	req.Tools = tools
+	req.ToolChoice = choice
+	return s.createMessage(ctx, req)
+}
+
+// createMessage is the shared implementation for CreateMessage and
+// CreateMessageWithTools: it enforces the sampling capability gate and
+// nil-sender guard, marshals the request, dispatches it, and decodes the
+// result.
+func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	if !s.SupportsFeature("sampling") {
 		return nil, fmt.Errorf("client does not support sampling")
+	}
+	if s.sender == nil {
+		return nil, ErrNoRequestSender
 	}
 
 	params, err := json.Marshal(req)
@@ -180,6 +240,9 @@ func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) 
 func (s *Session) ListRoots(ctx context.Context) (*ListRootsResult, error) {
 	if !s.SupportsFeature("roots") {
 		return nil, fmt.Errorf("client does not support roots")
+	}
+	if s.sender == nil {
+		return nil, ErrNoRequestSender
 	}
 
 	idRaw, err := json.Marshal(s.requestID.Add(1))

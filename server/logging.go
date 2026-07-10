@@ -92,3 +92,16 @@ func logLevelPriority(level LogLevel) int {
 func ShouldLog(messageLevel, minLevel LogLevel) bool {
 	return logLevelPriority(messageLevel) >= logLevelPriority(minLevel)
 }
+
+// IsValidLogLevel reports whether level is one of the eight RFC 5424 severities
+// MCP defines. Used to reject logging/setLevel requests carrying an unknown
+// level rather than silently coercing them to debug.
+func IsValidLogLevel(level LogLevel) bool {
+	switch level {
+	case LogLevelDebug, LogLevelInfo, LogLevelNotice, LogLevelWarning,
+		LogLevelError, LogLevelCritical, LogLevelAlert, LogLevelEmergency:
+		return true
+	default:
+		return false
+	}
+}

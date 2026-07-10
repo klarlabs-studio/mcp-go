@@ -4,6 +4,103 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Certified — 2025-03-26 and 2025-06-18 negotiable (Phases 1–2)
+
+`protocol.SupportedVersions` now lists `2024-11-05`, `2025-03-26`, and
+`2025-06-18`; the default (`protocol.MCPVersion`) advances to `2025-06-18`. The
+server negotiates and honors all three, and the conformance harness runs its
+full method set against each (version-aware `initialize` echo).
+
+- **Top-level `title`** (2025-06-18) on tools, resources, resource templates, and
+  prompts — advertised as a sibling of `name` in every list response. New
+  `.Title()` builder on resources and prompts (tools already had one via
+  annotations); `Title` field on `ResourceInfo`/`ResourceTemplateInfo`/
+  `PromptInfo`.
+- `ProgressNotification.message` (2025-03-26) — already present, now covered.
+- **JSON-RPC batching** (added 2025-03-26, removed 2025-06-18) is intentionally
+  not supported: it was optional in 03-26 and gone by 06-18, so never batching is
+  conformant across the supported range.
+
+### Added — spec-revisions features (Phases 1–3, additive)
+
+Feature work spanning the 2025-03-26 → 2025-11-25 revisions. These are additive
+and land ahead of the formal per-revision certification (the negotiated default
+stays 2024-11-05 until each revision's remaining wire-level work — batching
+gating, `MCP-Protocol-Version` header enforcement, `tasks/*`, URL elicitation —
+is complete and conformance-gated).
+
+- **Streamable HTTP server** (2025-03-26). Opt in with `mcp.WithStreamable()` /
+  `transport.WithStreamable()`: a single `/mcp` endpoint that accepts POST
+  (JSON or SSE-framed reply, negotiated via `Accept`), GET (a standing
+  server→client SSE stream keyed by `Mcp-Session-Id`), and DELETE (session
+  teardown). `Mcp-Session-Id` is minted on `initialize` and required/echoed
+  thereafter. The legacy HTTP+SSE endpoints remain the default, unchanged.
+- **Audio & resource_link content, embedded resources** (2025-03-26/2025-06-18).
+  `NewAudioContent`, `NewResourceLink`, `NewEmbeddedResource` on the ContentBlock
+  union; they flow through tool results with no dispatcher change.
+- **Icons metadata** (2025-11-25, SEP-973). `.Icons(...)` builder on tools,
+  resources, and prompts; advertised in `tools/list`, `resources/list`,
+  `resources/templates/list`, and `prompts/list`.
+- **Sampling with tools** (2025-11-25, SEP-1577). `CreateMessageRequest` gains
+  `Tools`/`ToolChoice`; `CreateMessageResult` gains `ToolCalls`; new
+  `Session.CreateMessageWithTools`. New `SamplingTool`/`SamplingToolChoice`/
+  `SamplingToolCall` types.
+- **JSON Schema 2020-12 dialect** (2025-11-25, SEP-1613). Generated schemas
+  carry the `$schema: …/2020-12/schema` marker; `schema.Dialect2020_12` constant.
+- **OAuth/OIDC discovery metadata** (2025-06-18/2025-11-25, advertise-only). The
+  `/.well-known/mcp` document can publish RFC 9728 protected-resource metadata
+  (`authorizationServers`, `protectedResourceMetadata`, `resourceIndicator`,
+  `scopesSupported`) and an `oidcConfiguration` pointer via
+  `WithDiscoveryOAuthMetadata`. The library still performs no token handling.
+
+### Added — spec-revisions foundation (Phase 0)
+
+First slice of the spec-revisions roadmap (`docs/revisions-roadmap.md`), which
+brings mcp-go current across every MCP revision from `2024-11-05` to the
+`2026-07-28` release candidate. This slice lays the backbone and fixes wiring:
+
+- **Protocol version negotiation.** `protocol.SupportedVersions`,
+  `protocol.IsSupportedVersion`, and `protocol.NegotiateVersion` replace the
+  hard-pinned version. `initialize` now parses the client's `protocolVersion`
+  and echoes it back when supported (negotiating down to the server's preferred
+  version otherwise) — previously the request was ignored entirely. New spec
+  revisions are enabled by appending to `SupportedVersions` as each roadmap
+  phase is certified.
+- **Client capabilities captured at initialize.** `initialize` now records the
+  client's advertised capabilities on the session (via the new
+  `(*server.Session).SetClientCapabilitiesJSON`), so feature gating for
+  sampling/elicitation has the data it needs.
+- **Dead methods wired into the dispatcher.** `completion/complete`,
+  `logging/setLevel`, `resources/templates/list`, and
+  `notifications/initialized` are now dispatched. Their handlers already
+  existed but were unreachable and returned `-32601 MethodNotFound`.
+- **Capability advertisement.** `completions` now auto-advertises when a
+  completion handler is registered; a new opt-in `Capabilities.Logging` flag
+  advertises the `logging` capability.
+- **Session injection (stdio + websocket).** Both transports now attach a
+  per-connection `server.Session` to every request context, so features that
+  need one — logging notifications, channels, resource-updated — are reachable.
+  Previously `SessionFromContext(ctx)` was always nil and these silently no-op'd.
+  (HTTP session injection lands in Phase 1 with the Streamable HTTP transport.)
+- **Graceful degradation for server→client requests.** `Session.CreateMessage`,
+  `Session.ListRoots`, and `Elicitor.Elicit` now return the new sentinel
+  `server.ErrNoRequestSender` when the transport has no bidirectional request
+  sender, instead of panicking on a nil sender. One-way features are unaffected.
+- **`ContentBlock` content-block union.** `Content` is now the single canonical
+  content-block union (aliased as `ContentBlock`), extended to cover `audio`,
+  `resource_link`, and embedded `resource` blocks alongside text/image, with
+  `NewAudioContent`, `NewResourceLink`, and `NewEmbeddedResource` constructors
+  and optional content `Annotations`. Additive — text/image blocks serialize
+  unchanged. The standalone prompt `TextContent`/`ImageContent` types remain for
+  compatibility. This is the groundwork audio (Phase 1) and resource_link
+  (Phase 2) build on.
+
+### Per-revision conformance harness
+
+- `mcp_conformance_test.go` drives a fully featured reference server through
+  every method a revision defines and asserts the response shape; cases carry a
+  `minVersion` so later phases extend the same gate.
+
 ### Removed (BREAKING)
 
 #### In-library authentication removed — auth is out of scope

@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
 )
 
 // Stdio implements MCP transport over stdin/stdout.
@@ -80,6 +81,14 @@ func (s *Stdio) Addr() string {
 // with Serve responses.
 func (s *Stdio) Serve(ctx context.Context, handler Handler) error {
 	reader := NewNewlineFramer(s.in, nil)
+
+	// One session per stdio connection (stdio is inherently single-connection).
+	// The transport is the notifier, enabling one-way server→client features
+	// (logging, channels, resource-updated). There is no bidirectional request
+	// sender for stdio yet, so sampling/elicitation report ErrNoRequestSender
+	// rather than silently no-op. initialize populates the session's client
+	// capabilities, which persists for every later request on this connection.
+	ctx = server.ContextWithSession(ctx, server.NewSession("stdio", nil, s))
 
 	// Channel for scanner results
 	lines := make(chan []byte)

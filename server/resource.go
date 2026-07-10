@@ -28,10 +28,12 @@ type ResourceHandler func(ctx context.Context, uri string, params map[string]str
 type Resource struct {
 	uriTemplate string
 	name        string
+	title       string
 	description string
 	mimeType    string
 	handler     ResourceHandler
 	annotations *ResourceAnnotations
+	icons       []Icon
 
 	// Compiled regex for URI matching
 	uriRegex   *regexp.Regexp
@@ -46,22 +48,31 @@ func (r *Resource) URITemplate() string { return r.uriTemplate }
 // builder never set one.
 func (r *Resource) Name() string { return r.name }
 
+// Icons returns the resource's icons, used for the icons field in
+// resources/list and resources/templates/list. Returns nil when no icons
+// were set.
+func (r *Resource) Icons() []Icon { return r.icons }
+
 // ResourceInfo represents metadata about a registered resource.
 type ResourceInfo struct {
 	URITemplate string
 	Name        string
+	Title       string
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
+	Icons       []Icon
 }
 
 // ResourceTemplateInfo represents metadata about a resource template.
 type ResourceTemplateInfo struct {
 	URITemplate string
 	Name        string
+	Title       string
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
+	Icons       []Icon
 }
 
 // ResourceBuilder provides a fluent API for building resources.
@@ -89,12 +100,33 @@ func (b *ResourceBuilder) Description(desc string) *ResourceBuilder {
 	return b
 }
 
+// Title sets a human-readable display title, advertised as the top-level
+// `title` field (MCP 2025-06-18). `name` remains the programmatic identifier.
+func (b *ResourceBuilder) Title(title string) *ResourceBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.resource.title = title
+	return b
+}
+
 // MimeType sets the MIME type of the resource content.
 func (b *ResourceBuilder) MimeType(mimeType string) *ResourceBuilder {
 	if b.err != nil {
 		return b
 	}
 	b.resource.mimeType = mimeType
+	return b
+}
+
+// Icons sets optional icons advertised for this resource in resources/list and
+// resources/templates/list, per the MCP 2025-11-25 spec (SEP-973). Icons are
+// for UI display and are purely informational metadata.
+func (b *ResourceBuilder) Icons(icons ...Icon) *ResourceBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.resource.icons = icons
 	return b
 }
 

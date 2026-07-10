@@ -44,6 +44,9 @@ func (e *Elicitor) Elicit(ctx context.Context, req *ElicitRequest) (*ElicitResul
 	if !e.session.SupportsFeature("elicitation") {
 		return nil, fmt.Errorf("client does not support elicitation")
 	}
+	if e.session.sender == nil {
+		return nil, ErrNoRequestSender
+	}
 
 	params, err := json.Marshal(req)
 	if err != nil {
