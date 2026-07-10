@@ -19,13 +19,26 @@ const formatDateTime = "date-time"
 
 const tagRequired = "required"
 
+// Dialect2020_12 is the JSON Schema 2020-12 dialect identifier. It is the
+// default dialect mandated by the MCP specification revision 2025-11-25
+// (SEP-1613) for tool inputSchema/outputSchema. Generated root schemas
+// advertise it via the "$schema" keyword so strict validators select the
+// correct dialect semantics.
+const Dialect2020_12 = "https://json-schema.org/draft/2020-12/schema"
+
 // Schema represents a JSON Schema.
 //
 // AdditionalProperties is encoded only when explicitly set. For struct-derived
 // schemas it is set to bool(false) so the resulting JSON satisfies OpenAI
 // strict tool-calling, which requires closed objects. Map-derived schemas
 // leave it unset so they remain open.
+//
+// Dialect carries the "$schema" dialect marker and is set only on root
+// schemas produced by Generate/GenerateFromType. Nested (sub-)schemas leave
+// it empty, matching JSON Schema convention where the dialect is declared
+// once at the document root.
 type Schema struct {
+	Dialect              string             `json:"$schema,omitempty"`
 	Type                 string             `json:"type,omitempty"`
 	Format               string             `json:"format,omitempty"`
 	Properties           map[string]*Schema `json:"properties,omitempty"`
@@ -55,6 +68,9 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 	}
 
 	out := map[string]any{"type": typeObject}
+	if s.Dialect != "" {
+		out["$schema"] = s.Dialect
+	}
 	if s.Format != "" {
 		out["format"] = s.Format
 	}
@@ -90,15 +106,28 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// Generate creates a JSON Schema from a Go value.
+// Generate creates a JSON Schema from a Go value. The returned root schema
+// advertises the JSON Schema 2020-12 dialect via the "$schema" keyword.
 func Generate(v any) (*Schema, error) {
 	t := reflect.TypeOf(v)
-	return generateFromType(t)
+	s, err := generateFromType(t)
+	if err != nil {
+		return nil, err
+	}
+	s.Dialect = Dialect2020_12
+	return s, nil
 }
 
-// GenerateFromType creates a JSON Schema from a reflect.Type.
+// GenerateFromType creates a JSON Schema from a reflect.Type. The returned
+// root schema advertises the JSON Schema 2020-12 dialect via the "$schema"
+// keyword.
 func GenerateFromType(t reflect.Type) (*Schema, error) {
-	return generateFromType(t)
+	s, err := generateFromType(t)
+	if err != nil {
+		return nil, err
+	}
+	s.Dialect = Dialect2020_12
+	return s, nil
 }
 
 func generateFromType(t reflect.Type) (*Schema, error) {

@@ -50,10 +50,19 @@
 // The Schema type represents a JSON Schema:
 //
 //	type Schema struct {
+//	    Dialect     string             `json:"$schema,omitempty"`
 //	    Type        string             `json:"type,omitempty"`
 //	    Properties  map[string]*Schema `json:"properties,omitempty"`
 //	    Required    []string           `json:"required,omitempty"`
 //	    Description string             `json:"description,omitempty"`
 //	    Items       *Schema            `json:"items,omitempty"`
 //	}
+//
+// # Dialect
+//
+// Root schemas produced by Generate and GenerateFromType advertise the JSON
+// Schema 2020-12 dialect via the "$schema" keyword (see Dialect2020_12), the
+// default dialect required by the MCP specification revision 2025-11-25
+// (SEP-1613). The marker is set only on the document root; nested sub-schemas
+// leave it empty per JSON Schema convention.
 package schema
