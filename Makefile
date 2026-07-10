@@ -73,8 +73,9 @@ ci: deps lint test build
 
 # Install git hooks
 hooks:
-	git config core.hooksPath .githooks
-	@echo "Git hooks installed (using .githooks/)"
+	@git config --unset core.hooksPath 2>/dev/null || true
+	warden init --hooks=pre-commit,pre-push
+	@echo "Warden shift-left gate armed (policy in .warden.yaml)."
 
 # Install development tools
 tools:

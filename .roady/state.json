@@ -1,6 +1,6 @@
 {
   "project_id": "",
-  "version": 14,
+  "version": 16,
   "task_states": {
     "phase1-healthz": {
       "status": "done",
@@ -49,7 +49,59 @@
       "started_at": "2026-03-20T21:41:30.475932+01:00",
       "completed_at": "2026-03-20T22:00:05.605804+01:00",
       "elapsed_minutes": 18
+    },
+    "rev0-client-caps": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev0-conformance-harness": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev0-content-union": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev0-session-injection": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev0-version-negotiation": {
+      "status": "in_progress",
+      "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-07-10T12:34:25.287968+02:00",
+      "elapsed_minutes": 0
+    },
+    "rev0-wire-dead-methods": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev1-2025-03-26": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev2-2025-06-18": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev3-2025-11-25": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "rev4-2026-07-28": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-03-20T22:00:05.605804+01:00"
+  "updated_at": "2026-07-10T12:34:25.287968+02:00"
 }

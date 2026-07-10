@@ -1,10 +1,16 @@
 # warden gate — https://github.com/klarlabs-studio/warden
-# Any dev with warden installed gets the same checks CI runs, pre-commit/pre-push.
-hooks: { pre_commit: true, pre_push: true }
+# Shift-left CI: any dev with warden installed gets the same checks CI runs,
+# enforced pre-commit / pre-push. Arm locally with `make hooks` (runs
+# `warden init`). Policy below mirrors the klarlabs shared go-ci.yml bar:
+# format → vet → lint(+gocritic) on commit; build → race tests on push.
+hooks: {pre_commit: true, pre_push: true}
 commands:
+  fmt: "test -z \"$(gofmt -l .)\""
+  vet: "go vet ./..."
   lint: "golangci-lint run ./..."
+  build: "go build ./..."
   test: "go test -race ./..."
 steps:
-  pre_commit: [lint]
-  pre_push: [test, lint]
+  pre_commit: [fmt, vet, lint]
+  pre_push: [build, test]
 parallel: true

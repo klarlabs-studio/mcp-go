@@ -9,7 +9,8 @@
       "priority": "medium",
       "estimate": "8h",
       "depends_on": [],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
     },
     {
       "id": "phase1-redis-example",
@@ -20,7 +21,8 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
     },
     {
       "id": "phase1-healthz",
@@ -31,7 +33,8 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
     },
     {
       "id": "phase2-discovery",
@@ -42,7 +45,8 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
     },
     {
       "id": "phase3-tasks",
@@ -53,7 +57,8 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
     },
     {
       "id": "phase4-enterprise",
@@ -64,10 +69,131 @@
       "depends_on": [
         "phase2-discovery"
       ],
-      "feature_id": "2026 Roadmap Alignment"
+      "feature_id": "2026 Roadmap Alignment",
+      "source": {}
+    },
+    {
+      "id": "rev0-version-negotiation",
+      "title": "Rev Phase 0: Protocol version negotiation layer",
+      "description": "Add protocol.SupportedVersions (ordered). Parse client protocolVersion in handleInitialize (mcp.go:746); negotiate/echo; UnsupportedProtocolVersion when none overlap. Stop hard-returning protocol.MCPVersion (server.go:278).",
+      "priority": "high",
+      "estimate": "6h",
+      "depends_on": [],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev0-client-caps",
+      "title": "Rev Phase 0: Capture client capabilities at initialize",
+      "description": "Parse capabilities from initialize params into ClientCapabilities (session.go:37) so elicitation/sampling gating works.",
+      "priority": "high",
+      "estimate": "3h",
+      "depends_on": [
+        "rev0-version-negotiation"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev0-session-injection",
+      "title": "Rev Phase 0: Inject Session into request context (stdio/http/ws)",
+      "description": "Wire ContextWithSession from transports so SessionFromContext(ctx) is non-nil; unblocks sampling, elicitation, channels, logging notifications.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [
+        "rev0-client-caps"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev0-wire-dead-methods",
+      "title": "Rev Phase 0: Wire dead methods into dispatcher",
+      "description": "Add completion/complete, logging/setLevel, resources/templates/list, notifications/initialized to methodHandlers() (mcp.go:672). Advertise completions capability.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "rev0-version-negotiation"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev0-content-union",
+      "title": "Rev Phase 0: Unify Content into ContentBlock union",
+      "description": "Replace duplicated Content structs (sampling.go:24, prompt.go:9, tool.go:16) with one ContentBlock union. Prereq for audio/resource_link/embedded.",
+      "priority": "high",
+      "estimate": "5h",
+      "depends_on": [],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev0-conformance-harness",
+      "title": "Rev Phase 0: Per-revision conformance test harness",
+      "description": "Table-driven suite driving a server through each revision's method set over each transport; the per-phase certification gate.",
+      "priority": "high",
+      "estimate": "4h",
+      "depends_on": [
+        "rev0-wire-dead-methods",
+        "rev0-session-injection"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev1-2025-03-26",
+      "title": "Rev Phase 1: Certify 2025-03-26 (v1.23.0)",
+      "description": "Streamable HTTP server (single endpoint, Mcp-Session-Id, GET SSE), audio content, JSON-RPC batching (version-gated), OAuth 2.1 posture, ProgressNotification.message. Bump negotiated default.",
+      "priority": "medium",
+      "estimate": "16h",
+      "depends_on": [
+        "rev0-version-negotiation",
+        "rev0-content-union",
+        "rev0-conformance-harness"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev2-2025-06-18",
+      "title": "Rev Phase 2: Certify 2025-06-18 (v1.24.0)",
+      "description": "Reject batching (reversal), enforce MCP-Protocol-Version header, resource_link content, top-level title fields, completion context, RFC 9728/8707 auth metadata. Bump default.",
+      "priority": "medium",
+      "estimate": "12h",
+      "depends_on": [
+        "rev1-2025-03-26"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev3-2025-11-25",
+      "title": "Rev Phase 3: Certify 2025-11-25 = current (v1.25.0)",
+      "description": "Wire Tasks to tasks/* JSON-RPC, sampling-with-tools, icons, URL-mode elicitation, JSON Schema 2020-12 default, input-validation-as-tool-error, enum/default rework, OIDC discovery. Bump default — mcp-go now current.",
+      "priority": "medium",
+      "estimate": "20h",
+      "depends_on": [
+        "rev2-2025-06-18",
+        "rev0-wire-dead-methods"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
+    },
+    {
+      "id": "rev4-2026-07-28",
+      "title": "Rev Phase 4: 2026-07-28 RC stateless rewrite (v2.0.0)",
+      "description": "server/discover, MRTR/InputRequiredResult with resultType, subscriptions/listen, drop Mcp-Session-Id, Mcp-Method/Mcp-Name headers, CacheableResult (ttlMs/cacheScope), W3C trace context, extensions capability map, MCP Apps + Tasks as extensions, error renumbering, deprecate roots/sampling/logging. Behind Stateless opt-in until spec final.",
+      "priority": "low",
+      "estimate": "40h",
+      "depends_on": [
+        "rev3-2025-11-25"
+      ],
+      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "source": {}
     }
   ],
   "approval_status": "approved",
   "created_at": "2026-03-20T21:10:16.232146+01:00",
-  "updated_at": "2026-03-20T21:10:16.232152+01:00"
+  "updated_at": "2026-07-10T12:30:39.890085+02:00"
 }

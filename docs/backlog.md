@@ -4,3 +4,9 @@
 Foundation work for aligning mcp-go with MCP core 2026 roadmap priorities including horizontal scaling, discovery, and enterprise readiness.
 
 ---
+
+## Spec Revisions Alignment (2024-11-05 → 2026-07-28)
+
+Bring mcp-go current across every MCP spec revision. Backbone: protocol version negotiation. Phase 0 (Foundation, v1.22.0): version-negotiation layer, capture client capabilities at initialize, inject Session into request context across stdio/http/ws, wire the dead methods (completion/complete, logging/setLevel, resources/templates/list, notifications/initialized), advertise completions capability, unify the three duplicated Content structs into one ContentBlock union, conformance harness. Phase 1 (2025-03-26, v1.23.0): Streamable HTTP server (single endpoint, Mcp-Session-Id, GET SSE), audio content, JSON-RPC batching (version-gated), OAuth 2.1 posture, ProgressNotification.message. Phase 2 (2025-06-18, v1.24.0): reject batching (reversal), enforce MCP-Protocol-Version header, resource_link content, top-level title fields, completion context, RFC 9728/8707 auth metadata. Phase 3 (2025-11-25 = current published, v1.25.0): wire Tasks to tasks/* JSON-RPC, sampling-with-tools, icons metadata, URL-mode elicitation, JSON Schema 2020-12 default, input-validation-as-tool-error, elicitation enum/default rework, OIDC discovery. Phase 4 (2026-07-28 RC, v2.0.0 — breaking): stateless rewrite — server/discover, MRTR/InputRequiredResult with resultType, subscriptions/listen, drop Mcp-Session-Id, Mcp-Method/Mcp-Name routing headers, CacheableResult (ttlMs/cacheScope), W3C trace context in _meta, extensions capability map, MCP Apps + Tasks as extensions, error-code renumbering, deprecate roots/sampling/logging. Detailed plan in docs/revisions-roadmap.md. Auth stays out-of-library by design (advertise-only OAuth/OIDC metadata). Preserve differentiators: MCP Apps, WebSocket, gRPC, middleware suite.
+
+---
