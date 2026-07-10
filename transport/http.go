@@ -378,6 +378,14 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	// Correlate this request with the client's server-push stream so handlers
 	// like resources/subscribe can target it. The client echoes the clientId
 	// it received on its SSE connection.
+	//
+	// Unlike stdio/websocket, HTTP does not inject a per-connection
+	// server.Session here: POST requests are stateless, so a per-request
+	// session would not carry the client capabilities recorded at initialize
+	// across to later tool calls, making capability gating unreliable. Session
+	// injection for HTTP is wired in Phase 1 alongside the Streamable HTTP
+	// transport and the per-clientId session store (see
+	// docs/revisions-roadmap.md).
 	if clientID := r.URL.Query().Get("clientId"); clientID != "" {
 		ctx = ContextWithClientID(ctx, clientID)
 	}

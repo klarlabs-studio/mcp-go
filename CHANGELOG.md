@@ -28,6 +28,15 @@ brings mcp-go current across every MCP revision from `2024-11-05` to the
 - **Capability advertisement.** `completions` now auto-advertises when a
   completion handler is registered; a new opt-in `Capabilities.Logging` flag
   advertises the `logging` capability.
+- **Session injection (stdio + websocket).** Both transports now attach a
+  per-connection `server.Session` to every request context, so features that
+  need one — logging notifications, channels, resource-updated — are reachable.
+  Previously `SessionFromContext(ctx)` was always nil and these silently no-op'd.
+  (HTTP session injection lands in Phase 1 with the Streamable HTTP transport.)
+- **Graceful degradation for server→client requests.** `Session.CreateMessage`,
+  `Session.ListRoots`, and `Elicitor.Elicit` now return the new sentinel
+  `server.ErrNoRequestSender` when the transport has no bidirectional request
+  sender, instead of panicking on a nil sender. One-way features are unaffected.
 
 ### Removed (BREAKING)
 

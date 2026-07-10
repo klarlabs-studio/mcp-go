@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,13 @@ type Session struct {
 	// Client capabilities (what the client supports)
 	clientCaps ClientCapabilities
 }
+
+// ErrNoRequestSender is returned by server→client request methods (sampling,
+// elicitation, roots/list) when the session has no RequestSender — i.e. the
+// transport does not support bidirectional server-to-client requests. One-way
+// features (logging, channels, resource-updated notifications) still work
+// because they only need the notifier.
+var ErrNoRequestSender = errors.New("transport does not support server-to-client requests")
 
 // ClientCapabilities describes what features the client supports.
 type ClientCapabilities struct {
@@ -163,6 +171,9 @@ func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) 
 	if !s.SupportsFeature("sampling") {
 		return nil, fmt.Errorf("client does not support sampling")
 	}
+	if s.sender == nil {
+		return nil, ErrNoRequestSender
+	}
 
 	params, err := json.Marshal(req)
 	if err != nil {
@@ -209,6 +220,9 @@ func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) 
 func (s *Session) ListRoots(ctx context.Context) (*ListRootsResult, error) {
 	if !s.SupportsFeature("roots") {
 		return nil, fmt.Errorf("client does not support roots")
+	}
+	if s.sender == nil {
+		return nil, ErrNoRequestSender
 	}
 
 	idRaw, err := json.Marshal(s.requestID.Add(1))

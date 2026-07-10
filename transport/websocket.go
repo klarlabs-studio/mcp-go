@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
 )
 
 // defaultWSMaxMessageBytes bounds a single inbound WebSocket message. A
@@ -233,6 +234,13 @@ func (ws *WebSocket) handleConnection(ctx context.Context, w http.ResponseWriter
 	// Create notification sender for this client
 	sender := &wsNotificationSender{client: client}
 
+	// One session per websocket connection. The sender is the notifier, so
+	// one-way server→client features (logging, channels, resource-updated)
+	// work; there is no bidirectional request sender yet, so sampling/
+	// elicitation report ErrNoRequestSender. Client capabilities recorded at
+	// initialize persist for the life of the connection.
+	sess := server.NewSession("ws", nil, sender)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -260,8 +268,9 @@ func (ws *WebSocket) handleConnection(ctx context.Context, w http.ResponseWriter
 			continue
 		}
 
-		// Attach notification sender to context
+		// Attach notification sender and the per-connection session to context
 		reqCtx := ContextWithNotificationSender(ctx, sender)
+		reqCtx = server.ContextWithSession(reqCtx, sess)
 
 		// Handle request
 		resp, err := handler.HandleRequest(reqCtx, &req)
