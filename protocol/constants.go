@@ -5,7 +5,7 @@ import "slices"
 // MCPVersion is the default protocol version this library advertises when a
 // client requests a version it does not support (or requests none). It is the
 // newest revision fully implemented and certified by the conformance suite.
-const MCPVersion = "2025-06-18"
+const MCPVersion = "2025-11-25"
 
 // SupportedVersions lists every MCP protocol revision this library can speak,
 // ordered oldest→newest. The server negotiates the best match against the
@@ -19,6 +19,7 @@ var SupportedVersions = []string{
 	"2024-11-05",
 	"2025-03-26",
 	"2025-06-18",
+	"2025-11-25",
 }
 
 // IsSupportedVersion reports whether v is a protocol version this library
@@ -56,6 +57,12 @@ const (
 	MethodPromptsGet             = "prompts/get"
 	MethodCompletionComplete     = "completion/complete"
 	MethodPing                   = "ping"
+
+	// Task-augmented requests (MCP 2025-11-25, SEP-1686).
+	MethodTasksGet    = "tasks/get"
+	MethodTasksResult = "tasks/result"
+	MethodTasksCancel = "tasks/cancel"
+	MethodTasksList   = "tasks/list"
 )
 
 // MCP notification methods.

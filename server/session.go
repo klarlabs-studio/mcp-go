@@ -46,7 +46,10 @@ type ClientCapabilities struct {
 	Sampling    bool             `json:"sampling,omitempty"`
 	Roots       *RootsCapability `json:"roots,omitempty"`
 	Elicitation bool             `json:"elicitation,omitempty"`
-	Channels    bool             `json:"channels,omitempty"`
+	// ElicitationURL reports whether the client supports url-mode elicitation
+	// (MCP 2025-11-25). An empty elicitation capability object means form only.
+	ElicitationURL bool `json:"-"`
+	Channels       bool `json:"channels,omitempty"`
 }
 
 // RootsCapability describes the client's roots support.
@@ -124,9 +127,11 @@ func (s *Session) SetClientCapabilities(caps ClientCapabilities) {
 func (s *Session) SetClientCapabilitiesJSON(raw json.RawMessage) {
 	var wire struct {
 		Sampling    *json.RawMessage `json:"sampling"`
-		Elicitation *json.RawMessage `json:"elicitation"`
-		Channels    *json.RawMessage `json:"channels"`
-		Roots       *struct {
+		Elicitation *struct {
+			URL *json.RawMessage `json:"url"`
+		} `json:"elicitation"`
+		Channels *json.RawMessage `json:"channels"`
+		Roots    *struct {
 			ListChanged bool `json:"listChanged"`
 		} `json:"roots"`
 	}
@@ -137,6 +142,9 @@ func (s *Session) SetClientCapabilitiesJSON(raw json.RawMessage) {
 		Sampling:    wire.Sampling != nil,
 		Elicitation: wire.Elicitation != nil,
 		Channels:    wire.Channels != nil,
+	}
+	if wire.Elicitation != nil && wire.Elicitation.URL != nil {
+		caps.ElicitationURL = true
 	}
 	if wire.Roots != nil {
 		caps.Roots = &RootsCapability{ListChanged: wire.Roots.ListChanged}
@@ -158,6 +166,8 @@ func (s *Session) SupportsFeature(feature string) bool {
 		return s.clientCaps.Roots != nil && s.clientCaps.Roots.ListChanged
 	case "elicitation":
 		return s.clientCaps.Elicitation
+	case "elicitation.url":
+		return s.clientCaps.ElicitationURL
 	case "channels":
 		return s.clientCaps.Channels
 	default:

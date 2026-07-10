@@ -6,9 +6,19 @@ import (
 	"fmt"
 	"reflect"
 
-	"go.klarlabs.de/mcp/protocol"
 	"go.klarlabs.de/mcp/schema"
 )
+
+// ToolInputError is returned by Tool.Execute when the call's input fails to
+// parse or does not satisfy the tool's input schema. Per MCP 2025-11-25
+// (SEP-1303) the dispatcher reports it as a tool execution error (an isError
+// CallToolResult) rather than a protocol error, so the model sees the problem
+// and can retry with corrected input.
+type ToolInputError struct {
+	Message string
+}
+
+func (e *ToolInputError) Error() string { return e.Message }
 
 // StructuredResult allows tool handlers to return structured content
 // alongside text content blocks. When a handler returns this type,
@@ -36,7 +46,12 @@ type Tool struct {
 	annotations    *ToolAnnotations
 	meta           map[string]any
 	icons          []Icon
+	taskSupport    TaskSupport
 }
+
+// TaskSupport reports whether this tool may be invoked as a task-augmented
+// request (MCP 2025-11-25). Empty is treated as "forbidden".
+func (t *Tool) TaskSupport() TaskSupport { return t.taskSupport }
 
 // ToolBuilder provides a fluent API for building tools.
 type ToolBuilder struct {
@@ -102,6 +117,19 @@ func (b *ToolBuilder) Meta(meta map[string]any) *ToolBuilder {
 		return b
 	}
 	b.tool.meta = meta
+	return b
+}
+
+// TaskSupport declares whether this tool may be invoked as a task-augmented
+// request (MCP 2025-11-25): "optional" lets clients run it as a task or
+// normally, "required" forces task invocation, "forbidden" (the default)
+// disallows it. Setting optional/required auto-advertises the server's tasks
+// capability. The tool value is echoed as `execution.taskSupport` in tools/list.
+func (b *ToolBuilder) TaskSupport(mode TaskSupport) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.taskSupport = mode
 	return b
 }
 
@@ -227,17 +255,19 @@ func (t *Tool) Icons() []Icon {
 func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (any, error) {
 	// Validate input against the generated schema before the handler runs,
 	// so invalid-per-schema input never reaches business logic. Validation is
-	// on by default; SkipValidation opts a tool out.
+	// on by default; SkipValidation opts a tool out. A failure is a
+	// ToolInputError, which the dispatcher surfaces as a tool execution error
+	// (isError result) per MCP 2025-11-25 / SEP-1303 so the model can self-correct.
 	if !t.skipValidation && t.validatable != nil {
 		if err := t.validatable.Validate(input); err != nil {
-			return nil, protocol.NewInvalidParams(fmt.Sprintf("input validation failed: %v", err))
+			return nil, &ToolInputError{Message: fmt.Sprintf("input validation failed: %v", err)}
 		}
 	}
 
 	// Create input value
 	inputPtr := reflect.New(t.inputType)
 	if err := json.Unmarshal(input, inputPtr.Interface()); err != nil {
-		return nil, protocol.NewInvalidParams(fmt.Sprintf("failed to parse input: %v", err))
+		return nil, &ToolInputError{Message: fmt.Sprintf("failed to parse input: %v", err)}
 	}
 
 	// Build arguments

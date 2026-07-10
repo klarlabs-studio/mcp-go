@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Certified — 2025-11-25 negotiable (Phase 3 complete)
+
+`protocol.SupportedVersions` now includes `2025-11-25` and the default
+(`protocol.MCPVersion`) advances to it. The server negotiates and honors all
+four revisions; the conformance harness runs the full method set against each.
+Completing the revision:
+
+- **Input validation as tool execution errors** (SEP-1303) — invalid tool input
+  is now returned as an `isError` result (via the new `ToolInputError`) instead
+  of a `-32602` protocol error, so the model can self-correct. Applies to plain
+  and task-augmented calls.
+- **URL-mode elicitation** (SEP-1036) — `ElicitRequest` gains `mode`/`url`/
+  `elicitationId`; new `Elicitor.ElicitURL`, `mcp.ElicitModeForm`/`ElicitModeURL`,
+  the `elicitation.url` client capability (empty elicitation object = form only),
+  and the `-32042` `URLElicitationRequired` error (`protocol.NewURLElicitationRequired`).
+- **Elicitation enums & defaults** (SEP-1330 / SEP-1034) — expressible directly
+  in the freeform `requestedSchema` (`oneOf`/`anyOf` with `const`+`title`,
+  per-primitive `default`); no API change needed.
+- `Implementation.description` (already present) confirmed advertised.
+
+### Added — task-augmented requests (Phase 3, 2025-11-25, SEP-1686)
+
+Full spec-conformant Tasks: a `tools/call` carrying a `task` field is accepted
+immediately with a `CreateTaskResult`, runs in the background, and its outcome is
+retrieved by polling. New over the wire:
+
+- **Augmented `tools/call`** — `params.task: { ttl }` → returns `{ task: { taskId,
+  status:"working", createdAt, lastUpdatedAt, ttl, pollInterval } }` and executes
+  asynchronously.
+- **`tasks/get`** (poll status), **`tasks/result`** (block until terminal, return
+  exactly what the plain call would, with `io.modelcontextprotocol/related-task`
+  meta), **`tasks/cancel`** (best-effort stop; `-32602` on already-terminal),
+  **`tasks/list`** (cursor pagination).
+- **`.TaskSupport(mcp.TaskSupportOptional|Required|Forbidden)`** builder →
+  advertised as `execution.taskSupport` in `tools/list`; a task on a
+  forbidden/unset tool, or a plain call on a required-task tool, is `-32601`.
+- **`tasks` capability** auto-advertised (`{list, cancel, requests:{tools:{call}}}`)
+  when any tool opts in. Task IDs are cryptographically random; the registry is
+  bounded and TTL-evicting.
+
+This is a distinct, spec-conformant implementation; the legacy `TaskManager`
+(pre-spec `tasks/create` model) is left untouched.
+
 ### Certified — 2025-03-26 and 2025-06-18 negotiable (Phases 1–2)
 
 `protocol.SupportedVersions` now lists `2024-11-05`, `2025-03-26`, and

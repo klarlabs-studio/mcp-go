@@ -17,6 +17,10 @@ const (
 	CodeNotFound     = -32001
 	CodeUnauthorized = -32002
 	CodeRateLimited  = -32003
+	// CodeURLElicitationRequired signals that a request cannot proceed until a
+	// url-mode elicitation is completed (MCP 2025-11-25, SEP-1036). The error
+	// data carries the required elicitations.
+	CodeURLElicitationRequired = -32042
 )
 
 // Error represents a JSON-RPC 2.0 error.
@@ -82,4 +86,15 @@ func NewNotFound(msg string) *Error {
 // NewUnauthorized creates an unauthorized error (-32002).
 func NewUnauthorized(msg string) *Error {
 	return &Error{Code: CodeUnauthorized, Message: msg}
+}
+
+// NewURLElicitationRequired creates a URL-elicitation-required error (-32042,
+// MCP 2025-11-25). elicitations is the list of url-mode elicitations the client
+// must complete before retrying, carried in the error data.
+func NewURLElicitationRequired(msg string, elicitations any) *Error {
+	return &Error{
+		Code:    CodeURLElicitationRequired,
+		Message: msg,
+		Data:    map[string]any{"elicitations": elicitations},
+	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestToolBuilder(t *testing.T) {
@@ -293,12 +291,11 @@ func TestTool_Execute_ValidationByDefault(t *testing.T) {
 			t.Fatal("handler must not be called when input is invalid per schema")
 		}
 
-		var mcpErr *protocol.Error
-		if !errors.As(err, &mcpErr) {
-			t.Fatalf("expected *protocol.Error, got %T: %v", err, err)
-		}
-		if mcpErr.Code != protocol.CodeInvalidParams {
-			t.Errorf("error code = %d, want %d (InvalidParams)", mcpErr.Code, protocol.CodeInvalidParams)
+		// SEP-1303: input validation failures are ToolInputErrors (surfaced by
+		// the dispatcher as an isError result), not protocol errors.
+		var inputErr *ToolInputError
+		if !errors.As(err, &inputErr) {
+			t.Fatalf("expected *ToolInputError, got %T: %v", err, err)
 		}
 	})
 

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -417,7 +418,7 @@ func TestMCPCompliance_Errors(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid params returns InvalidParams", func(t *testing.T) {
+	t.Run("invalid tool input is a tool execution error (SEP-1303)", func(t *testing.T) {
 		srv.Tool("test").Handler(func(input struct{ X int }) (int, error) { return input.X, nil })
 
 		resp := executeRequest(t, srv, &protocol.Request{
@@ -427,12 +428,14 @@ func TestMCPCompliance_Errors(t *testing.T) {
 			Params:  json.RawMessage(`{"name":"test","arguments":"invalid"}`),
 		})
 
-		if resp.Error == nil {
-			t.Fatal("expected error for invalid params")
+		// Per MCP 2025-11-25, invalid input is returned as an isError result so
+		// the model can self-correct — not a -32602 protocol error.
+		if resp.Error != nil {
+			t.Fatalf("expected no protocol error, got %+v", resp.Error)
 		}
-
-		if resp.Error.Code != protocol.CodeInvalidParams {
-			t.Errorf("error.code = %d, want %d", resp.Error.Code, protocol.CodeInvalidParams)
+		result, ok := resp.Result.(map[string]any)
+		if !ok || result["isError"] != true {
+			t.Errorf("expected isError result, got %v", resp.Result)
 		}
 	})
 }
@@ -609,6 +612,14 @@ func (h *testHandler) handleToolsCall(ctx context.Context, req *protocol.Request
 
 	result, err := tool.Execute(ctx, params.Arguments)
 	if err != nil {
+		// SEP-1303: input problems are tool execution errors (isError result).
+		var inputErr *mcp.ToolInputError
+		if errors.As(err, &inputErr) {
+			return protocol.NewResponse(req.ID, map[string]any{
+				"content": []map[string]any{{"type": "text", "text": inputErr.Message}},
+				"isError": true,
+			}), nil
+		}
 		if mcpErr, ok := err.(*protocol.Error); ok {
 			return nil, mcpErr
 		}

@@ -54,6 +54,8 @@ const (
 	fieldText            = "text"
 	fieldType            = "type"
 	fieldURI             = "uri"
+	fieldTask            = "task"
+	fieldTaskID          = "taskId"
 )
 
 // Re-export core types for convenience
@@ -185,6 +187,10 @@ var NewSubscriptionManager = server.NewSubscriptionManager
 // Structured result types for tool responses
 type StructuredResult = server.StructuredResult
 
+// ToolInputError is returned by a tool when input fails to parse/validate;
+// the dispatcher surfaces it as an isError result (SEP-1303).
+type ToolInputError = server.ToolInputError
+
 // Elicitation types for interactive user prompts
 type ElicitRequest = server.ElicitRequest
 type ElicitResult = server.ElicitResult
@@ -193,6 +199,13 @@ type Elicitor = server.Elicitor
 var (
 	NewElicitor       = server.NewElicitor
 	ElicitFromContext = server.ElicitFromContext
+)
+
+// Elicitation modes (MCP 2025-11-25): form (default, in-band structured data)
+// and url (out-of-band navigation for sensitive interactions).
+const (
+	ElicitModeForm = server.ElicitModeForm
+	ElicitModeURL  = server.ElicitModeURL
 )
 
 // Channel types for server-initiated push messages
@@ -212,6 +225,18 @@ type CompletionHandler = server.CompletionHandler
 
 // Resource template types
 type ResourceTemplateInfo = server.ResourceTemplateInfo
+
+// Task-augmented request types (MCP 2025-11-25). Declare a tool's task support
+// with .TaskSupport(mcp.TaskSupportOptional); clients augment tools/call with a
+// task and poll tasks/get / tasks/result.
+type AugTask = server.AugTask
+type TaskSupport = server.TaskSupport
+
+const (
+	TaskSupportForbidden = server.TaskSupportForbidden
+	TaskSupportOptional  = server.TaskSupportOptional
+	TaskSupportRequired  = server.TaskSupportRequired
+)
 
 // Session types for bidirectional MCP communication
 type Session = server.Session
@@ -706,6 +731,10 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodCompletionComplete:     h.handleCompletion,
 		protocol.MethodLoggingSetLevel:        h.handleLoggingSetLevel,
 		protocol.MethodResourcesTemplatesList: h.handleResourcesTemplatesList,
+		protocol.MethodTasksGet:               h.handleTasksGet,
+		protocol.MethodTasksResult:            h.handleTasksResult,
+		protocol.MethodTasksCancel:            h.handleTasksCancel,
+		protocol.MethodTasksList:              h.handleTasksList,
 	}
 }
 
@@ -797,6 +826,18 @@ func (h *requestHandler) serverCapabilities(manifest server.Manifest) map[string
 	}
 	if manifest.Capabilities.Logging {
 		capabilities["logging"] = map[string]any{}
+	}
+	// Tasks (MCP 2025-11-25): auto-advertised when any tool opts into task
+	// augmentation. list/cancel are always supported; tools/call is the only
+	// task-augmentable server request.
+	if h.srv.HasTaskTools() {
+		capabilities["tasks"] = map[string]any{
+			"list":   map[string]any{},
+			"cancel": map[string]any{},
+			"requests": map[string]any{
+				"tools": map[string]any{"call": map[string]any{}},
+			},
+		}
 	}
 	return capabilities
 }
@@ -895,6 +936,11 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 		if len(t.Icons) > 0 {
 			item["icons"] = t.Icons
 		}
+		// execution.taskSupport (MCP 2025-11-25): advertise only when the tool
+		// opts in, so a plain tool's listing is unchanged.
+		if t.TaskSupport == server.TaskSupportOptional || t.TaskSupport == server.TaskSupportRequired {
+			item["execution"] = map[string]any{"taskSupport": string(t.TaskSupport)}
+		}
 		if t.Meta != nil {
 			item["_meta"] = t.Meta
 		}
@@ -908,11 +954,74 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 	return protocol.NewResponse(req.ID, result), nil
 }
 
+// toolExecutionError builds an isError CallToolResult carrying a message — used
+// to surface input-validation failures to the model per SEP-1303.
+func toolExecutionError(msg string) map[string]any {
+	return map[string]any{
+		"content": []map[string]any{{fieldType: fieldText, fieldText: msg}},
+		"isError": true,
+	}
+}
+
+// reconcileTaskSupport enforces a tool's execution.taskSupport against whether
+// the caller augmented the request with a task: a task on a forbidden/unset
+// tool, or a plain call on a required-task tool, is -32601 (Method not found)
+// per MCP 2025-11-25.
+func reconcileTaskSupport(mode server.TaskSupport, augmented bool, name string) error {
+	switch mode {
+	case server.TaskSupportRequired:
+		if !augmented {
+			return protocol.NewMethodNotFound("tool requires task augmentation: " + name)
+		}
+	case server.TaskSupportOptional:
+		// either form is allowed
+	default: // forbidden / unset
+		if augmented {
+			return protocol.NewMethodNotFound("tool does not support task augmentation: " + name)
+		}
+	}
+	return nil
+}
+
+// startAugmentedToolCall runs a tools/call as a background task and returns the
+// CreateTaskResult immediately. The closure runs the tool and builds its normal
+// response so tasks/result returns exactly what a plain call would have.
+func (h *requestHandler) startAugmentedToolCall(ctx context.Context, req *protocol.Request, tool *server.Tool, args json.RawMessage, ttl *int64) (*protocol.Response, error) {
+	task, err := h.srv.StartAugmentedCall(ctx, ttl, func(runCtx context.Context) (any, bool, error) {
+		res, execErr := tool.Execute(runCtx, args)
+		if execErr != nil {
+			// SEP-1303: an input error becomes a failed task carrying an
+			// isError result (not a protocol error).
+			var inputErr *server.ToolInputError
+			if errors.As(execErr, &inputErr) {
+				return toolExecutionError(inputErr.Message), true, nil
+			}
+			return nil, false, execErr
+		}
+		resp, berr := buildToolCallResponse(tool, res)
+		if berr != nil {
+			return nil, false, berr
+		}
+		if tool.Meta() != nil {
+			resp["_meta"] = tool.Meta()
+		}
+		isErr, _ := resp["isError"].(bool)
+		return resp, isErr, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewResponse(req.ID, map[string]any{fieldTask: task}), nil
+}
+
 func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	// Parse params
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
+		Task      *struct {
+			TTL *int64 `json:"ttl"`
+		} `json:"task"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, protocol.NewInvalidParams(err.Error())
@@ -927,6 +1036,13 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	}
 	if h.toolFilter != nil && !h.toolFilter(ctx, params.Name) {
 		return nil, protocol.NewNotFound("tool not found: " + params.Name)
+	}
+
+	// Task augmentation (MCP 2025-11-25): reconcile the request against the
+	// tool's execution.taskSupport before executing.
+	augmented := params.Task != nil
+	if err := reconcileTaskSupport(tool.TaskSupport(), augmented, params.Name); err != nil {
+		return nil, err
 	}
 
 	// Set up progress reporting if token is present
@@ -949,11 +1065,28 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		}
 	}
 
+	// Task-augmented call: accept immediately, run in the background, and return
+	// a CreateTaskResult. The requestor then polls tasks/get and fetches the
+	// outcome via tasks/result.
+	if augmented {
+		var ttl *int64
+		if params.Task != nil {
+			ttl = params.Task.TTL
+		}
+		return h.startAugmentedToolCall(ctx, req, tool, params.Arguments, ttl)
+	}
+
 	// Execute tool. A deliberate protocol error passes through verbatim; any
 	// other error is returned raw so publicError can sanitize it (no leaking
 	// internal detail to the peer).
 	result, err := tool.Execute(ctx, params.Arguments)
 	if err != nil {
+		// SEP-1303: input problems are tool execution errors, not protocol
+		// errors, so the model can self-correct.
+		var inputErr *server.ToolInputError
+		if errors.As(err, &inputErr) {
+			return protocol.NewResponse(req.ID, toolExecutionError(inputErr.Message)), nil
+		}
 		var mcpErr *protocol.Error
 		if errors.As(err, &mcpErr) {
 			return nil, mcpErr
@@ -1350,6 +1483,107 @@ func (h *requestHandler) handleResourcesTemplatesList(ctx context.Context, req *
 		list = append(list, item)
 	}
 	return protocol.NewResponse(req.ID, map[string]any{"resourceTemplates": list}), nil
+}
+
+// relatedTaskMeta is the _meta key that associates a message with its task.
+const relatedTaskMetaKey = "io.modelcontextprotocol/related-task"
+
+// handleTasksGet serves tasks/get: return the task's current state.
+func (h *requestHandler) handleTasksGet(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	task, ok := h.srv.GetAugTask(params.TaskID)
+	if !ok {
+		return nil, protocol.NewInvalidParams("task not found: " + params.TaskID)
+	}
+	return protocol.NewResponse(req.ID, task), nil
+}
+
+// handleTasksResult serves tasks/result: block until the task is terminal, then
+// return exactly what the underlying request would have returned (with the
+// related-task _meta association).
+func (h *requestHandler) handleTasksResult(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	result, execErr, err := h.srv.AwaitAugTaskResult(ctx, params.TaskID)
+	if err != nil {
+		if errors.Is(err, server.ErrAugTaskNotFound) {
+			return nil, protocol.NewInvalidParams("task not found: " + params.TaskID)
+		}
+		return nil, err // ctx cancelled, etc.
+	}
+	if execErr != nil {
+		// The underlying request produced a JSON-RPC error; tasks/result must
+		// return that same error.
+		var mcpErr *protocol.Error
+		if errors.As(execErr, &mcpErr) {
+			return nil, mcpErr
+		}
+		return nil, execErr
+	}
+	resp, ok := result.(map[string]any)
+	if !ok || resp == nil {
+		// Cancelled (or resultless) task: surface as a tool execution error.
+		resp = map[string]any{
+			"content": []map[string]any{{fieldType: fieldText, fieldText: "task did not produce a result"}},
+			"isError": true,
+		}
+	}
+	attachRelatedTask(resp, params.TaskID)
+	return protocol.NewResponse(req.ID, resp), nil
+}
+
+// handleTasksCancel serves tasks/cancel.
+func (h *requestHandler) handleTasksCancel(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	task, err := h.srv.CancelAugTask(params.TaskID)
+	if err != nil {
+		// Both unknown-task and already-terminal map to -32602 per spec.
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	return protocol.NewResponse(req.ID, task), nil
+}
+
+// handleTasksList serves tasks/list with cursor pagination.
+func (h *requestHandler) handleTasksList(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		Cursor string `json:"cursor"`
+	}
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, protocol.NewInvalidParams(err.Error())
+		}
+	}
+	tasks, next := h.srv.ListAugTasks(params.Cursor, 0)
+	result := map[string]any{"tasks": tasks}
+	if next != "" {
+		result["nextCursor"] = next
+	}
+	return protocol.NewResponse(req.ID, result), nil
+}
+
+// attachRelatedTask records the io.modelcontextprotocol/related-task association
+// in a result's _meta.
+func attachRelatedTask(resp map[string]any, taskID string) {
+	meta, _ := resp["_meta"].(map[string]any)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	meta[relatedTaskMetaKey] = map[string]any{fieldTaskID: taskID}
+	resp["_meta"] = meta
 }
 
 // notificationAdapter adapts transport.NotificationSender to server.NotificationSender.
