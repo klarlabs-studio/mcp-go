@@ -5,16 +5,124 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"go.klarlabs.de/mcp/protocol"
 )
 
-// Icon represents an icon for UI display.
+// Icon represents an icon for UI display. A single Icon value serializes for
+// both MCP icon shapes so callers do not need era-specific types:
+//
+//   - the legacy shape (2025-11-25, SEP-973) uses uri/mimeType/size;
+//   - the modern shape (2026-07-28) uses src/sizes/theme.
+//
+// The two eras describe the same concepts under different names:
+//
+//	legacy URI  ≈ modern Src   (image URL or data URI)
+//	legacy Size ≈ modern Sizes (48 ≈ "48x48"; modern also allows "any" and
+//	                            multiple space-separated descriptors)
+//	MimeType is shared by both eras.
+//
+// Populate the legacy fields, the modern fields, or both. NewIcon builds a
+// modern icon; Normalize fills each era's fields from the other so a value
+// authored for one era serializes sensibly for both. Legacy struct literals
+// keep working unchanged.
 type Icon struct {
-	URI      string `json:"uri"`                // data URI or https URL
-	MimeType string `json:"mimeType,omitempty"` // image/png, image/svg+xml, etc.
-	Size     int    `json:"size,omitempty"`     // pixel size (icons are square)
+	// URI is the legacy (2025-11-25) image source: a data URI or https URL.
+	// Corresponds to the modern Src.
+	URI string `json:"uri"`
+	// MimeType is the image media type (image/png, image/svg+xml, ...). Shared
+	// by both the legacy and modern shapes.
+	MimeType string `json:"mimeType,omitempty"`
+	// Size is the legacy square pixel size (icons are square). Corresponds to
+	// the modern Sizes.
+	Size int `json:"size,omitempty"`
+
+	// Src is the modern (2026-07-28) image source: a data URI or https URL.
+	// Corresponds to the legacy URI.
+	Src string `json:"src,omitempty"`
+	// Sizes is the modern space-separated size descriptor string, e.g.
+	// "48x48 96x96" or "any". Corresponds to the legacy Size.
+	Sizes string `json:"sizes,omitempty"`
+	// Theme selects a light/dark variant of the icon: "light" or "dark". Modern
+	// only; empty means the icon applies to any theme.
+	Theme string `json:"theme,omitempty"`
+}
+
+// NewIcon constructs a modern (2026-07-28) icon with the given source URL or
+// data URI. Chain WithMimeType, WithSizes, and WithTheme to add metadata, and
+// call Normalize to also populate the legacy fields for back-compat.
+func NewIcon(src string) Icon {
+	return Icon{Src: src}
+}
+
+// WithMimeType returns a copy of the icon with the image media type set. The
+// media type is shared by both the legacy and modern shapes.
+func (i Icon) WithMimeType(mimeType string) Icon {
+	i.MimeType = mimeType
+	return i
+}
+
+// WithSizes returns a copy of the icon with the modern space-separated size
+// descriptor string set, e.g. "48x48 96x96" or "any".
+func (i Icon) WithSizes(sizes string) Icon {
+	i.Sizes = sizes
+	return i
+}
+
+// WithTheme returns a copy of the icon carrying a light/dark theme variant
+// ("light" or "dark"). Icons may exist in per-theme variants; attach one theme
+// per Icon value. Modern only.
+func (i Icon) WithTheme(theme string) Icon {
+	i.Theme = theme
+	return i
+}
+
+// Normalize returns a copy of the icon with empty fields filled from their
+// cross-era counterparts: URI and Src copy across verbatim, and Size and Sizes
+// convert (Size 48 ≈ Sizes "48x48"; the first square "NxN" descriptor in Sizes
+// ≈ Size N; "any" yields no pixel Size). It never overwrites a field that is
+// already set, so an icon authored for one era serializes for both.
+func (i Icon) Normalize() Icon {
+	// Source URL: legacy URI <-> modern Src.
+	if i.Src == "" {
+		i.Src = i.URI
+	}
+	if i.URI == "" {
+		i.URI = i.Src
+	}
+	// Size: legacy Size (pixels) <-> modern Sizes (descriptor string).
+	if i.Sizes == "" && i.Size > 0 {
+		i.Sizes = fmt.Sprintf("%dx%d", i.Size, i.Size)
+	}
+	if i.Size == 0 && i.Sizes != "" {
+		i.Size = parseSquareSize(i.Sizes)
+	}
+	return i
+}
+
+// parseSquareSize extracts the pixel size from a modern size descriptor string
+// such as "48x48" or "32x32 64x64", returning the width of the first square
+// descriptor. It returns 0 for "any" or any value it cannot parse.
+func parseSquareSize(sizes string) int {
+	for _, field := range strings.Fields(sizes) {
+		w, h, ok := strings.Cut(field, "x")
+		if !ok {
+			continue
+		}
+		width, err := strconv.Atoi(w)
+		if err != nil {
+			continue
+		}
+		height, err := strconv.Atoi(h)
+		if err != nil || width != height {
+			continue
+		}
+		return width
+	}
+	return 0
 }
 
 // BuildInfo contains build metadata for debugging and version verification.
