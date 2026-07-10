@@ -50,6 +50,7 @@ type PromptHandler func(ctx context.Context, args map[string]string) (*PromptRes
 // Prompt represents a prompt template exposed via MCP.
 type Prompt struct {
 	name        string
+	title       string
 	description string
 	arguments   []PromptArgument
 	handler     PromptHandler
@@ -64,6 +65,7 @@ func (p *Prompt) Icons() []Icon { return p.icons }
 // PromptInfo represents metadata about a registered prompt.
 type PromptInfo struct {
 	Name        string
+	Title       string
 	Description string
 	Arguments   []PromptArgument
 	Annotations *PromptAnnotations
@@ -83,6 +85,16 @@ func (b *PromptBuilder) Description(desc string) *PromptBuilder {
 		return b
 	}
 	b.prompt.description = desc
+	return b
+}
+
+// Title sets a human-readable display title, advertised as the top-level
+// `title` field (MCP 2025-06-18). `name` remains the programmatic identifier.
+func (b *PromptBuilder) Title(title string) *PromptBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.prompt.title = title
 	return b
 }
 

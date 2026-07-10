@@ -882,6 +882,10 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 			"description": t.Description,
 			"inputSchema": t.InputSchema,
 		}
+		// Top-level title (MCP 2025-06-18); tools carry it inside annotations.
+		if t.Annotations != nil && t.Annotations.Title != "" {
+			item["title"] = t.Annotations.Title
+		}
 		if t.OutputSchema != nil {
 			item["outputSchema"] = t.OutputSchema
 		}
@@ -1054,6 +1058,9 @@ func (h *requestHandler) handleResourcesList(ctx context.Context, req *protocol.
 			fieldURI:  r.URITemplate,
 			fieldName: r.Name,
 		}
+		if r.Title != "" {
+			item["title"] = r.Title
+		}
 		if r.Description != "" {
 			item["description"] = r.Description
 		}
@@ -1173,6 +1180,9 @@ func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Re
 		}
 		item := map[string]any{
 			fieldName: p.Name,
+		}
+		if p.Title != "" {
+			item["title"] = p.Title
 		}
 		if p.Description != "" {
 			item["description"] = p.Description
@@ -1321,6 +1331,9 @@ func (h *requestHandler) handleResourcesTemplatesList(ctx context.Context, req *
 		item := map[string]any{
 			"uriTemplate": t.URITemplate,
 			fieldName:     t.Name,
+		}
+		if t.Title != "" {
+			item["title"] = t.Title
 		}
 		if t.Description != "" {
 			item["description"] = t.Description

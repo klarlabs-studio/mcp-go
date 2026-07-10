@@ -351,6 +351,7 @@ func (s *Server) Resources() []ResourceInfo {
 		result = append(result, ResourceInfo{
 			URITemplate: r.uriTemplate,
 			Name:        r.name,
+			Title:       r.title,
 			Description: r.description,
 			MimeType:    r.mimeType,
 			Annotations: r.annotations,
@@ -429,6 +430,7 @@ func (s *Server) Prompts() []PromptInfo {
 	for _, p := range s.prompts {
 		result = append(result, PromptInfo{
 			Name:        p.name,
+			Title:       p.title,
 			Description: p.description,
 			Arguments:   p.arguments,
 			Annotations: p.annotations,
@@ -526,6 +528,7 @@ func (s *Server) ResourceTemplates() []ResourceTemplateInfo {
 			result = append(result, ResourceTemplateInfo{
 				URITemplate: r.uriTemplate,
 				Name:        r.name,
+				Title:       r.title,
 				Description: r.description,
 				MimeType:    r.mimeType,
 				Annotations: r.annotations,

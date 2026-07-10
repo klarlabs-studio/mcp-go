@@ -28,6 +28,7 @@ type ResourceHandler func(ctx context.Context, uri string, params map[string]str
 type Resource struct {
 	uriTemplate string
 	name        string
+	title       string
 	description string
 	mimeType    string
 	handler     ResourceHandler
@@ -56,6 +57,7 @@ func (r *Resource) Icons() []Icon { return r.icons }
 type ResourceInfo struct {
 	URITemplate string
 	Name        string
+	Title       string
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
@@ -66,6 +68,7 @@ type ResourceInfo struct {
 type ResourceTemplateInfo struct {
 	URITemplate string
 	Name        string
+	Title       string
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
@@ -94,6 +97,16 @@ func (b *ResourceBuilder) Description(desc string) *ResourceBuilder {
 		return b
 	}
 	b.resource.description = desc
+	return b
+}
+
+// Title sets a human-readable display title, advertised as the top-level
+// `title` field (MCP 2025-06-18). `name` remains the programmatic identifier.
+func (b *ResourceBuilder) Title(title string) *ResourceBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.resource.title = title
 	return b
 }
 

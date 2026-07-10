@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Certified — 2025-03-26 and 2025-06-18 negotiable (Phases 1–2)
+
+`protocol.SupportedVersions` now lists `2024-11-05`, `2025-03-26`, and
+`2025-06-18`; the default (`protocol.MCPVersion`) advances to `2025-06-18`. The
+server negotiates and honors all three, and the conformance harness runs its
+full method set against each (version-aware `initialize` echo).
+
+- **Top-level `title`** (2025-06-18) on tools, resources, resource templates, and
+  prompts — advertised as a sibling of `name` in every list response. New
+  `.Title()` builder on resources and prompts (tools already had one via
+  annotations); `Title` field on `ResourceInfo`/`ResourceTemplateInfo`/
+  `PromptInfo`.
+- `ProgressNotification.message` (2025-03-26) — already present, now covered.
+- **JSON-RPC batching** (added 2025-03-26, removed 2025-06-18) is intentionally
+  not supported: it was optional in 03-26 and gone by 06-18, so never batching is
+  conformant across the supported range.
+
 ### Added — spec-revisions features (Phases 1–3, additive)
 
 Feature work spanning the 2025-03-26 → 2025-11-25 revisions. These are additive

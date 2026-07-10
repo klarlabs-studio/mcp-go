@@ -44,10 +44,12 @@ func referenceServer() *Server {
 	}
 	srv.Tool("echo").
 		Description("echoes text").
+		Title("Echo Tool").
 		Handler(func(in echoIn) (string, error) { return in.Text, nil })
 
 	srv.Resource("static://info").
 		Name("info").
+		Title("Static Info").
 		Description("static info").
 		Handler(func(_ context.Context, uri string, _ map[string]string) (*ResourceContent, error) {
 			return &ResourceContent{URI: uri, Text: "info"}, nil
@@ -62,6 +64,7 @@ func referenceServer() *Server {
 
 	srv.Prompt("greet").
 		Description("greeting prompt").
+		Title("Greeting").
 		Handler(func(_ context.Context, _ map[string]string) (*PromptResult, error) {
 			return &PromptResult{Messages: []PromptMessage{{Role: "user", Content: NewTextContent("hi")}}}, nil
 		})
@@ -131,41 +134,81 @@ func conformanceCases() []conformanceCase {
 			name: "logging/setLevel", minVersion: "2024-11-05", method: protocol.MethodLoggingSetLevel,
 			params: map[string]any{"level": "info"},
 		},
+		{
+			name: "tools/list carries top-level title", minVersion: "2025-06-18", method: protocol.MethodToolsList,
+			params: map[string]any{},
+			validate: func(t *testing.T, r map[string]any) {
+				tools := r["tools"].([]map[string]any)
+				if len(tools) == 0 || tools[0]["title"] == nil {
+					t.Errorf("expected top-level title on tool, got %v", tools)
+				}
+			},
+		},
+		{
+			name: "prompts/list carries top-level title", minVersion: "2025-06-18", method: protocol.MethodPromptsList,
+			params: map[string]any{},
+			validate: func(t *testing.T, r map[string]any) {
+				prompts := r["prompts"].([]map[string]any)
+				if len(prompts) == 0 || prompts[0]["title"] == nil {
+					t.Errorf("expected top-level title on prompt, got %v", prompts)
+				}
+			},
+		},
 	}
 }
 
-func TestConformance_2024_11_05(t *testing.T) {
-	const rev = "2024-11-05"
-	srv := referenceServer()
-	handler := newRequestHandler(srv)
+// TestConformance runs the harness against every revision the library claims to
+// support (protocol.SupportedVersions), applying each case whose minVersion the
+// revision has reached. The initialize case is version-aware: it requests the
+// revision under test and asserts the server negotiates (echoes) it back.
+func TestConformance(t *testing.T) {
+	for _, rev := range protocol.SupportedVersions {
+		t.Run(rev, func(t *testing.T) {
+			srv := referenceServer()
+			handler := newRequestHandler(srv)
 
-	for _, tc := range conformanceCases() {
-		if tc.minVersion > rev {
-			continue // not part of this revision yet
-		}
-		t.Run(tc.name, func(t *testing.T) {
-			req := &protocol.Request{
-				JSONRPC: "2.0",
-				ID:      json.RawMessage(`1`),
-				Method:  tc.method,
-				Params:  mustParams(t, tc.params),
-			}
-			resp, err := handler.HandleRequest(context.Background(), req)
-			if err != nil {
-				t.Fatalf("%s: unexpected error: %v", tc.method, err)
-			}
-			if resp == nil {
-				t.Fatalf("%s: nil response", tc.method)
-			}
-			if resp.Error != nil {
-				t.Fatalf("%s: error response: %+v", tc.method, resp.Error)
-			}
-			if tc.validate != nil {
-				result, ok := resp.Result.(map[string]any)
-				if !ok {
-					t.Fatalf("%s: result not a map: %T", tc.method, resp.Result)
+			for _, tc := range conformanceCases() {
+				if tc.minVersion > rev {
+					continue // not part of this revision yet
 				}
-				tc.validate(t, result)
+				params := tc.params
+				validate := tc.validate
+				if tc.method == protocol.MethodInitialize {
+					params = map[string]any{
+						"protocolVersion": rev,
+						"clientInfo":      map[string]any{"name": "c", "version": "1"},
+					}
+					validate = func(t *testing.T, r map[string]any) {
+						if r["protocolVersion"] != rev {
+							t.Errorf("initialize did not negotiate %s, got %v", rev, r["protocolVersion"])
+						}
+					}
+				}
+				t.Run(tc.name, func(t *testing.T) {
+					req := &protocol.Request{
+						JSONRPC: "2.0",
+						ID:      json.RawMessage(`1`),
+						Method:  tc.method,
+						Params:  mustParams(t, params),
+					}
+					resp, err := handler.HandleRequest(context.Background(), req)
+					if err != nil {
+						t.Fatalf("%s: unexpected error: %v", tc.method, err)
+					}
+					if resp == nil {
+						t.Fatalf("%s: nil response", tc.method)
+					}
+					if resp.Error != nil {
+						t.Fatalf("%s: error response: %+v", tc.method, resp.Error)
+					}
+					if validate != nil {
+						result, ok := resp.Result.(map[string]any)
+						if !ok {
+							t.Fatalf("%s: result not a map: %T", tc.method, resp.Result)
+						}
+						validate(t, result)
+					}
+				})
 			}
 		})
 	}
