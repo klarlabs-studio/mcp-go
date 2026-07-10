@@ -100,6 +100,33 @@ func (e ValidationErrors) Error() string {
 	return sb.String()
 }
 
+// valContext carries the state shared across a single validation pass. root is
+// the top-level schema whose $defs are consulted to resolve "$ref" pointers;
+// sub-schemas (properties, items, combinators) do not carry their own $defs.
+type valContext struct {
+	root *Schema
+}
+
+// resolveRef looks up a "#/$defs/<name>" pointer in the root document's $defs.
+// It returns nil for pointers it cannot resolve (external or unknown), which
+// callers treat leniently: an unresolvable reference never fails valid input.
+func (vc *valContext) resolveRef(ref string) *Schema {
+	name, ok := strings.CutPrefix(ref, defRefPrefix)
+	if !ok || vc.root == nil {
+		return nil
+	}
+	return vc.root.Defs[name]
+}
+
+// matches reports whether value validates cleanly against sub. It is used by
+// the boolean combinators (oneOf/anyOf) and the "if" applicator, where a
+// non-match must be counted rather than surfaced as an error.
+func (vc *valContext) matches(sub *Schema, value any) bool {
+	var errs ValidationErrors
+	sub.validate(vc, "", value, &errs)
+	return len(errs) == 0
+}
+
 // Validate validates JSON data against a schema.
 // Returns nil if valid, or ValidationErrors if invalid.
 func (s *Schema) Validate(data json.RawMessage) error {
@@ -115,7 +142,7 @@ func (s *Schema) Validate(data json.RawMessage) error {
 	}
 
 	var errs ValidationErrors
-	s.validate("", value, &errs)
+	s.validate(&valContext{root: s}, "", value, &errs)
 
 	if len(errs) > 0 {
 		return errs
@@ -126,7 +153,7 @@ func (s *Schema) Validate(data json.RawMessage) error {
 // ValidateValue validates a Go value against a schema.
 func (s *Schema) ValidateValue(value any) error {
 	var errs ValidationErrors
-	s.validate("", value, &errs)
+	s.validate(&valContext{root: s}, "", value, &errs)
 
 	if len(errs) > 0 {
 		return errs
@@ -134,18 +161,30 @@ func (s *Schema) ValidateValue(value any) error {
 	return nil
 }
 
-func (s *Schema) validate(path string, value any, errs *ValidationErrors) {
+func (s *Schema) validate(vc *valContext, path string, value any, errs *ValidationErrors) {
 	// Handle nil values
 	if value == nil {
 		// null is valid for any type unless required is enforced elsewhere
 		return
 	}
 
+	// $ref delegates validation to the referenced definition. Generated
+	// recursion-breaking nodes are pure references, so resolving and
+	// delegating fully validates them; an unresolvable reference is ignored.
+	if s.Ref != "" {
+		if target := vc.resolveRef(s.Ref); target != nil {
+			target.validate(vc, path, value, errs)
+		}
+		return
+	}
+
+	s.validateCompositions(vc, path, value, errs)
+
 	switch s.Type {
 	case typeObject:
-		s.validateObject(path, value, errs)
+		s.validateObject(vc, path, value, errs)
 	case typeArray:
-		s.validateArray(path, value, errs)
+		s.validateArray(vc, path, value, errs)
 	case typeString:
 		s.validateString(path, value, errs)
 	case typeInteger:
@@ -157,7 +196,60 @@ func (s *Schema) validate(path string, value any, errs *ValidationErrors) {
 	}
 }
 
-func (s *Schema) validateObject(path string, value any, errs *ValidationErrors) {
+// validateCompositions enforces the 2020-12 boolean combinators and the
+// if/then/else conditional: allOf requires every branch to pass, anyOf at
+// least one, oneOf exactly one, and if/then/else selects a branch by whether
+// the "if" schema matches. Each is checked only when present, so a schema
+// using none of them behaves exactly as before.
+func (s *Schema) validateCompositions(vc *valContext, path string, value any, errs *ValidationErrors) {
+	for _, sub := range s.AllOf {
+		sub.validate(vc, path, value, errs)
+	}
+
+	if len(s.AnyOf) > 0 {
+		matched := false
+		for _, sub := range s.AnyOf {
+			if vc.matches(sub, value) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			*errs = append(*errs, &ValidationError{
+				Path:    path,
+				Message: "value does not match any schema in anyOf",
+			})
+		}
+	}
+
+	if len(s.OneOf) > 0 {
+		count := 0
+		for _, sub := range s.OneOf {
+			if vc.matches(sub, value) {
+				count++
+			}
+		}
+		if count != 1 {
+			*errs = append(*errs, &ValidationError{
+				Path:    path,
+				Message: fmt.Sprintf("value must match exactly one schema in oneOf, matched %d", count),
+			})
+		}
+	}
+
+	if s.If != nil {
+		switch {
+		case vc.matches(s.If, value):
+			if s.Then != nil {
+				s.Then.validate(vc, path, value, errs)
+			}
+		case s.Else != nil:
+			s.Else.validate(vc, path, value, errs)
+		}
+	}
+}
+
+func (s *Schema) validateObject(vc *valContext, path string, value any, errs *ValidationErrors) {
 	obj, ok := value.(map[string]any)
 	if !ok {
 		*errs = append(*errs, &ValidationError{
@@ -182,12 +274,12 @@ func (s *Schema) validateObject(path string, value any, errs *ValidationErrors) 
 	for name, propSchema := range s.Properties {
 		if val, exists := obj[name]; exists {
 			fieldPath := joinPath(path, name)
-			propSchema.validate(fieldPath, val, errs)
+			propSchema.validate(vc, fieldPath, val, errs)
 		}
 	}
 }
 
-func (s *Schema) validateArray(path string, value any, errs *ValidationErrors) {
+func (s *Schema) validateArray(vc *valContext, path string, value any, errs *ValidationErrors) {
 	rv := reflect.ValueOf(value)
 	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
 		*errs = append(*errs, &ValidationError{
@@ -203,7 +295,7 @@ func (s *Schema) validateArray(path string, value any, errs *ValidationErrors) {
 
 	for i := 0; i < rv.Len(); i++ {
 		itemPath := fmt.Sprintf("%s[%d]", path, i)
-		s.Items.validate(itemPath, rv.Index(i).Interface(), errs)
+		s.Items.validate(vc, itemPath, rv.Index(i).Interface(), errs)
 	}
 }
 

@@ -66,6 +66,9 @@ func (e *Elicitor) Elicit(ctx context.Context, req *ElicitRequest) (*ElicitResul
 	if req.Mode == ElicitModeURL && !e.session.SupportsFeature("elicitation.url") {
 		return nil, fmt.Errorf("client does not support url-mode elicitation")
 	}
+	if b := e.session.InputBroker(); b != nil {
+		return b.elicit(req)
+	}
 	if e.session.sender == nil {
 		return nil, ErrNoRequestSender
 	}

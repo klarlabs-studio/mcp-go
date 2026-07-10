@@ -28,12 +28,14 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 
 	"go.klarlabs.de/mcp/middleware"
@@ -53,6 +55,7 @@ const (
 	fieldListChanged     = "listChanged"
 	fieldText            = "text"
 	fieldType            = "type"
+	fieldContent         = "content"
 	fieldURI             = "uri"
 	fieldTask            = "task"
 	fieldTaskID          = "taskId"
@@ -206,6 +209,27 @@ var (
 const (
 	ElicitModeForm = server.ElicitModeForm
 	ElicitModeURL  = server.ElicitModeURL
+)
+
+// MRTR types (MCP 2026-07-28): the stateless Multi Round-Trip Request model that
+// replaces server-initiated sampling, elicitation, and roots. A stateless
+// handler's input calls are fulfilled from client-supplied InputResponses or, on
+// the first round, returned as an InputRequiredResult for the client to fulfill
+// and retry.
+type InputRequest = server.InputRequest
+type InputResponse = server.InputResponse
+type InputRequiredResult = server.InputRequiredResult
+
+// ErrInputRequired is the sentinel a stateless handler receives from an input
+// call (CreateMessage / Elicit / ListRoots) when the client has not yet supplied
+// that input; propagate it unchanged.
+var ErrInputRequired = server.ErrInputRequired
+
+// Input request kinds carried in InputRequest.Kind.
+const (
+	InputKindSampling    = server.InputKindSampling
+	InputKindElicitation = server.InputKindElicitation
+	InputKindRoots       = server.InputKindRoots
 )
 
 // Channel types for server-initiated push messages
@@ -455,6 +479,9 @@ var (
 	WithIcons = server.WithIcons
 	// WithBuildInfo sets build metadata for debugging and version verification.
 	WithBuildInfo = server.WithBuildInfo
+	// WithResultCache sets the cache hint (ttlMs, cacheScope) advertised on
+	// cacheable list/read results to modern (2026-07-28) clients.
+	WithResultCache = server.WithResultCache
 )
 
 // ServeStdio runs the server using stdio transport.
@@ -735,6 +762,9 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodTasksResult:            h.handleTasksResult,
 		protocol.MethodTasksCancel:            h.handleTasksCancel,
 		protocol.MethodTasksList:              h.handleTasksList,
+		protocol.MethodTasksUpdate:            h.handleTasksUpdate,
+		protocol.MethodServerDiscover:         h.handleServerDiscover,
+		protocol.MethodSubscriptionsListen:    h.handleSubscriptionsListen,
 	}
 }
 
@@ -749,9 +779,45 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 		defer cancel()
 	}
 
-	resp, err := h.dispatch(ctx, req)
+	// Modern (stateless) path: a request carrying the per-request protocol
+	// _meta is validated and served with a request-scoped session built from
+	// its declared capabilities. Legacy requests fall through unchanged.
+	meta, modern, err := parseModernMeta(req.Params)
 	if err != nil {
 		return nil, h.publicError(req, err)
+	}
+	if modern {
+		ctx, err = h.applyModern(ctx, req.Method, meta)
+		if err != nil {
+			return nil, h.publicError(req, err)
+		}
+		// tasks/list is retired in the modern (2026-07-28) tasks extension, which
+		// favors direct task handles over listing. The legacy method stays for
+		// negotiated 2025-11-25 sessions; a modern caller gets MethodNotFound.
+		if req.Method == protocol.MethodTasksList {
+			return nil, h.publicError(req, protocol.NewMethodNotFound(req.Method))
+		}
+	}
+
+	resp, err := h.dispatch(ctx, req)
+	// MRTR (MCP 2026-07-28): a stateless handler that called sampling/elicitation/
+	// roots without a supplied response is paused, not failed — surface the
+	// recorded inputRequests as an input_required result for the client to
+	// fulfill and retry.
+	if modern {
+		if r, ok := inputRequiredResponse(ctx, req); ok {
+			return r, nil
+		}
+	}
+	if err != nil {
+		if modern {
+			err = modernizeError(err)
+		}
+		return nil, h.publicError(req, err)
+	}
+	if modern {
+		withResultType(resp)
+		h.applyCacheHint(req.Method, resp)
 	}
 	return resp, nil
 }
@@ -872,13 +938,27 @@ func (h *requestHandler) handleInitialize(ctx context.Context, req *protocol.Req
 
 	capabilities := h.serverCapabilities(manifest)
 
-	// Build serverInfo with required fields
+	result := map[string]any{
+		fieldProtocolVersion: negotiatedVersion,
+		"serverInfo":         serverInfoMap(manifest),
+		"capabilities":       capabilities,
+	}
+
+	// Include instructions if set
+	if instructions := h.srv.Instructions(); instructions != "" {
+		result["instructions"] = instructions
+	}
+
+	return protocol.NewResponse(req.ID, result), nil
+}
+
+// serverInfoMap builds the serverInfo/implementation object shared by
+// initialize and server/discover.
+func serverInfoMap(manifest server.Manifest) map[string]any {
 	serverInfo := map[string]any{
 		fieldName:    manifest.Name,
 		fieldVersion: manifest.Version,
 	}
-
-	// Add optional MCP spec fields if set
 	if manifest.Title != "" {
 		serverInfo["title"] = manifest.Title
 	}
@@ -891,27 +971,59 @@ func (h *requestHandler) handleInitialize(ctx context.Context, req *protocol.Req
 	if len(manifest.Icons) > 0 {
 		serverInfo["icons"] = manifest.Icons
 	}
-	// Add extension field (not in MCP spec)
 	if manifest.BuildInfo != nil {
-		serverInfo["buildInfo"] = manifest.BuildInfo
+		serverInfo["buildInfo"] = manifest.BuildInfo // extension field, not in MCP spec
 	}
+	return serverInfo
+}
+
+// extensionsMap advertises the reverse-DNS extensions the server supports in
+// capabilities.extensions (MCP 2026-07-28). MCP Apps is always offered (mcp-go
+// serves ui:// resources); Tasks when any tool opts into augmentation.
+func (h *requestHandler) extensionsMap() map[string]any {
+	ext := map[string]any{
+		protocol.ExtensionUI: map[string]any{},
+	}
+	if h.srv.HasTaskTools() {
+		ext[protocol.ExtensionTasks] = map[string]any{}
+	}
+	return ext
+}
+
+// handleServerDiscover serves server/discover (MCP 2026-07-28): the stateless
+// replacement for the initialize handshake. It reports the server's supported
+// protocol versions, capabilities (including the extensions map), and identity
+// in a single cacheable result.
+func (h *requestHandler) handleServerDiscover(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	manifest := h.srv.Manifest()
+	capabilities := h.serverCapabilities(manifest)
+	capabilities["extensions"] = h.extensionsMap()
+
+	supported := make([]string, 0, len(protocol.SupportedVersions)+1)
+	supported = append(supported, protocol.DraftVersion)
+	supported = append(supported, protocol.SupportedVersions...)
 
 	result := map[string]any{
-		fieldProtocolVersion: negotiatedVersion,
-		"serverInfo":         serverInfo,
-		"capabilities":       capabilities,
+		"resultType":        protocol.ResultTypeComplete,
+		"supportedVersions": supported,
+		"capabilities":      capabilities,
+		"serverInfo":        serverInfoMap(manifest),
 	}
-
-	// Include instructions if set
 	if instructions := h.srv.Instructions(); instructions != "" {
 		result["instructions"] = instructions
 	}
-
 	return protocol.NewResponse(req.ID, result), nil
 }
 
 func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
 	tools := h.srv.Tools()
+
+	// Sort by name so tools/list returns a deterministic order on every call
+	// (MCP 2026-07-28). Server.Tools() is backed by a Go map, whose iteration
+	// order is randomized; without this the response would vary between calls.
+	slices.SortFunc(tools, func(a, b server.ToolInfo) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	toolList := make([]map[string]any, 0, len(tools))
 	for _, t := range tools {
@@ -958,8 +1070,8 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 // to surface input-validation failures to the model per SEP-1303.
 func toolExecutionError(msg string) map[string]any {
 	return map[string]any{
-		"content": []map[string]any{{fieldType: fieldText, fieldText: msg}},
-		"isError": true,
+		fieldContent: []map[string]any{{fieldType: fieldText, fieldText: msg}},
+		"isError":    true,
 	}
 }
 
@@ -1149,7 +1261,7 @@ func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error
 		textContent = string(data)
 		marshaled = data
 	}
-	response["content"] = []map[string]any{
+	response[fieldContent] = []map[string]any{
 		{
 			fieldType: fieldText,
 			fieldText: textContent,
@@ -1169,9 +1281,9 @@ func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error
 // a missing content field.
 func applyStructuredResult(response map[string]any, v *server.StructuredResult) {
 	if len(v.Content) > 0 {
-		response["content"] = v.Content
+		response[fieldContent] = v.Content
 	} else {
-		response["content"] = []map[string]any{}
+		response[fieldContent] = []map[string]any{}
 	}
 	response["structuredContent"] = v.StructuredContent
 	if v.IsError {
@@ -1301,6 +1413,56 @@ func (h *requestHandler) handleResourcesUnsubscribe(ctx context.Context, req *pr
 		h.srv.UnsubscribeResource(clientID, params.URI)
 	}
 	return protocol.NewResponse(req.ID, map[string]any{}), nil
+}
+
+// handleSubscriptionsListen serves subscriptions/listen (MCP 2026-07-28, SEP):
+// the stateless replacement for the GET SSE stream plus resources/subscribe and
+// resources/unsubscribe. A modern client declares the notification methods it
+// wants delivered (e.g. notifications/resources/updated) and, optionally, the
+// resource URIs it cares about. The requested URIs are registered on the
+// request-scoped session's SubscriptionManager — the same machinery
+// resources/subscribe drives — and the handler returns a stable, non-empty
+// subscriptionId. Subsequent notifications carry that id under
+// _meta[io.modelcontextprotocol/subscriptionId] so the client can correlate
+// them with this listen call.
+//
+// This increment covers protocol negotiation and server-side registration only.
+// Realizing the long-lived POST-response stream over which the tagged
+// notifications actually flow is a deferred transport follow-up; nothing under
+// transport/ is wired to it yet.
+func (h *requestHandler) handleSubscriptionsListen(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	// subscriptions/listen is a modern (stateless) method: the request-scoped
+	// session is built from the per-request _meta. Its absence means the caller
+	// did not send a modern request, so there is nothing to register against.
+	session := server.SessionFromContext(ctx)
+	if session == nil {
+		return nil, protocol.NewInvalidParams("subscriptions/listen requires a modern request (per-request _meta)")
+	}
+
+	var params struct {
+		Notifications []string `json:"notifications"`
+		URIs          []string `json:"uris"`
+	}
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, protocol.NewInvalidParams(err.Error())
+		}
+	}
+
+	// Register each requested resource URI on the session's subscription
+	// manager. An empty URI is rejected rather than silently registered.
+	for _, uri := range params.URIs {
+		if uri == "" {
+			return nil, protocol.NewInvalidParams("subscriptions/listen uris must be non-empty")
+		}
+		session.Subscribe(uri)
+	}
+
+	id, err := newSubscriptionID()
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewResponse(req.ID, map[string]any{"subscriptionId": id}), nil
 }
 
 func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
@@ -1533,8 +1695,8 @@ func (h *requestHandler) handleTasksResult(ctx context.Context, req *protocol.Re
 	if !ok || resp == nil {
 		// Cancelled (or resultless) task: surface as a tool execution error.
 		resp = map[string]any{
-			"content": []map[string]any{{fieldType: fieldText, fieldText: "task did not produce a result"}},
-			"isError": true,
+			fieldContent: []map[string]any{{fieldType: fieldText, fieldText: "task did not produce a result"}},
+			"isError":    true,
 		}
 	}
 	attachRelatedTask(resp, params.TaskID)
@@ -1552,6 +1714,24 @@ func (h *requestHandler) handleTasksCancel(_ context.Context, req *protocol.Requ
 	task, err := h.srv.CancelAugTask(params.TaskID)
 	if err != nil {
 		// Both unknown-task and already-terminal map to -32602 per spec.
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	return protocol.NewResponse(req.ID, task), nil
+}
+
+// handleTasksUpdate serves tasks/update (MCP 2026-07-28 tasks extension): refresh
+// a non-terminal task's ttl so a slow task is not evicted before it finishes. A
+// null ttl clears the deadline. Unknown/terminal tasks map to -32602.
+func (h *requestHandler) handleTasksUpdate(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		TaskID string `json:"taskId"`
+		TTL    *int64 `json:"ttl"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	task, err := h.srv.UpdateAugTask(params.TaskID, params.TTL)
+	if err != nil {
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
 	return protocol.NewResponse(req.ID, task), nil

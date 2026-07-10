@@ -50,60 +50,80 @@ type Schema struct {
 	Minimum              *float64           `json:"minimum,omitempty"`
 	Maximum              *float64           `json:"maximum,omitempty"`
 	Items                *Schema            `json:"items,omitempty"`
+
+	// JSON Schema 2020-12 referencing and composition keywords. These make
+	// inputSchema/outputSchema express the full 2020-12 vocabulary rather than
+	// the flat object/array subset. Ref points at a definition inside Defs
+	// (e.g. "#/$defs/Node"); Defs is the document's reusable definition map and
+	// is carried only on root schemas. OneOf/AnyOf/AllOf are the boolean
+	// combinators, and If/Then/Else form a conditional applicator. All are
+	// optional and omitted from JSON when unset.
+	Ref   string             `json:"$ref,omitempty"`
+	Defs  map[string]*Schema `json:"$defs,omitempty"`
+	OneOf []*Schema          `json:"oneOf,omitempty"`
+	AnyOf []*Schema          `json:"anyOf,omitempty"`
+	AllOf []*Schema          `json:"allOf,omitempty"`
+	If    *Schema            `json:"if,omitempty"`
+	Then  *Schema            `json:"then,omitempty"`
+	Else  *Schema            `json:"else,omitempty"`
 }
 
-// MarshalJSON encodes the schema. For object-typed schemas it forces the
-// "properties" key to be present (emitting `{}` when empty) and writes
-// AdditionalProperties when set.
+// isComposition reports whether the schema is a reference or boolean
+// combinator rather than a plain object. Such schemas must not have an empty
+// "properties" key forced onto them by MarshalJSON: a $ref/oneOf/anyOf/allOf
+// node validates by delegation, and injecting "properties":{} would both be
+// meaningless and, for a closed ("additionalProperties":false) sibling,
+// actively wrong.
+func (s Schema) isComposition() bool {
+	return s.Ref != "" || len(s.OneOf) > 0 || len(s.AnyOf) > 0 || len(s.AllOf) > 0
+}
+
+// MarshalJSON encodes the schema. For plain object-typed schemas it forces
+// the "properties" key to be present (emitting `{}` when empty) and always
+// writes AdditionalProperties when set.
 //
-// Why: OpenAI's strict function-calling mode rejects object schemas that
-// omit "properties" with the error
-// `object schema missing properties. (format)`, which would otherwise
-// break any tool whose handler input is `struct{}`. Forcing properties
-// to materialize removes the footgun for downstream consumers.
+// Why force properties: OpenAI's strict function-calling mode rejects object
+// schemas that omit "properties" with the error
+// `object schema missing properties. (format)`, which would otherwise break
+// any tool whose handler input is `struct{}`. Forcing properties to
+// materialize removes the footgun for downstream consumers.
+//
+// The encoder marshals every field through the struct tags (so 2020-12
+// keywords such as $ref/$defs/oneOf/if round-trip automatically) and only
+// patches in the two keys the tags cannot express: the forced "properties"
+// and the "-"-tagged AdditionalProperties. Composition schemas
+// ($ref/oneOf/anyOf/allOf) are deliberately excluded from the properties
+// forcing so they are not mistaken for closed objects.
 func (s Schema) MarshalJSON() ([]byte, error) {
-	if s.Type != typeObject {
-		type plain Schema
-		return json.Marshal(plain(s))
+	type plain Schema
+	data, err := json.Marshal(plain(s))
+	if err != nil {
+		return nil, err
 	}
 
-	out := map[string]any{"type": typeObject}
-	if s.Dialect != "" {
-		out["$schema"] = s.Dialect
+	forceProps := s.Type == typeObject && !s.isComposition()
+	if !forceProps && s.AdditionalProperties == nil {
+		return data, nil
 	}
-	if s.Format != "" {
-		out["format"] = s.Format
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
 	}
-	props := s.Properties
-	if props == nil {
-		props = map[string]*Schema{}
+
+	if forceProps {
+		if _, ok := m["properties"]; !ok {
+			m["properties"] = json.RawMessage(`{}`)
+		}
 	}
-	out["properties"] = props
 	if s.AdditionalProperties != nil {
-		out["additionalProperties"] = s.AdditionalProperties
+		ap, err := json.Marshal(s.AdditionalProperties)
+		if err != nil {
+			return nil, err
+		}
+		m["additionalProperties"] = ap
 	}
-	if len(s.Required) > 0 {
-		out[tagRequired] = s.Required
-	}
-	if s.Description != "" {
-		out["description"] = s.Description
-	}
-	if s.Default != nil {
-		out["default"] = s.Default
-	}
-	if len(s.Enum) > 0 {
-		out["enum"] = s.Enum
-	}
-	if s.Minimum != nil {
-		out["minimum"] = *s.Minimum
-	}
-	if s.Maximum != nil {
-		out["maximum"] = *s.Maximum
-	}
-	if s.Items != nil {
-		out["items"] = s.Items
-	}
-	return json.Marshal(out)
+	return json.Marshal(m)
 }
 
 // Generate creates a JSON Schema from a Go value. The returned root schema
@@ -130,7 +150,50 @@ func GenerateFromType(t reflect.Type) (*Schema, error) {
 	return s, nil
 }
 
+// defRefPrefix is the JSON-pointer prefix under which generated definitions
+// are registered and referenced ("#/$defs/<TypeName>").
+const defRefPrefix = "#/$defs/"
+
+// defRef returns the "$ref" string that points at the definition for t.
+func defRef(t reflect.Type) string {
+	return defRefPrefix + t.Name()
+}
+
+// genContext threads the state needed to break recursive Go types across a
+// single generation. visiting holds the struct types currently on the
+// generation stack (a back-edge to one of them is a cycle); recursive records
+// which of those were actually referenced recursively and therefore need a
+// hoisted definition; defs collects those hoisted definitions, which are
+// attached to the root schema's $defs.
+type genContext struct {
+	visiting  map[reflect.Type]struct{}
+	recursive map[reflect.Type]bool
+	defs      map[string]*Schema
+}
+
+func newGenContext() *genContext {
+	return &genContext{
+		visiting:  make(map[reflect.Type]struct{}),
+		recursive: make(map[reflect.Type]bool),
+		defs:      make(map[string]*Schema),
+	}
+}
+
 func generateFromType(t reflect.Type) (*Schema, error) {
+	ctx := newGenContext()
+	s, err := ctx.gen(t)
+	if err != nil {
+		return nil, err
+	}
+	// Hoist any recursion-breaking definitions onto the root document so the
+	// "#/$defs/..." references resolve.
+	if len(ctx.defs) > 0 {
+		s.Defs = ctx.defs
+	}
+	return s, nil
+}
+
+func (c *genContext) gen(t reflect.Type) (*Schema, error) {
 	// Handle pointers
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -148,7 +211,7 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 
 	switch t.Kind() {
 	case reflect.Struct:
-		return generateStructSchema(t)
+		return c.genStruct(t)
 	case reflect.String:
 		return &Schema{Type: typeString}, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -159,7 +222,7 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 	case reflect.Bool:
 		return &Schema{Type: typeBoolean}, nil
 	case reflect.Slice, reflect.Array:
-		return generateArraySchema(t)
+		return c.genArray(t)
 	case reflect.Map:
 		return &Schema{Type: typeObject}, nil
 	default:
@@ -167,7 +230,17 @@ func generateFromType(t reflect.Type) (*Schema, error) {
 	}
 }
 
-func generateStructSchema(t reflect.Type) (*Schema, error) {
+func (c *genContext) genStruct(t reflect.Type) (*Schema, error) {
+	// A back-edge to a type already on the stack is a cycle. Emit a $ref
+	// instead of recursing forever, and flag the type so its definition is
+	// hoisted into $defs once the outermost generation finishes.
+	if _, onStack := c.visiting[t]; onStack {
+		c.recursive[t] = true
+		return &Schema{Ref: defRef(t)}, nil
+	}
+
+	c.visiting[t] = struct{}{}
+
 	// AdditionalProperties: false marks the object as closed so OpenAI
 	// strict tool-calling accepts the schema. Maps, which can grow at
 	// runtime, leave AdditionalProperties unset (handled separately).
@@ -200,7 +273,7 @@ func generateStructSchema(t reflect.Type) (*Schema, error) {
 		}
 
 		// Generate field schema
-		fieldSchema, err := generateFromType(field.Type)
+		fieldSchema, err := c.gen(field.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -211,11 +284,22 @@ func generateStructSchema(t reflect.Type) (*Schema, error) {
 		schema.Properties[fieldName] = fieldSchema
 	}
 
+	delete(c.visiting, t)
+
+	// If this type was referenced recursively, hoist it into $defs and return
+	// a $ref to it (from every position, including the outermost). Keeping the
+	// definition in exactly one place avoids sharing a pointer with the root,
+	// which would otherwise let the root's dialect marker leak into $defs.
+	if c.recursive[t] {
+		c.defs[t.Name()] = schema
+		return &Schema{Ref: defRef(t)}, nil
+	}
+
 	return schema, nil
 }
 
-func generateArraySchema(t reflect.Type) (*Schema, error) {
-	itemSchema, err := generateFromType(t.Elem())
+func (c *genContext) genArray(t reflect.Type) (*Schema, error) {
+	itemSchema, err := c.gen(t.Elem())
 	if err != nil {
 		return nil, err
 	}

@@ -167,43 +167,59 @@ clients keep working, then make it the default in v2.
 - [ ] **Remove** `initialize`/`notifications/initialized`, `ping`,
   `logging/setLevel`, `notifications/roots/list_changed`,
   `resources/subscribe`/`unsubscribe`, the GET stream (all gated to this version).
-- [ ] **`subscriptions/listen`** — single long-lived POST-response stream
+- [x] **`subscriptions/listen`** — single long-lived POST-response stream
   replacing the GET endpoint + subscribe/unsubscribe; clients opt into notif
-  types; tag with `io.modelcontextprotocol/subscriptionId`.
+  types; tag with `io.modelcontextprotocol/subscriptionId`. (Protocol method +
+  server-side registration + `subscriptionId` + the long-lived POST-response SSE
+  stream with `subscriptionId`-tagged notifications all landed.)
 
 **Multi Round-Trip Requests (MRTR)** — replaces all server-initiated requests
-- [ ] Every result carries required `resultType` (`"complete"` | `"input_required"`).
-- [ ] Replace server-initiated `roots/list`, `sampling/createMessage`,
+- [x] Every result carries required `resultType` (`"complete"` | `"input_required"`).
+- [x] Replace server-initiated `roots/list`, `sampling/createMessage`,
   `elicitation/create` with `InputRequiredResult` + client retry carrying
-  `inputResponses`; correlate via `requestState`.
+  `inputResponses`; correlate via `requestState`. (Replay/continuation model:
+  broker fulfills input calls from client-supplied responses or records them as
+  pending `input_required`; handler is re-run each round.)
 
 **Transport**
-- [ ] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).
+- [x] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).
+  (`WithStreamableStateless()` drops the session-id lifecycle on the POST path.)
 - [ ] **Remove SSE resumability** (`Last-Event-ID`, event IDs).
-- [ ] **Required routing headers** `Mcp-Method`, `Mcp-Name` on Streamable HTTP POST.
+- [x] **Required routing headers** `Mcp-Method`, `Mcp-Name` on Streamable HTTP POST.
+  (Validated-when-present by default; `WithStreamableStateless()` hard-requires
+  `Mcp-Method` → `-32020` on absence/mismatch.)
 - [ ] **`CacheableResult`** — `ttlMs` + `cacheScope` on `tools/list`,
   `prompts/list`, `resources/list`, `resources/read`, `resources/templates/list`.
-- [ ] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —
+- [x] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —
   ties into existing OTel middleware.
-- [ ] Deterministic ordering of `tools/list`.
+- [x] Deterministic ordering of `tools/list`.
 
 **Extensions framework (SEP-2133)**
 - [ ] Add the **`extensions` capability map** (reverse-DNS ids) to client/server
   capabilities.
-- [ ] Re-express **MCP Apps** through the extensions framework (today it's raw
-  `_meta.ui.resourceUri`); certify against `io.modelcontextprotocol/apps`.
-- [ ] Move **Tasks** to the `io.modelcontextprotocol/tasks` extension: polling
+- [x] Re-express **MCP Apps** through the extensions framework. RESOLVED: the MCP
+  Apps extension identifier is `io.modelcontextprotocol/ui` (NOT `/apps` — the
+  feature is "MCP Apps" but the negotiated id is `/ui`, per the ext-apps spec
+  2026-01-26). mcp-go already advertises it via `capabilities.extensions`
+  (`ExtensionUI`) and associates tools via `_meta.ui.resourceUri` (+ the flat
+  `_meta["ui/resourceUri"]`, which the spec deprecates for removal before GA — we
+  keep emitting it for host compat). Already conformant.
+- [~] Move **Tasks** to the `io.modelcontextprotocol/tasks` extension: polling
   `tasks/get`, new `tasks/update`, **remove `tasks/list`**, allow unsolicited task
-  handles.
+  handles. (tasks/update added; tasks/list gated off for modern; extension
+  already advertised. Unsolicited task handles remain.)
 
 **Auth / errors / deprecations**
-- [ ] `iss` validation (RFC 9207); `application_type` in DCR; Client ID Metadata
-  Documents over DCR.
+- [~] `iss` validation (RFC 9207); `application_type` in DCR; Client ID Metadata
+  Documents over DCR. RESOLVED as OUT OF SCOPE: in-library auth was deliberately
+  removed (see Cross-cutting "Auth stance") — enforcement (iss validation, DCR)
+  belongs at the gateway, and mcp-go stays advertise-only. Not implemented by
+  design; revisit only if the auth stance changes.
 - [ ] Error renumbering: resource-not-found `-32002` → `-32602`;
   `HeaderMismatch` `-32001`→`-32020`, etc.; adopt the `-32020..-32099` MCP range.
 - [ ] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
   migrations (tool params / provider APIs / stderr+OTel).
-- [ ] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
+- [x] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
   `oneOf`/`anyOf`, conditionals).
 - [ ] Make `Stateless` the default; tag **v2.0.0**.
 

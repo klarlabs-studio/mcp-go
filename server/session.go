@@ -32,6 +32,11 @@ type Session struct {
 
 	// Client capabilities (what the client supports)
 	clientCaps ClientCapabilities
+
+	// broker fulfills server→client requests (sampling, elicitation, roots) via
+	// the stateless MRTR model (MCP 2026-07-28) when set — the request-scoped
+	// replacement for a RequestSender. Nil under legacy session semantics.
+	broker *InputBroker
 }
 
 // ErrNoRequestSender is returned by server→client request methods (sampling,
@@ -152,6 +157,24 @@ func (s *Session) SetClientCapabilitiesJSON(raw json.RawMessage) {
 	s.SetClientCapabilities(caps)
 }
 
+// SetInputBroker attaches an MRTR input broker (MCP 2026-07-28) so this
+// session's server→client request methods (sampling, elicitation, roots)
+// resolve statelessly from client-supplied input responses instead of a
+// RequestSender.
+func (s *Session) SetInputBroker(b *InputBroker) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.broker = b
+}
+
+// InputBroker returns the session's MRTR input broker, or nil under legacy
+// (session-negotiated) semantics.
+func (s *Session) InputBroker() *InputBroker {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.broker
+}
+
 // SupportsFeature returns true if the client supports the given feature.
 func (s *Session) SupportsFeature(feature string) bool {
 	s.mu.RLock()
@@ -177,6 +200,10 @@ func (s *Session) SupportsFeature(feature string) bool {
 
 // CreateMessage sends a sampling request to the client.
 // Returns an error if the client doesn't support sampling.
+//
+// Note: sampling is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should call an LLM provider API directly rather
+// than round-tripping a completion through the client.
 func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	return s.createMessage(ctx, req)
 }
@@ -200,6 +227,9 @@ func (s *Session) CreateMessageWithTools(ctx context.Context, req *CreateMessage
 func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	if !s.SupportsFeature("sampling") {
 		return nil, fmt.Errorf("client does not support sampling")
+	}
+	if b := s.InputBroker(); b != nil {
+		return b.sampling(req)
 	}
 	if s.sender == nil {
 		return nil, ErrNoRequestSender
@@ -247,9 +277,23 @@ func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) 
 
 // ListRoots requests the list of roots from the client.
 // Returns an error if the client doesn't support roots.
+//
+// Note: roots is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should receive directories/files via tool
+// parameters, resource URIs, or configuration instead.
 func (s *Session) ListRoots(ctx context.Context) (*ListRootsResult, error) {
 	if !s.SupportsFeature("roots") {
 		return nil, fmt.Errorf("client does not support roots")
+	}
+	if b := s.InputBroker(); b != nil {
+		res, err := b.listRoots()
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.roots = res.Roots
+		s.mu.Unlock()
+		return res, nil
 	}
 	if s.sender == nil {
 		return nil, ErrNoRequestSender
@@ -315,6 +359,10 @@ func (s *Session) HandleRootsChanged(roots []Root) {
 }
 
 // Log sends a log message at the specified level.
+//
+// Note: logging is deprecated as of MCP 2026-07-28 (12-month window; still
+// functional). Modern servers should log to stderr or emit OpenTelemetry
+// instead of routing log messages through the client.
 func (s *Session) Log(level LogLevel, logger string, data any) {
 	s.mu.RLock()
 	minLevel := s.logLevel

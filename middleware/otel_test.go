@@ -8,6 +8,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -199,6 +200,101 @@ func TestOTelMiddleware(t *testing.T) {
 		_, err := handler(context.Background(), req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestOTelTraceContextPropagation(t *testing.T) {
+	// A modern request whose _meta carries a valid W3C traceparent must produce
+	// a server span that joins the caller's trace: same trace id, and the span's
+	// parent is the incoming (remote) span.
+	const (
+		incomingTraceID = "0af7651916cd43dd8448eb211c80319c"
+		incomingSpanID  = "b7ad6b7169203331"
+	)
+	traceparent := "00-" + incomingTraceID + "-" + incomingSpanID + "-01"
+
+	metaParams := func(t *testing.T, meta map[string]string) json.RawMessage {
+		t.Helper()
+		m := map[string]any{"_meta": map[string]any{}}
+		inner := m["_meta"].(map[string]any)
+		for k, v := range meta {
+			inner[k] = v
+		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			t.Fatalf("marshal params: %v", err)
+		}
+		return b
+	}
+
+	t.Run("joins incoming trace via _meta traceparent", func(t *testing.T) {
+		exporter := tracetest.NewInMemoryExporter()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+		defer tp.Shutdown(context.Background())
+
+		middleware := OTel(
+			WithTracerProvider(tp),
+			WithOTelPropagator(propagation.TraceContext{}),
+		)
+		handler := middleware(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			return &protocol.Response{ID: req.ID}, nil
+		})
+
+		req := &protocol.Request{
+			ID:     json.RawMessage("1"),
+			Method: "tools/list",
+			Params: metaParams(t, map[string]string{
+				protocol.MetaKeyTraceparent: traceparent,
+			}),
+		}
+		if _, err := handler(context.Background(), req); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) != 1 {
+			t.Fatalf("expected 1 span, got %d", len(spans))
+		}
+		span := spans[0]
+		if got := span.SpanContext.TraceID().String(); got != incomingTraceID {
+			t.Errorf("expected span trace id %q, got %q", incomingTraceID, got)
+		}
+		if got := span.Parent.SpanID().String(); got != incomingSpanID {
+			t.Errorf("expected parent span id %q, got %q", incomingSpanID, got)
+		}
+		if !span.Parent.IsRemote() {
+			t.Error("expected parent span context to be remote")
+		}
+	})
+
+	t.Run("root span when trace context absent", func(t *testing.T) {
+		exporter := tracetest.NewInMemoryExporter()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+		defer tp.Shutdown(context.Background())
+
+		middleware := OTel(
+			WithTracerProvider(tp),
+			WithOTelPropagator(propagation.TraceContext{}),
+		)
+		handler := middleware(func(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+			return &protocol.Response{ID: req.ID}, nil
+		})
+
+		req := &protocol.Request{ID: json.RawMessage("1"), Method: "tools/list"}
+		if _, err := handler(context.Background(), req); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		spans := exporter.GetSpans()
+		if len(spans) != 1 {
+			t.Fatalf("expected 1 span, got %d", len(spans))
+		}
+		if spans[0].Parent.IsValid() {
+			t.Error("expected root span (no valid parent) when trace context absent")
+		}
+		if spans[0].SpanContext.TraceID().String() == incomingTraceID {
+			t.Error("root span must not reuse the sample incoming trace id")
 		}
 	})
 }

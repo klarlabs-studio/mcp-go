@@ -4,6 +4,100 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — 2026-07-28 stateless foundation (Phase 4, experimental)
+
+First increment of the modern, stateless MCP revision (RC, SEP-2575). This lays
+the foundation; the full stateless request path (per-request `_meta`, MRTR,
+`subscriptions/listen`, routing headers) is built incrementally and `2026-07-28`
+is deliberately NOT yet in `SupportedVersions`.
+
+- **`server/discover`** (SEP-2575) — the stateless replacement for the
+  `initialize` handshake. Returns `{ resultType:"complete", supportedVersions,
+  capabilities (incl. the extensions map), serverInfo, instructions }` in one
+  cacheable request. mcp-go is dual-era: it keeps `initialize` for legacy clients.
+- **Extensions capability map** (SEP-2133) — `capabilities.extensions` advertises
+  reverse-DNS extension ids: `io.modelcontextprotocol/ui` (MCP Apps, always) and
+  `io.modelcontextprotocol/tasks` (when a tool opts into task augmentation).
+- **Modern error codes** — `-32020` HeaderMismatch, `-32021`
+  MissingRequiredClientCapability, `-32022` UnsupportedProtocolVersion, with
+  `protocol.NewUnsupportedProtocolVersion` / `NewMissingRequiredClientCapability`.
+- **Reserved `_meta` key + resultType constants** — `protocol.MetaKey*`
+  (protocolVersion/clientInfo/clientCapabilities/logLevel/subscriptionId/
+  related-task), `protocol.ResultTypeComplete`/`InputRequired`, `protocol.DraftVersion`.
+- **Stateless per-request `_meta` handling.** A request carrying
+  `io.modelcontextprotocol/protocolVersion` in `_meta` is served on the modern
+  path: required fields (protocolVersion/clientInfo/clientCapabilities) are
+  enforced (`-32602` if missing), the version is checked (`-32022` if
+  unsupported; `server/discover` exempt), a request-scoped session is built from
+  the declared capabilities (so sampling/elicitation gating works with no
+  connection state), and the result is stamped `resultType:"complete"`. A
+  request without the modern `_meta` is served unchanged under legacy semantics
+  (dual-era).
+- **MRTR — Multi Round-Trip Requests** (SEP-2575) — the stateless replacement
+  for every server-initiated request. A modern tool handler that calls sampling,
+  elicitation, or `roots/list` without a supplied response no longer fails with
+  `ErrNoRequestSender`: the call is recorded and the request returns
+  `resultType:"input_required"` with the `inputRequests` it needs (`InputRequest`
+  ID/kind/payload). The client fulfills them and retries the same call carrying
+  `io.modelcontextprotocol/inputResponses` in `_meta`; the handler is replayed
+  and its input calls resolve from those responses (correlated by stable
+  `ir-N` IDs). `requestState` is echoed back for client-side correlation. The
+  legacy (session + RequestSender) path is unchanged. New public types
+  `InputRequest`, `InputResponse`, `InputRequiredResult`, sentinel
+  `ErrInputRequired`, and `InputKind{Sampling,Elicitation,Roots}`.
+- **`subscriptions/listen`** (SEP; MCP 2026-07-28) — the stateless subscription
+  method that replaces the GET SSE stream + `resources/subscribe`/`unsubscribe`.
+  A client opts into notification types and resource `uris`; the server registers
+  the URIs on the request-scoped session's SubscriptionManager and returns a
+  `subscriptionId` (correlates the `io.modelcontextprotocol/subscriptionId` tag on
+  subsequent notifications). No session → `-32602`. On Streamable HTTP the method
+  is served as a **long-lived POST-response SSE stream**: the handler runs once to
+  register + return the `subscriptionId`, then the response stays open forwarding
+  notifications pushed via `HTTP.NotifySubscription` (each tagged with the
+  `subscriptionId` in `_meta`) until the client disconnects, reusing the standing-
+  stream registry for backpressure/cleanup.
+- **Streamable HTTP routing headers** — `Mcp-Method` / `Mcp-Name` on the
+  streamable POST path are validated against the JSON-RPC body (method, and the
+  name/uri target for `tools/call`/`prompts/get`/`resources/read`); a mismatch
+  returns `-32020` HeaderMismatch (`protocol.NewHeaderMismatch`). Validation is
+  applied when the headers are present by default; `WithStreamableStateless()`
+  additionally **hard-requires** `Mcp-Method` (absent → `-32020`) and **drops the
+  `Mcp-Session-Id` lifecycle** (no minting, no per-request requirement) — the
+  modern (MCP 2026-07-28) streamable model, opt-in until v2.
+- **W3C Trace Context propagation** — a modern request carrying
+  `io.modelcontextprotocol/traceparent` / `tracestate` / `baggage` in `_meta` has
+  its distributed-trace position extracted (via the OTel `TraceContext`/`Baggage`
+  propagators) so the server span joins the client's trace. The OTel middleware
+  parents the top-level span onto the incoming remote span; `applyModern`
+  propagates it to handler-level spans. `WithOTelPropagator` option added.
+- **`tasks/update` + modern `tasks/list` retirement** — `tasks/update` refreshes
+  a non-terminal task's `ttl` (null clears the deadline) so a slow task is not
+  evicted before completion (`Server.UpdateAugTask`); `tasks/list` is served for
+  legacy sessions but returns `MethodNotFound` for modern (2026-07-28) requests,
+  per the tasks extension favoring direct task handles over listing.
+- **Deterministic `tools/list` ordering** — tools are sorted by name, so
+  `tools/list` returns a stable order across calls (was Go map-iteration order).
+- **Full JSON Schema 2020-12** for `inputSchema`/`outputSchema` — the `schema`
+  package now supports `$ref`/`$defs` (auto-emitted to break recursive types),
+  `oneOf`/`anyOf`/`allOf`, and `if`/`then`/`else`: generated, marshaled, and
+  enforced by the validator (`$ref` resolved against root `$defs`; unresolvable
+  refs treated leniently). Legacy non-recursive output is unchanged.
+- **Modern Icon fields** (SEP-973 evolution) — the `Icon` type gains additive
+  modern fields `src` / `sizes` / `theme` alongside the legacy `uri` / `mimeType`
+  / `size` (legacy JSON output is unchanged). `NewIcon(src)` + `WithMimeType` /
+  `WithSizes` / `WithTheme` builders and `Normalize()` (fills each era's empty
+  fields from the other) ease dual-era construction.
+- **CacheableResult** (SEP-2549) — `WithResultCache(ttlMs, scope)` stamps
+  `ttlMs`/`cacheScope` on cacheable results (`tools/list`, `prompts/list`,
+  `resources/list`, `resources/read`, `resources/templates/list`) for modern
+  clients; legacy responses are unaffected.
+- **Modern error renumbering** — resource-not-found is `-32602` on the modern
+  path (vs `-32001` on legacy), per the retirement of the `-32002` not-found code.
+- **Deprecation posture** (SEP-2577) — sampling, roots, and logging are
+  documented as deprecated in 2026-07-28 (12-month window; still fully
+  functional) with their migration paths (provider APIs / tool params / stderr
+  + OpenTelemetry).
+
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
 `protocol.SupportedVersions` now includes `2025-11-25` and the default

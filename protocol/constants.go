@@ -63,6 +63,70 @@ const (
 	MethodTasksResult = "tasks/result"
 	MethodTasksCancel = "tasks/cancel"
 	MethodTasksList   = "tasks/list"
+
+	// MethodTasksUpdate refreshes a task's ttl (MCP 2026-07-28 tasks extension).
+	// tasks/list, by contrast, is retired in the modern era (gated off for modern
+	// requests) — the tasks extension favors direct task handles over listing.
+	MethodTasksUpdate = "tasks/update"
+
+	// Stateless discovery (MCP 2026-07-28, SEP-2575) — replaces initialize for
+	// modern clients.
+	MethodServerDiscover = "server/discover"
+
+	// Stateless subscription (MCP 2026-07-28, SEP) — a modern client opts into
+	// the notification types (and resource URIs) it wants via a single method,
+	// replacing the GET SSE stream plus resources/subscribe and
+	// resources/unsubscribe. Delivered notifications are tagged with
+	// MetaKeySubscriptionID so the client can correlate them.
+	MethodSubscriptionsListen = "subscriptions/listen"
+)
+
+// DraftVersion is the 2026-07-28 release-candidate ("modern", stateless)
+// protocol revision. It is advertised via server/discover but is NOT yet in
+// SupportedVersions (which drives the legacy initialize handshake): the modern
+// stateless request path is being built incrementally (docs/revisions-roadmap.md
+// Phase 4).
+const DraftVersion = "2026-07-28"
+
+// Reserved per-request _meta keys for the stateless (modern) request model
+// (MCP 2026-07-28). Every modern request carries protocol version, client
+// identity, and capabilities here instead of via an initialize handshake.
+const (
+	MetaKeyProtocolVersion    = "io.modelcontextprotocol/protocolVersion"
+	MetaKeyClientInfo         = "io.modelcontextprotocol/clientInfo"
+	MetaKeyClientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+	MetaKeyLogLevel           = "io.modelcontextprotocol/logLevel"
+	MetaKeySubscriptionID     = "io.modelcontextprotocol/subscriptionId"
+	MetaKeyRelatedTask        = "io.modelcontextprotocol/related-task"
+
+	// MRTR (Multi Round-Trip Requests, MCP 2026-07-28): a client retrying a
+	// call that returned resultType "input_required" carries its fulfillment of
+	// the earlier inputRequests under MetaKeyInputResponses and echoes the
+	// server's opaque MetaKeyRequestState.
+	MetaKeyInputResponses = "io.modelcontextprotocol/inputResponses"
+	MetaKeyRequestState   = "io.modelcontextprotocol/requestState"
+
+	// W3C Trace Context (MCP 2026-07-28): a modern request carries the caller's
+	// distributed-trace position in _meta so the server span joins the client's
+	// trace. traceparent/tracestate map to the propagation.TraceContext
+	// propagator; baggage to the propagation.Baggage propagator.
+	MetaKeyTraceparent = "io.modelcontextprotocol/traceparent"
+	MetaKeyTracestate  = "io.modelcontextprotocol/tracestate"
+	MetaKeyBaggage     = "io.modelcontextprotocol/baggage"
+)
+
+// Extension identifiers (reverse-DNS) negotiated via capabilities.extensions
+// (MCP 2026-07-28, SEP-2133).
+const (
+	ExtensionUI    = "io.modelcontextprotocol/ui"    // MCP Apps
+	ExtensionTasks = "io.modelcontextprotocol/tasks" // Tasks
+)
+
+// ResultType values for polymorphic results (MCP 2026-07-28). An absent
+// resultType is treated as "complete" for backward compatibility.
+const (
+	ResultTypeComplete      = "complete"
+	ResultTypeInputRequired = "input_required"
 )
 
 // MCP notification methods.

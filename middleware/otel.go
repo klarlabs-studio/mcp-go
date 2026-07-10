@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -24,6 +26,7 @@ type OTelOption func(*otelConfig)
 type otelConfig struct {
 	tracerProvider trace.TracerProvider
 	meterProvider  metric.MeterProvider
+	propagator     propagation.TextMapPropagator
 	serviceName    string
 	skipMethods    map[string]bool
 }
@@ -58,12 +61,25 @@ func WithOTelSkipMethods(methods ...string) OTelOption {
 	}
 }
 
+// WithOTelPropagator sets the text-map propagator used to extract W3C Trace
+// Context (traceparent/tracestate/baggage) carried in a modern request's
+// _meta. It defaults to the globally-registered propagator
+// (otel.GetTextMapPropagator), so an application that installs a propagator at
+// startup gets remote-parent joining for free. Supply one explicitly to avoid
+// depending on global state.
+func WithOTelPropagator(p propagation.TextMapPropagator) OTelOption {
+	return func(c *otelConfig) {
+		c.propagator = p
+	}
+}
+
 // OTel returns middleware that adds OpenTelemetry tracing and metrics.
 // It creates spans for each request and records request counts and latency.
 func OTel(opts ...OTelOption) Middleware {
 	cfg := &otelConfig{
 		tracerProvider: otel.GetTracerProvider(),
 		meterProvider:  otel.GetMeterProvider(),
+		propagator:     otel.GetTextMapPropagator(),
 		serviceName:    "mcp-server",
 		skipMethods:    make(map[string]bool),
 	}
@@ -108,6 +124,13 @@ func OTel(opts ...OTelOption) Middleware {
 			if cfg.skipMethods[req.Method] {
 				return next(ctx, req)
 			}
+
+			// Join the client's distributed trace: a modern (stateless) request
+			// carries W3C Trace Context in its _meta. Extracting it here — before
+			// the span is started — makes the server span a child of the caller's
+			// remote span. Absent trace context, ctx is unchanged and the span is
+			// a root.
+			ctx = extractModernTraceContext(ctx, req, cfg.propagator)
 
 			// Start span
 			spanName := "mcp." + req.Method
@@ -172,6 +195,53 @@ func OTel(opts ...OTelOption) Middleware {
 			return resp, err
 		}
 	}
+}
+
+// extractModernTraceContext reads W3C Trace Context (traceparent, tracestate,
+// baggage) from a modern request's _meta and, when present, returns a context
+// carrying the remote SpanContext so a span started next parents onto the
+// caller's trace. It returns ctx unchanged for a legacy request or one without
+// trace context. A nil propagator (or the no-op default) simply yields ctx.
+func extractModernTraceContext(ctx context.Context, req *protocol.Request, propagator propagation.TextMapPropagator) context.Context {
+	if propagator == nil || req == nil {
+		return ctx
+	}
+	carrier, ok := traceCarrierFromMeta(req.Params)
+	if !ok {
+		return ctx
+	}
+	return propagator.Extract(ctx, carrier)
+}
+
+// traceCarrierFromMeta pulls the reserved trace-context keys out of a request's
+// params _meta into a propagation carrier. It returns (carrier, false) when no
+// trace-context key is present, so callers can skip extraction entirely.
+func traceCarrierFromMeta(params json.RawMessage) (propagation.MapCarrier, bool) {
+	if len(params) == 0 {
+		return nil, false
+	}
+	var envelope struct {
+		Meta map[string]json.RawMessage `json:"_meta"`
+	}
+	if err := json.Unmarshal(params, &envelope); err != nil {
+		return nil, false
+	}
+	carrier := propagation.MapCarrier{}
+	put := func(metaKey, carrierKey string) {
+		if raw, ok := envelope.Meta[metaKey]; ok {
+			var v string
+			if json.Unmarshal(raw, &v) == nil && v != "" {
+				carrier[carrierKey] = v
+			}
+		}
+	}
+	put(protocol.MetaKeyTraceparent, "traceparent")
+	put(protocol.MetaKeyTracestate, "tracestate")
+	put(protocol.MetaKeyBaggage, "baggage")
+	if len(carrier) == 0 {
+		return nil, false
+	}
+	return carrier, true
 }
 
 // SpanFromContext returns the current span from context.

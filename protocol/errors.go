@@ -23,6 +23,20 @@ const (
 	CodeURLElicitationRequired = -32042
 )
 
+// MCP-reserved error codes for the modern (2026-07-28) protocol. The -32020..
+// -32099 sub-range is reserved for the MCP specification.
+const (
+	// CodeHeaderMismatch: an HTTP routing header disagrees with the request body.
+	CodeHeaderMismatch = -32020
+	// CodeMissingRequiredClientCapability: the request needs a client capability
+	// that was not declared in io.modelcontextprotocol/clientCapabilities. The
+	// error data carries requiredCapabilities.
+	CodeMissingRequiredClientCapability = -32021
+	// CodeUnsupportedProtocolVersion: the server does not implement the
+	// requested protocol version. The error data carries supported + requested.
+	CodeUnsupportedProtocolVersion = -32022
+)
+
 // Error represents a JSON-RPC 2.0 error.
 type Error struct {
 	Code    int    `json:"code"`
@@ -96,5 +110,33 @@ func NewURLElicitationRequired(msg string, elicitations any) *Error {
 		Code:    CodeURLElicitationRequired,
 		Message: msg,
 		Data:    map[string]any{"elicitations": elicitations},
+	}
+}
+
+// NewUnsupportedProtocolVersion creates a -32022 error (MCP 2026-07-28) listing
+// the versions the server supports and the one the client requested, so the
+// client can retry with a mutually supported version.
+func NewUnsupportedProtocolVersion(supported []string, requested string) *Error {
+	return &Error{
+		Code:    CodeUnsupportedProtocolVersion,
+		Message: "Unsupported protocol version",
+		Data:    map[string]any{"supported": supported, "requested": requested},
+	}
+}
+
+// NewHeaderMismatch creates a -32020 error (MCP 2026-07-28) reported when a
+// Streamable HTTP routing header (Mcp-Method / Mcp-Name) disagrees with the
+// JSON-RPC request body it is supposed to describe.
+func NewHeaderMismatch(msg string) *Error {
+	return &Error{Code: CodeHeaderMismatch, Message: msg}
+}
+
+// NewMissingRequiredClientCapability creates a -32021 error (MCP 2026-07-28)
+// naming the client capabilities the request required but did not declare.
+func NewMissingRequiredClientCapability(required ...string) *Error {
+	return &Error{
+		Code:    CodeMissingRequiredClientCapability,
+		Message: "Missing required client capability",
+		Data:    map[string]any{"requiredCapabilities": required},
 	}
 }
