@@ -64,6 +64,24 @@ is deliberately NOT yet in `SupportedVersions`.
   additionally **hard-requires** `Mcp-Method` (absent → `-32020`) and **drops the
   `Mcp-Session-Id` lifecycle** (no minting, no per-request requirement) — the
   modern (MCP 2026-07-28) streamable model, opt-in until v2.
+- **W3C Trace Context propagation** — a modern request carrying
+  `io.modelcontextprotocol/traceparent` / `tracestate` / `baggage` in `_meta` has
+  its distributed-trace position extracted (via the OTel `TraceContext`/`Baggage`
+  propagators) so the server span joins the client's trace. The OTel middleware
+  parents the top-level span onto the incoming remote span; `applyModern`
+  propagates it to handler-level spans. `WithOTelPropagator` option added.
+- **`tasks/update` + modern `tasks/list` retirement** — `tasks/update` refreshes
+  a non-terminal task's `ttl` (null clears the deadline) so a slow task is not
+  evicted before completion (`Server.UpdateAugTask`); `tasks/list` is served for
+  legacy sessions but returns `MethodNotFound` for modern (2026-07-28) requests,
+  per the tasks extension favoring direct task handles over listing.
+- **Deterministic `tools/list` ordering** — tools are sorted by name, so
+  `tools/list` returns a stable order across calls (was Go map-iteration order).
+- **Full JSON Schema 2020-12** for `inputSchema`/`outputSchema` — the `schema`
+  package now supports `$ref`/`$defs` (auto-emitted to break recursive types),
+  `oneOf`/`anyOf`/`allOf`, and `if`/`then`/`else`: generated, marshaled, and
+  enforced by the validator (`$ref` resolved against root `$defs`; unresolvable
+  refs treated leniently). Legacy non-recursive output is unchanged.
 - **Modern Icon fields** (SEP-973 evolution) — the `Icon` type gains additive
   modern fields `src` / `sizes` / `theme` alongside the legacy `uri` / `mimeType`
   / `size` (legacy JSON output is unchanged). `NewIcon(src)` + `WithMimeType` /

@@ -190,18 +190,19 @@ clients keep working, then make it the default in v2.
   `Mcp-Method` → `-32020` on absence/mismatch.)
 - [ ] **`CacheableResult`** — `ttlMs` + `cacheScope` on `tools/list`,
   `prompts/list`, `resources/list`, `resources/read`, `resources/templates/list`.
-- [ ] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —
+- [x] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —
   ties into existing OTel middleware.
-- [ ] Deterministic ordering of `tools/list`.
+- [x] Deterministic ordering of `tools/list`.
 
 **Extensions framework (SEP-2133)**
 - [ ] Add the **`extensions` capability map** (reverse-DNS ids) to client/server
   capabilities.
 - [ ] Re-express **MCP Apps** through the extensions framework (today it's raw
   `_meta.ui.resourceUri`); certify against `io.modelcontextprotocol/apps`.
-- [ ] Move **Tasks** to the `io.modelcontextprotocol/tasks` extension: polling
+- [~] Move **Tasks** to the `io.modelcontextprotocol/tasks` extension: polling
   `tasks/get`, new `tasks/update`, **remove `tasks/list`**, allow unsolicited task
-  handles.
+  handles. (tasks/update added; tasks/list gated off for modern; extension
+  already advertised. Unsolicited task handles remain.)
 
 **Auth / errors / deprecations**
 - [ ] `iss` validation (RFC 9207); `application_type` in DCR; Client ID Metadata
@@ -210,7 +211,7 @@ clients keep working, then make it the default in v2.
   `HeaderMismatch` `-32001`→`-32020`, etc.; adopt the `-32020..-32099` MCP range.
 - [ ] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
   migrations (tool params / provider APIs / stderr+OTel).
-- [ ] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
+- [x] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
   `oneOf`/`anyOf`, conditionals).
 - [ ] Make `Stateless` the default; tag **v2.0.0**.
 
