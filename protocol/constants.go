@@ -56,6 +56,12 @@ const (
 	MethodPromptsGet             = "prompts/get"
 	MethodCompletionComplete     = "completion/complete"
 	MethodPing                   = "ping"
+
+	// Task-augmented requests (MCP 2025-11-25, SEP-1686).
+	MethodTasksGet    = "tasks/get"
+	MethodTasksResult = "tasks/result"
+	MethodTasksCancel = "tasks/cancel"
+	MethodTasksList   = "tasks/list"
 )
 
 // MCP notification methods.

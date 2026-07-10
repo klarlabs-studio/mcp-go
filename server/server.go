@@ -74,6 +74,7 @@ type ToolInfo struct {
 	Annotations  *ToolAnnotations
 	Meta         map[string]any
 	Icons        []Icon
+	TaskSupport  TaskSupport
 }
 
 // Option configures a Server.
@@ -91,6 +92,7 @@ type Server struct {
 	middleware   []Middleware
 	completions  *completionRegistry
 	tasks        *TaskManager
+	augTasks     *augTaskRegistry
 	resourceSubs *resourceSubscriptions
 
 	// regErrs accumulates registration collisions. The fluent builder API
@@ -108,6 +110,7 @@ func New(info Info, opts ...Option) *Server {
 		resources:    make(map[string]*Resource),
 		prompts:      make(map[string]*Prompt),
 		resourceSubs: newResourceSubscriptions(),
+		augTasks:     newAugTaskRegistry(),
 	}
 
 	for _, opt := range opts {
@@ -257,6 +260,7 @@ func (s *Server) Tools() []ToolInfo {
 			Annotations:  t.annotations,
 			Meta:         t.meta,
 			Icons:        t.icons,
+			TaskSupport:  t.taskSupport,
 		})
 	}
 	return result
@@ -505,6 +509,25 @@ func (s *Server) HandleCompletion(ctx context.Context, ref CompletionRef, arg Co
 	}
 
 	return completions.Handle(ctx, ref, arg)
+}
+
+// AugTasks returns the task-augmented-request registry (MCP 2025-11-25). It is
+// the store the dispatcher uses for tools/call task augmentation and the
+// tasks/get|result|cancel|list operations.
+func (s *Server) AugTasks() *augTaskRegistry { return s.augTasks }
+
+// HasTaskTools reports whether any registered tool opts into task augmentation
+// (TaskSupport optional or required), used to auto-advertise the server's tasks
+// capability.
+func (s *Server) HasTaskTools() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, t := range s.tools {
+		if t.taskSupport == TaskSupportOptional || t.taskSupport == TaskSupportRequired {
+			return true
+		}
+	}
+	return false
 }
 
 // HasCompletions reports whether any prompt/resource completion handler has

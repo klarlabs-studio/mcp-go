@@ -36,7 +36,12 @@ type Tool struct {
 	annotations    *ToolAnnotations
 	meta           map[string]any
 	icons          []Icon
+	taskSupport    TaskSupport
 }
+
+// TaskSupport reports whether this tool may be invoked as a task-augmented
+// request (MCP 2025-11-25). Empty is treated as "forbidden".
+func (t *Tool) TaskSupport() TaskSupport { return t.taskSupport }
 
 // ToolBuilder provides a fluent API for building tools.
 type ToolBuilder struct {
@@ -102,6 +107,19 @@ func (b *ToolBuilder) Meta(meta map[string]any) *ToolBuilder {
 		return b
 	}
 	b.tool.meta = meta
+	return b
+}
+
+// TaskSupport declares whether this tool may be invoked as a task-augmented
+// request (MCP 2025-11-25): "optional" lets clients run it as a task or
+// normally, "required" forces task invocation, "forbidden" (the default)
+// disallows it. Setting optional/required auto-advertises the server's tasks
+// capability. The tool value is echoed as `execution.taskSupport` in tools/list.
+func (b *ToolBuilder) TaskSupport(mode TaskSupport) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.taskSupport = mode
 	return b
 }
 
