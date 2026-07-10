@@ -137,6 +137,36 @@ func (r *augTaskRegistry) create(ttlMs *int64) (*AugTask, error) {
 	return t, nil
 }
 
+// updateTTL refreshes a non-terminal task's ttl (and expiry), returning the
+// updated task. A nil ttl clears the deadline (unlimited). It returns
+// ErrAugTaskNotFound for an unknown/expired id and ErrAugTaskTerminal for a task
+// that has already finished (its ttl can no longer be meaningfully extended).
+func (r *augTaskRegistry) updateTTL(id string, ttlMs *int64) (*AugTask, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.tasks[id]
+	if !ok || r.expiredLocked(t) {
+		if ok {
+			delete(r.tasks, id)
+		}
+		return nil, ErrAugTaskNotFound
+	}
+	if t.Status.terminal() {
+		return nil, ErrAugTaskTerminal
+	}
+	now := r.now()
+	t.TTL = ttlMs
+	if ttlMs != nil {
+		t.ttlDur = time.Duration(*ttlMs) * time.Millisecond
+		t.expireAt = now.Add(t.ttlDur)
+	} else {
+		t.ttlDur = 0
+		t.expireAt = time.Time{}
+	}
+	t.LastUpdatedAt = now.UTC().Format(time.RFC3339)
+	return t, nil
+}
+
 // get returns a live (non-expired) task by id.
 func (r *augTaskRegistry) get(id string) (*AugTask, bool) {
 	r.mu.Lock()
@@ -279,6 +309,15 @@ func (s *Server) AwaitAugTaskResult(ctx context.Context, id string) (result any,
 // CancelAugTask cancels a task (ErrAugTaskNotFound / ErrAugTaskTerminal on
 // failure), returning the updated task.
 func (s *Server) CancelAugTask(id string) (*AugTask, error) { return s.augTasks.cancelTask(id) }
+
+// UpdateAugTask refreshes a non-terminal task's ttl (nil clears the deadline),
+// returning the updated task. It backs the tasks/update method (MCP 2026-07-28):
+// a caller polling a long-running task can extend its lifetime so it is not
+// evicted before completion. Errors: ErrAugTaskNotFound (unknown/expired),
+// ErrAugTaskTerminal (already finished).
+func (s *Server) UpdateAugTask(id string, ttlMs *int64) (*AugTask, error) {
+	return s.augTasks.updateTTL(id, ttlMs)
+}
 
 // ListAugTasks returns tasks newest-first with cursor pagination.
 func (s *Server) ListAugTasks(cursor string, limit int) ([]*AugTask, string) {

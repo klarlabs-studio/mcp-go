@@ -64,6 +64,11 @@ const (
 	MethodTasksCancel = "tasks/cancel"
 	MethodTasksList   = "tasks/list"
 
+	// MethodTasksUpdate refreshes a task's ttl (MCP 2026-07-28 tasks extension).
+	// tasks/list, by contrast, is retired in the modern era (gated off for modern
+	// requests) — the tasks extension favors direct task handles over listing.
+	MethodTasksUpdate = "tasks/update"
+
 	// Stateless discovery (MCP 2026-07-28, SEP-2575) — replaces initialize for
 	// modern clients.
 	MethodServerDiscover = "server/discover"

@@ -760,6 +760,7 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodTasksResult:            h.handleTasksResult,
 		protocol.MethodTasksCancel:            h.handleTasksCancel,
 		protocol.MethodTasksList:              h.handleTasksList,
+		protocol.MethodTasksUpdate:            h.handleTasksUpdate,
 		protocol.MethodServerDiscover:         h.handleServerDiscover,
 		protocol.MethodSubscriptionsListen:    h.handleSubscriptionsListen,
 	}
@@ -787,6 +788,12 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 		ctx, err = h.applyModern(ctx, req.Method, meta)
 		if err != nil {
 			return nil, h.publicError(req, err)
+		}
+		// tasks/list is retired in the modern (2026-07-28) tasks extension, which
+		// favors direct task handles over listing. The legacy method stays for
+		// negotiated 2025-11-25 sessions; a modern caller gets MethodNotFound.
+		if req.Method == protocol.MethodTasksList {
+			return nil, h.publicError(req, protocol.NewMethodNotFound(req.Method))
 		}
 	}
 
@@ -1698,6 +1705,24 @@ func (h *requestHandler) handleTasksCancel(_ context.Context, req *protocol.Requ
 	task, err := h.srv.CancelAugTask(params.TaskID)
 	if err != nil {
 		// Both unknown-task and already-terminal map to -32602 per spec.
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	return protocol.NewResponse(req.ID, task), nil
+}
+
+// handleTasksUpdate serves tasks/update (MCP 2026-07-28 tasks extension): refresh
+// a non-terminal task's ttl so a slow task is not evicted before it finishes. A
+// null ttl clears the deadline. Unknown/terminal tasks map to -32602.
+func (h *requestHandler) handleTasksUpdate(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		TaskID string `json:"taskId"`
+		TTL    *int64 `json:"ttl"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	task, err := h.srv.UpdateAugTask(params.TaskID, params.TTL)
+	if err != nil {
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
 	return protocol.NewResponse(req.ID, task), nil
