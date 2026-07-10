@@ -172,10 +172,12 @@ clients keep working, then make it the default in v2.
   types; tag with `io.modelcontextprotocol/subscriptionId`.
 
 **Multi Round-Trip Requests (MRTR)** — replaces all server-initiated requests
-- [ ] Every result carries required `resultType` (`"complete"` | `"input_required"`).
-- [ ] Replace server-initiated `roots/list`, `sampling/createMessage`,
+- [x] Every result carries required `resultType` (`"complete"` | `"input_required"`).
+- [x] Replace server-initiated `roots/list`, `sampling/createMessage`,
   `elicitation/create` with `InputRequiredResult` + client retry carrying
-  `inputResponses`; correlate via `requestState`.
+  `inputResponses`; correlate via `requestState`. (Replay/continuation model:
+  broker fulfills input calls from client-supplied responses or records them as
+  pending `input_required`; handler is re-run each round.)
 
 **Transport**
 - [ ] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).

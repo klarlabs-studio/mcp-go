@@ -53,6 +53,7 @@ const (
 	fieldListChanged     = "listChanged"
 	fieldText            = "text"
 	fieldType            = "type"
+	fieldContent         = "content"
 	fieldURI             = "uri"
 	fieldTask            = "task"
 	fieldTaskID          = "taskId"
@@ -206,6 +207,27 @@ var (
 const (
 	ElicitModeForm = server.ElicitModeForm
 	ElicitModeURL  = server.ElicitModeURL
+)
+
+// MRTR types (MCP 2026-07-28): the stateless Multi Round-Trip Request model that
+// replaces server-initiated sampling, elicitation, and roots. A stateless
+// handler's input calls are fulfilled from client-supplied InputResponses or, on
+// the first round, returned as an InputRequiredResult for the client to fulfill
+// and retry.
+type InputRequest = server.InputRequest
+type InputResponse = server.InputResponse
+type InputRequiredResult = server.InputRequiredResult
+
+// ErrInputRequired is the sentinel a stateless handler receives from an input
+// call (CreateMessage / Elicit / ListRoots) when the client has not yet supplied
+// that input; propagate it unchanged.
+var ErrInputRequired = server.ErrInputRequired
+
+// Input request kinds carried in InputRequest.Kind.
+const (
+	InputKindSampling    = server.InputKindSampling
+	InputKindElicitation = server.InputKindElicitation
+	InputKindRoots       = server.InputKindRoots
 )
 
 // Channel types for server-initiated push messages
@@ -768,6 +790,15 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 	}
 
 	resp, err := h.dispatch(ctx, req)
+	// MRTR (MCP 2026-07-28): a stateless handler that called sampling/elicitation/
+	// roots without a supplied response is paused, not failed — surface the
+	// recorded inputRequests as an input_required result for the client to
+	// fulfill and retry.
+	if modern {
+		if r, ok := inputRequiredResponse(ctx, req); ok {
+			return r, nil
+		}
+	}
 	if err != nil {
 		if modern {
 			err = modernizeError(err)
@@ -1022,8 +1053,8 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 // to surface input-validation failures to the model per SEP-1303.
 func toolExecutionError(msg string) map[string]any {
 	return map[string]any{
-		"content": []map[string]any{{fieldType: fieldText, fieldText: msg}},
-		"isError": true,
+		fieldContent: []map[string]any{{fieldType: fieldText, fieldText: msg}},
+		"isError":    true,
 	}
 }
 
@@ -1213,7 +1244,7 @@ func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error
 		textContent = string(data)
 		marshaled = data
 	}
-	response["content"] = []map[string]any{
+	response[fieldContent] = []map[string]any{
 		{
 			fieldType: fieldText,
 			fieldText: textContent,
@@ -1233,9 +1264,9 @@ func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error
 // a missing content field.
 func applyStructuredResult(response map[string]any, v *server.StructuredResult) {
 	if len(v.Content) > 0 {
-		response["content"] = v.Content
+		response[fieldContent] = v.Content
 	} else {
-		response["content"] = []map[string]any{}
+		response[fieldContent] = []map[string]any{}
 	}
 	response["structuredContent"] = v.StructuredContent
 	if v.IsError {
@@ -1597,8 +1628,8 @@ func (h *requestHandler) handleTasksResult(ctx context.Context, req *protocol.Re
 	if !ok || resp == nil {
 		// Cancelled (or resultless) task: surface as a tool execution error.
 		resp = map[string]any{
-			"content": []map[string]any{{fieldType: fieldText, fieldText: "task did not produce a result"}},
-			"isError": true,
+			fieldContent: []map[string]any{{fieldType: fieldText, fieldText: "task did not produce a result"}},
+			"isError":    true,
 		}
 	}
 	attachRelatedTask(resp, params.TaskID)

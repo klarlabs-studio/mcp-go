@@ -29,6 +29,10 @@ type modernMeta struct {
 	clientInfo      json.RawMessage
 	clientCaps      json.RawMessage
 	logLevel        string
+	// MRTR retry fields: inputResponses fulfills the inputRequests of an earlier
+	// input_required result; requestState is the opaque token echoed back.
+	inputResponses []server.InputResponse
+	requestState   json.RawMessage
 }
 
 // parseModernMeta inspects a request's params `_meta`. It returns (meta, true)
@@ -56,6 +60,10 @@ func parseModernMeta(params json.RawMessage) (*modernMeta, bool, error) {
 	if ll, ok := envelope.Meta[protocol.MetaKeyLogLevel]; ok {
 		_ = json.Unmarshal(ll, &m.logLevel)
 	}
+	if ir, ok := envelope.Meta[protocol.MetaKeyInputResponses]; ok {
+		_ = json.Unmarshal(ir, &m.inputResponses)
+	}
+	m.requestState = envelope.Meta[protocol.MetaKeyRequestState]
 	return m, true, nil
 }
 
@@ -81,11 +89,32 @@ func (h *requestHandler) applyModern(ctx context.Context, method string, m *mode
 	if m.logLevel != "" {
 		sess.SetLogLevel(server.LogLevel(m.logLevel))
 	}
+	// Attach an MRTR broker so server→client requests (sampling, elicitation,
+	// roots) resolve statelessly: fulfilled from inputResponses on a retry, or
+	// recorded as pending for an input_required result on the first round.
+	sess.SetInputBroker(server.NewInputBroker(m.inputResponses, m.requestState))
 	return server.ContextWithSession(ctx, sess), nil
 }
 
 func isModernVersion(v string) bool {
 	return slices.Contains(modernVersions, v)
+}
+
+// inputRequiredResponse converts a paused stateless handler into an MRTR
+// input_required result (MCP 2026-07-28). It returns (response, true) when the
+// request's broker recorded unfulfilled input requests — the handler called
+// sampling/elicitation/roots without a supplied response — and (nil, false)
+// otherwise, so the caller handles a genuine error normally.
+func inputRequiredResponse(ctx context.Context, req *protocol.Request) (*protocol.Response, bool) {
+	sess := server.SessionFromContext(ctx)
+	if sess == nil {
+		return nil, false
+	}
+	broker := sess.InputBroker()
+	if broker == nil || !broker.HasPending() {
+		return nil, false
+	}
+	return protocol.NewResponse(req.ID, broker.Result()), true
 }
 
 // withResultType stamps resultType:"complete" on a modern result that does not

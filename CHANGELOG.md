@@ -33,6 +33,18 @@ is deliberately NOT yet in `SupportedVersions`.
   connection state), and the result is stamped `resultType:"complete"`. A
   request without the modern `_meta` is served unchanged under legacy semantics
   (dual-era).
+- **MRTR — Multi Round-Trip Requests** (SEP-2575) — the stateless replacement
+  for every server-initiated request. A modern tool handler that calls sampling,
+  elicitation, or `roots/list` without a supplied response no longer fails with
+  `ErrNoRequestSender`: the call is recorded and the request returns
+  `resultType:"input_required"` with the `inputRequests` it needs (`InputRequest`
+  ID/kind/payload). The client fulfills them and retries the same call carrying
+  `io.modelcontextprotocol/inputResponses` in `_meta`; the handler is replayed
+  and its input calls resolve from those responses (correlated by stable
+  `ir-N` IDs). `requestState` is echoed back for client-side correlation. The
+  legacy (session + RequestSender) path is unchanged. New public types
+  `InputRequest`, `InputResponse`, `InputRequiredResult`, sentinel
+  `ErrInputRequired`, and `InputKind{Sampling,Elicitation,Roots}`.
 - **CacheableResult** (SEP-2549) — `WithResultCache(ttlMs, scope)` stamps
   `ttlMs`/`cacheScope` on cacheable results (`tools/list`, `prompts/list`,
   `resources/list`, `resources/read`, `resources/templates/list`) for modern

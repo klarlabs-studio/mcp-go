@@ -86,6 +86,13 @@ const (
 	MetaKeyLogLevel           = "io.modelcontextprotocol/logLevel"
 	MetaKeySubscriptionID     = "io.modelcontextprotocol/subscriptionId"
 	MetaKeyRelatedTask        = "io.modelcontextprotocol/related-task"
+
+	// MRTR (Multi Round-Trip Requests, MCP 2026-07-28): a client retrying a
+	// call that returned resultType "input_required" carries its fulfillment of
+	// the earlier inputRequests under MetaKeyInputResponses and echoes the
+	// server's opaque MetaKeyRequestState.
+	MetaKeyInputResponses = "io.modelcontextprotocol/inputResponses"
+	MetaKeyRequestState   = "io.modelcontextprotocol/requestState"
 )
 
 // Extension identifiers (reverse-DNS) negotiated via capabilities.extensions
