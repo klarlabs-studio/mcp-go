@@ -249,6 +249,31 @@ func TestToolResult_CarriesUnionContent(t *testing.T) {
 	}
 }
 
+// TestToolsCall_ValidationIsToolError verifies SEP-1303: invalid tool input is
+// returned as a tool execution error (isError result), not a -32602 protocol
+// error, so the model can self-correct.
+func TestToolsCall_ValidationIsToolError(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	type in struct {
+		Name string `json:"name" jsonschema:"required"`
+	}
+	srv.Tool("greet").Handler(func(i in) (string, error) { return "hi " + i.Name, nil })
+
+	handler := newRequestHandler(srv)
+	req := &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsCall,
+		Params: mustParams(t, map[string]any{"name": "greet", "arguments": map[string]any{}}),
+	}
+	resp, err := handler.HandleRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("expected no protocol error, got %v", err)
+	}
+	res := resp.Result.(map[string]any)
+	if res["isError"] != true {
+		t.Errorf("expected isError result for invalid input, got %v", res)
+	}
+}
+
 func TestSession_SetClientCapabilitiesJSON(t *testing.T) {
 	sess := NewSession("id", nil, nil)
 	sess.SetClientCapabilitiesJSON(json.RawMessage(`{

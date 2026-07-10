@@ -8,12 +8,30 @@ import (
 	"go.klarlabs.de/mcp/protocol"
 )
 
-// ElicitRequest is sent by the server to request structured input from the user.
+// Elicitation modes (MCP 2025-11-25). Form collects structured data in-band;
+// URL directs the user to an out-of-band URL for sensitive interactions
+// (credentials, payment, third-party OAuth) that must not pass through the client.
+const (
+	ElicitModeForm = "form"
+	ElicitModeURL  = "url"
+)
+
+// ElicitRequest is sent by the server to request input from the user.
 type ElicitRequest struct {
+	// Mode is "form" (default) or "url" (MCP 2025-11-25). Omitted means form.
+	Mode string `json:"mode,omitempty"`
 	// Message is a human-readable message describing what input is needed.
 	Message string `json:"message"`
-	// RequestedSchema is a JSON Schema describing the desired input structure.
+	// RequestedSchema is a JSON Schema describing the desired input structure
+	// (form mode). It is a restricted flat object of primitives; enum variants
+	// (oneOf/anyOf with const+title) and per-primitive `default` are expressed
+	// directly in this map (SEP-1330 / SEP-1034).
 	RequestedSchema map[string]any `json:"requestedSchema,omitempty"`
+	// URL is the location the user should navigate to (url mode).
+	URL string `json:"url,omitempty"`
+	// ElicitationID uniquely identifies a url-mode elicitation so a later
+	// notifications/elicitation/complete can be correlated.
+	ElicitationID string `json:"elicitationId,omitempty"`
 }
 
 // ElicitResult is the response from an elicitation request.
@@ -43,6 +61,10 @@ func (e *Elicitor) Elicit(ctx context.Context, req *ElicitRequest) (*ElicitResul
 
 	if !e.session.SupportsFeature("elicitation") {
 		return nil, fmt.Errorf("client does not support elicitation")
+	}
+	// A url-mode request requires the client's url elicitation capability.
+	if req.Mode == ElicitModeURL && !e.session.SupportsFeature("elicitation.url") {
+		return nil, fmt.Errorf("client does not support url-mode elicitation")
 	}
 	if e.session.sender == nil {
 		return nil, ErrNoRequestSender
@@ -85,6 +107,21 @@ func (e *Elicitor) Elicit(ctx context.Context, req *ElicitRequest) (*ElicitResul
 	}
 
 	return &result, nil
+}
+
+// ElicitURL sends a url-mode elicitation (MCP 2025-11-25): it directs the user
+// to an out-of-band URL for a sensitive interaction (credentials, payment,
+// third-party OAuth) that must not pass through the client. An action of
+// "accept" means the user consented to open the URL, not that the out-of-band
+// interaction completed — the server learns that separately. elicitationID
+// correlates a later notifications/elicitation/complete.
+func (e *Elicitor) ElicitURL(ctx context.Context, message, url, elicitationID string) (*ElicitResult, error) {
+	return e.Elicit(ctx, &ElicitRequest{
+		Mode:          ElicitModeURL,
+		Message:       message,
+		URL:           url,
+		ElicitationID: elicitationID,
+	})
 }
 
 // elicitorKey is the context key for the elicitor.

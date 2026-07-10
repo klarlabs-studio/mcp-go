@@ -187,6 +187,10 @@ var NewSubscriptionManager = server.NewSubscriptionManager
 // Structured result types for tool responses
 type StructuredResult = server.StructuredResult
 
+// ToolInputError is returned by a tool when input fails to parse/validate;
+// the dispatcher surfaces it as an isError result (SEP-1303).
+type ToolInputError = server.ToolInputError
+
 // Elicitation types for interactive user prompts
 type ElicitRequest = server.ElicitRequest
 type ElicitResult = server.ElicitResult
@@ -195,6 +199,13 @@ type Elicitor = server.Elicitor
 var (
 	NewElicitor       = server.NewElicitor
 	ElicitFromContext = server.ElicitFromContext
+)
+
+// Elicitation modes (MCP 2025-11-25): form (default, in-band structured data)
+// and url (out-of-band navigation for sensitive interactions).
+const (
+	ElicitModeForm = server.ElicitModeForm
+	ElicitModeURL  = server.ElicitModeURL
 )
 
 // Channel types for server-initiated push messages
@@ -943,6 +954,15 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 	return protocol.NewResponse(req.ID, result), nil
 }
 
+// toolExecutionError builds an isError CallToolResult carrying a message — used
+// to surface input-validation failures to the model per SEP-1303.
+func toolExecutionError(msg string) map[string]any {
+	return map[string]any{
+		"content": []map[string]any{{fieldType: fieldText, fieldText: msg}},
+		"isError": true,
+	}
+}
+
 // reconcileTaskSupport enforces a tool's execution.taskSupport against whether
 // the caller augmented the request with a task: a task on a forbidden/unset
 // tool, or a plain call on a required-task tool, is -32601 (Method not found)
@@ -970,6 +990,12 @@ func (h *requestHandler) startAugmentedToolCall(ctx context.Context, req *protoc
 	task, err := h.srv.StartAugmentedCall(ctx, ttl, func(runCtx context.Context) (any, bool, error) {
 		res, execErr := tool.Execute(runCtx, args)
 		if execErr != nil {
+			// SEP-1303: an input error becomes a failed task carrying an
+			// isError result (not a protocol error).
+			var inputErr *server.ToolInputError
+			if errors.As(execErr, &inputErr) {
+				return toolExecutionError(inputErr.Message), true, nil
+			}
 			return nil, false, execErr
 		}
 		resp, berr := buildToolCallResponse(tool, res)
@@ -1055,6 +1081,12 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	// internal detail to the peer).
 	result, err := tool.Execute(ctx, params.Arguments)
 	if err != nil {
+		// SEP-1303: input problems are tool execution errors, not protocol
+		// errors, so the model can self-correct.
+		var inputErr *server.ToolInputError
+		if errors.As(err, &inputErr) {
+			return protocol.NewResponse(req.ID, toolExecutionError(inputErr.Message)), nil
+		}
 		var mcpErr *protocol.Error
 		if errors.As(err, &mcpErr) {
 			return nil, mcpErr
