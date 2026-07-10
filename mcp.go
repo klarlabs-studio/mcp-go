@@ -750,9 +750,26 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 		defer cancel()
 	}
 
+	// Modern (stateless) path: a request carrying the per-request protocol
+	// _meta is validated and served with a request-scoped session built from
+	// its declared capabilities. Legacy requests fall through unchanged.
+	meta, modern, err := parseModernMeta(req.Params)
+	if err != nil {
+		return nil, h.publicError(req, err)
+	}
+	if modern {
+		ctx, err = h.applyModern(ctx, req.Method, meta)
+		if err != nil {
+			return nil, h.publicError(req, err)
+		}
+	}
+
 	resp, err := h.dispatch(ctx, req)
 	if err != nil {
 		return nil, h.publicError(req, err)
+	}
+	if modern {
+		withResultType(resp)
 	}
 	return resp, nil
 }

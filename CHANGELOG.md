@@ -24,6 +24,15 @@ is deliberately NOT yet in `SupportedVersions`.
 - **Reserved `_meta` key + resultType constants** — `protocol.MetaKey*`
   (protocolVersion/clientInfo/clientCapabilities/logLevel/subscriptionId/
   related-task), `protocol.ResultTypeComplete`/`InputRequired`, `protocol.DraftVersion`.
+- **Stateless per-request `_meta` handling.** A request carrying
+  `io.modelcontextprotocol/protocolVersion` in `_meta` is served on the modern
+  path: required fields (protocolVersion/clientInfo/clientCapabilities) are
+  enforced (`-32602` if missing), the version is checked (`-32022` if
+  unsupported; `server/discover` exempt), a request-scoped session is built from
+  the declared capabilities (so sampling/elicitation gating works with no
+  connection state), and the result is stamped `resultType:"complete"`. A
+  request without the modern `_meta` is served unchanged under legacy semantics
+  (dual-era).
 
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
