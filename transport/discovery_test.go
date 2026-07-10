@@ -128,6 +128,155 @@ func TestServerDiscovery(t *testing.T) {
 		}
 	})
 
+	t.Run("advertises OAuth/OIDC metadata via auth struct", func(t *testing.T) {
+		manifest := &server.Manifest{
+			Name:            "test-server",
+			ProtocolVersion: "2025-11-25",
+			Capabilities:    server.Capabilities{},
+		}
+
+		auth := ServerAuth{
+			Required:                  true,
+			Methods:                   []AuthMethod{AuthOAuth2},
+			AuthorizationServers:      []string{"https://auth.example.com"},
+			ProtectedResourceMetadata: "https://mcp.example.com/.well-known/oauth-protected-resource",
+			ResourceIndicator:         "https://mcp.example.com",
+			ScopesSupported:           []string{"mcp:read", "mcp:write"},
+			OIDCConfiguration:         "https://auth.example.com/.well-known/openid-configuration",
+		}
+
+		discovery := NewServerDiscovery(manifest, WithDiscoveryAuth(auth))
+
+		rec := httptest.NewRecorder()
+		discovery.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/mcp", nil))
+
+		body := rec.Body.String()
+		wantSubstrings := []string{
+			`"authorizationServers":["https://auth.example.com"]`,
+			`"protectedResourceMetadata":"https://mcp.example.com/.well-known/oauth-protected-resource"`,
+			`"resourceIndicator":"https://mcp.example.com"`,
+			`"scopesSupported":["mcp:read","mcp:write"]`,
+			`"oidcConfiguration":"https://auth.example.com/.well-known/openid-configuration"`,
+		}
+		for _, want := range wantSubstrings {
+			if !strings.Contains(body, want) {
+				t.Errorf("expected body to contain %s, got %q", want, body)
+			}
+		}
+
+		// Round-trip to confirm the fields deserialize correctly.
+		var result ServerDiscovery
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+			t.Fatalf("failed to unmarshal response: %v", err)
+		}
+		if result.Authentication == nil {
+			t.Fatal("expected Authentication to be set")
+		}
+		if len(result.Authentication.AuthorizationServers) != 1 {
+			t.Errorf("len(AuthorizationServers) = %d, want 1", len(result.Authentication.AuthorizationServers))
+		}
+		if result.Authentication.ResourceIndicator != "https://mcp.example.com" {
+			t.Errorf("ResourceIndicator = %q, want https://mcp.example.com", result.Authentication.ResourceIndicator)
+		}
+	})
+
+	t.Run("advertises OAuth/OIDC metadata via option creating auth section", func(t *testing.T) {
+		manifest := &server.Manifest{
+			Name:            "test-server",
+			ProtocolVersion: "2025-11-25",
+			Capabilities:    server.Capabilities{},
+		}
+
+		meta := OAuthMetadata{
+			AuthorizationServers:      []string{"https://auth.example.com"},
+			ProtectedResourceMetadata: "https://mcp.example.com/.well-known/oauth-protected-resource",
+			ResourceIndicator:         "https://mcp.example.com",
+			ScopesSupported:           []string{"mcp:read"},
+			OIDCConfiguration:         "https://auth.example.com/.well-known/openid-configuration",
+		}
+
+		discovery := NewServerDiscovery(manifest, WithDiscoveryOAuthMetadata(meta))
+
+		if discovery.Authentication == nil {
+			t.Fatal("expected Authentication to be created by option")
+		}
+		if len(discovery.Authentication.Methods) != 1 || discovery.Authentication.Methods[0] != AuthOAuth2 {
+			t.Errorf("Methods = %v, want [oauth2]", discovery.Authentication.Methods)
+		}
+		if discovery.Authentication.OIDCConfiguration != meta.OIDCConfiguration {
+			t.Errorf("OIDCConfiguration = %q, want %q", discovery.Authentication.OIDCConfiguration, meta.OIDCConfiguration)
+		}
+	})
+
+	t.Run("option enriches existing auth section", func(t *testing.T) {
+		manifest := &server.Manifest{
+			Name:            "test-server",
+			ProtocolVersion: "2025-11-25",
+			Capabilities:    server.Capabilities{},
+		}
+
+		auth := ServerAuth{
+			Required:            true,
+			Methods:             []AuthMethod{AuthBearer},
+			AuthorizationHeader: "Bearer",
+		}
+		meta := OAuthMetadata{
+			ResourceIndicator: "https://mcp.example.com",
+		}
+
+		discovery := NewServerDiscovery(manifest,
+			WithDiscoveryAuth(auth),
+			WithDiscoveryOAuthMetadata(meta),
+		)
+
+		if discovery.Authentication == nil {
+			t.Fatal("expected Authentication to be set")
+		}
+		// Existing fields preserved.
+		if discovery.Authentication.AuthorizationHeader != "Bearer" {
+			t.Errorf("AuthorizationHeader = %q, want Bearer", discovery.Authentication.AuthorizationHeader)
+		}
+		if len(discovery.Authentication.Methods) != 1 || discovery.Authentication.Methods[0] != AuthBearer {
+			t.Errorf("Methods = %v, want [bearer]", discovery.Authentication.Methods)
+		}
+		// New field added.
+		if discovery.Authentication.ResourceIndicator != "https://mcp.example.com" {
+			t.Errorf("ResourceIndicator = %q, want https://mcp.example.com", discovery.Authentication.ResourceIndicator)
+		}
+	})
+
+	t.Run("omits OAuth/OIDC fields when unset", func(t *testing.T) {
+		manifest := &server.Manifest{
+			Name:            "test-server",
+			ProtocolVersion: "2025-11-25",
+			Capabilities:    server.Capabilities{},
+		}
+
+		auth := ServerAuth{
+			Required: true,
+			Methods:  []AuthMethod{AuthAPIKey},
+		}
+
+		discovery := NewServerDiscovery(manifest, WithDiscoveryAuth(auth))
+
+		rec := httptest.NewRecorder()
+		discovery.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/.well-known/mcp", nil))
+
+		body := rec.Body.String()
+		unwantedKeys := []string{
+			"authorizationServers",
+			"protectedResourceMetadata",
+			"resourceIndicator",
+			"scopesSupported",
+			"oidcConfiguration",
+		}
+		for _, key := range unwantedKeys {
+			if strings.Contains(body, key) {
+				t.Errorf("expected key %q to be omitted, got %q", key, body)
+			}
+		}
+	})
+
 	t.Run("includes optional fields", func(t *testing.T) {
 		manifest := &server.Manifest{
 			Name:            "test-server",
