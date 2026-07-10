@@ -42,6 +42,10 @@ type Capabilities struct {
 	Resources   bool
 	Prompts     bool
 	Completions bool
+	// Logging advertises the logging capability: the server accepts
+	// logging/setLevel and may emit notifications/message. Off by default so a
+	// bare server advertises no capabilities.
+	Logging bool
 	// ResourceSubscribe advertises resources.subscribe: clients may subscribe
 	// to a resource URI and receive notifications/resources/updated when it
 	// changes. Requires a transport with server push (HTTP+SSE).
@@ -495,6 +499,15 @@ func (s *Server) HandleCompletion(ctx context.Context, ref CompletionRef, arg Co
 	}
 
 	return completions.Handle(ctx, ref, arg)
+}
+
+// HasCompletions reports whether any prompt/resource completion handler has
+// been registered, so the server can auto-advertise the completions capability
+// even when the Capabilities.Completions flag was not set explicitly.
+func (s *Server) HasCompletions() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completions != nil
 }
 
 // ResourceTemplates returns info about all registered resource templates.

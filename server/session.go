@@ -107,6 +107,35 @@ func (s *Session) SetClientCapabilities(caps ClientCapabilities) {
 	s.clientCaps = caps
 }
 
+// SetClientCapabilitiesJSON records client capabilities from the raw
+// `capabilities` object sent in an `initialize` request. MCP encodes
+// capabilities in presence form — a feature is supported when its key is
+// present (e.g. `"sampling": {}`), which does not map onto the bool/struct
+// fields directly, so the wire object is decoded here. Unknown keys are
+// ignored; malformed JSON leaves capabilities unchanged.
+func (s *Session) SetClientCapabilitiesJSON(raw json.RawMessage) {
+	var wire struct {
+		Sampling    *json.RawMessage `json:"sampling"`
+		Elicitation *json.RawMessage `json:"elicitation"`
+		Channels    *json.RawMessage `json:"channels"`
+		Roots       *struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"roots"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return
+	}
+	caps := ClientCapabilities{
+		Sampling:    wire.Sampling != nil,
+		Elicitation: wire.Elicitation != nil,
+		Channels:    wire.Channels != nil,
+	}
+	if wire.Roots != nil {
+		caps.Roots = &RootsCapability{ListChanged: wire.Roots.ListChanged}
+	}
+	s.SetClientCapabilities(caps)
+}
+
 // SupportsFeature returns true if the client supports the given feature.
 func (s *Session) SupportsFeature(feature string) bool {
 	s.mu.RLock()

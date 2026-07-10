@@ -671,17 +671,21 @@ func (h *requestHandler) HandleRequest(ctx context.Context, req *protocol.Reques
 // All handlers use the same signature (ctx, req) for uniform dispatch.
 func (h *requestHandler) methodHandlers() map[string]func(context.Context, *protocol.Request) (*protocol.Response, error) {
 	return map[string]func(context.Context, *protocol.Request) (*protocol.Response, error){
-		protocol.MethodInitialize:           h.handleInitialize,
-		protocol.MethodToolsList:            h.handleToolsList,
-		protocol.MethodToolsCall:            h.handleToolsCall,
-		protocol.MethodResourcesList:        h.handleResourcesList,
-		protocol.MethodResourcesRead:        h.handleResourcesRead,
-		protocol.MethodResourcesSubscribe:   h.handleResourcesSubscribe,
-		protocol.MethodResourcesUnsubscribe: h.handleResourcesUnsubscribe,
-		protocol.MethodPromptsList:          h.handlePromptsList,
-		protocol.MethodPromptsGet:           h.handlePromptsGet,
-		protocol.MethodPing:                 h.handlePing,
-		protocol.MethodCancelled:            h.handleCancelled,
+		protocol.MethodInitialize:             h.handleInitialize,
+		protocol.MethodToolsList:              h.handleToolsList,
+		protocol.MethodToolsCall:              h.handleToolsCall,
+		protocol.MethodResourcesList:          h.handleResourcesList,
+		protocol.MethodResourcesRead:          h.handleResourcesRead,
+		protocol.MethodResourcesSubscribe:     h.handleResourcesSubscribe,
+		protocol.MethodResourcesUnsubscribe:   h.handleResourcesUnsubscribe,
+		protocol.MethodPromptsList:            h.handlePromptsList,
+		protocol.MethodPromptsGet:             h.handlePromptsGet,
+		protocol.MethodPing:                   h.handlePing,
+		protocol.MethodCancelled:              h.handleCancelled,
+		protocol.MethodInitialized:            h.handleInitialized,
+		protocol.MethodCompletionComplete:     h.handleCompletion,
+		protocol.MethodLoggingSetLevel:        h.handleLoggingSetLevel,
+		protocol.MethodResourcesTemplatesList: h.handleResourcesTemplatesList,
 	}
 }
 
@@ -743,11 +747,12 @@ func (h *requestHandler) handleCancelled(_ context.Context, req *protocol.Reques
 	return nil, nil
 }
 
-func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
-	manifest := h.srv.Manifest()
-
-	// Build capabilities based on explicit flags OR registered handlers
-	// This ensures capabilities are advertised even if users don't set flags explicitly
+// serverCapabilities builds the capabilities map advertised in the initialize
+// response. Capabilities are advertised from explicit flags OR from registered
+// handlers, so a server that registers tools/resources/prompts/completions
+// advertises them even without setting the flags. Extracted from
+// handleInitialize to keep that handler's complexity in check.
+func (h *requestHandler) serverCapabilities(manifest server.Manifest) map[string]any {
 	capabilities := make(map[string]any)
 
 	if manifest.Capabilities.Tools || len(h.srv.Tools()) > 0 {
@@ -763,6 +768,48 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	if manifest.Capabilities.Prompts || len(h.srv.Prompts()) > 0 {
 		capabilities["prompts"] = map[string]any{fieldListChanged: true}
 	}
+	// Completions and logging are advertised now that both methods are wired
+	// into the dispatcher. Completions auto-advertises when a handler is
+	// registered (mirroring tools/resources/prompts); logging is opt-in via the
+	// Logging capability flag so a bare server advertises nothing.
+	if manifest.Capabilities.Completions || h.srv.HasCompletions() {
+		capabilities["completions"] = map[string]any{}
+	}
+	if manifest.Capabilities.Logging {
+		capabilities["logging"] = map[string]any{}
+	}
+	return capabilities
+}
+
+func (h *requestHandler) handleInitialize(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	manifest := h.srv.Manifest()
+
+	// Parse the client's initialize params. Older code ignored these entirely,
+	// which meant the server never negotiated the protocol version and never
+	// recorded the client's capabilities. Both are parsed here now.
+	var params struct {
+		ProtocolVersion string          `json:"protocolVersion"`
+		Capabilities    json.RawMessage `json:"capabilities"`
+		ClientInfo      map[string]any  `json:"clientInfo"`
+	}
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, protocol.NewInvalidParams(err.Error())
+		}
+	}
+
+	// Negotiate: echo the client's version when we support it, otherwise reply
+	// with our preferred version and let the client decide whether to proceed.
+	negotiatedVersion := protocol.NegotiateVersion(params.ProtocolVersion)
+
+	// Record the client's advertised capabilities on the session (when a
+	// transport has attached one) so feature gating (sampling, elicitation)
+	// can consult them later in the connection.
+	if session := server.SessionFromContext(ctx); session != nil && len(params.Capabilities) > 0 {
+		session.SetClientCapabilitiesJSON(params.Capabilities)
+	}
+
+	capabilities := h.serverCapabilities(manifest)
 
 	// Build serverInfo with required fields
 	serverInfo := map[string]any{
@@ -789,7 +836,7 @@ func (h *requestHandler) handleInitialize(_ context.Context, req *protocol.Reque
 	}
 
 	result := map[string]any{
-		fieldProtocolVersion: manifest.ProtocolVersion,
+		fieldProtocolVersion: negotiatedVersion,
 		"serverInfo":         serverInfo,
 		"capabilities":       capabilities,
 	}
@@ -1176,6 +1223,88 @@ func (h *requestHandler) handlePromptsGet(ctx context.Context, req *protocol.Req
 
 func (h *requestHandler) handlePing(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
 	return protocol.NewResponse(req.ID, map[string]any{}), nil
+}
+
+// handleInitialized acknowledges the client's notifications/initialized. It is a
+// notification (no id), so it produces no response — but wiring it explicitly
+// stops it from falling through to MethodNotFound.
+func (h *requestHandler) handleInitialized(_ context.Context, _ *protocol.Request) (*protocol.Response, error) {
+	return nil, nil
+}
+
+// handleCompletion serves completion/complete, delegating to the server's
+// registered prompt/resource completion handlers. Previously the registry
+// existed but was never reachable over the wire.
+func (h *requestHandler) handleCompletion(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params struct {
+		Ref      server.CompletionRef      `json:"ref"`
+		Argument server.CompletionArgument `json:"argument"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+
+	result, err := h.srv.HandleCompletion(ctx, params.Ref, params.Argument)
+	if err != nil {
+		var mcpErr *protocol.Error
+		if errors.As(err, &mcpErr) {
+			return nil, mcpErr
+		}
+		return nil, err
+	}
+
+	// MCP nests the payload under "completion".
+	return protocol.NewResponse(req.ID, map[string]any{
+		"completion": map[string]any{
+			"values":  result.Values,
+			"total":   result.Total,
+			"hasMore": result.HasMore,
+		},
+	}), nil
+}
+
+// handleLoggingSetLevel serves logging/setLevel. The level is validated and, when
+// a session is attached to the request context, applied to that session so
+// subsequent notifications/message are filtered accordingly.
+func (h *requestHandler) handleLoggingSetLevel(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	var params server.SetLevelRequest
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, protocol.NewInvalidParams(err.Error())
+	}
+	if !server.IsValidLogLevel(params.Level) {
+		return nil, protocol.NewInvalidParams("unknown log level: " + string(params.Level))
+	}
+	if session := server.SessionFromContext(ctx); session != nil {
+		session.SetLogLevel(params.Level)
+	}
+	return protocol.NewResponse(req.ID, map[string]any{}), nil
+}
+
+// handleResourcesTemplatesList serves resources/templates/list, exposing the
+// URI-template resources the server registered.
+func (h *requestHandler) handleResourcesTemplatesList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	templates := h.srv.ResourceTemplates()
+	list := make([]map[string]any, 0, len(templates))
+	for _, t := range templates {
+		if h.resourceFilter != nil && !h.resourceFilter(ctx, t.URITemplate, t.Name) {
+			continue
+		}
+		item := map[string]any{
+			"uriTemplate": t.URITemplate,
+			fieldName:     t.Name,
+		}
+		if t.Description != "" {
+			item["description"] = t.Description
+		}
+		if t.MimeType != "" {
+			item["mimeType"] = t.MimeType
+		}
+		if t.Annotations != nil {
+			item["annotations"] = t.Annotations
+		}
+		list = append(list, item)
+	}
+	return protocol.NewResponse(req.ID, map[string]any{"resourceTemplates": list}), nil
 }
 
 // notificationAdapter adapts transport.NotificationSender to server.NotificationSender.

@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — spec-revisions foundation (Phase 0)
+
+First slice of the spec-revisions roadmap (`docs/revisions-roadmap.md`), which
+brings mcp-go current across every MCP revision from `2024-11-05` to the
+`2026-07-28` release candidate. This slice lays the backbone and fixes wiring:
+
+- **Protocol version negotiation.** `protocol.SupportedVersions`,
+  `protocol.IsSupportedVersion`, and `protocol.NegotiateVersion` replace the
+  hard-pinned version. `initialize` now parses the client's `protocolVersion`
+  and echoes it back when supported (negotiating down to the server's preferred
+  version otherwise) — previously the request was ignored entirely. New spec
+  revisions are enabled by appending to `SupportedVersions` as each roadmap
+  phase is certified.
+- **Client capabilities captured at initialize.** `initialize` now records the
+  client's advertised capabilities on the session (via the new
+  `(*server.Session).SetClientCapabilitiesJSON`), so feature gating for
+  sampling/elicitation has the data it needs.
+- **Dead methods wired into the dispatcher.** `completion/complete`,
+  `logging/setLevel`, `resources/templates/list`, and
+  `notifications/initialized` are now dispatched. Their handlers already
+  existed but were unreachable and returned `-32601 MethodNotFound`.
+- **Capability advertisement.** `completions` now auto-advertises when a
+  completion handler is registered; a new opt-in `Capabilities.Logging` flag
+  advertises the `logging` capability.
+
 ### Removed (BREAKING)
 
 #### In-library authentication removed — auth is out of scope
