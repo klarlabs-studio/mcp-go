@@ -67,6 +67,13 @@ const (
 	// Stateless discovery (MCP 2026-07-28, SEP-2575) — replaces initialize for
 	// modern clients.
 	MethodServerDiscover = "server/discover"
+
+	// Stateless subscription (MCP 2026-07-28, SEP) — a modern client opts into
+	// the notification types (and resource URIs) it wants via a single method,
+	// replacing the GET SSE stream plus resources/subscribe and
+	// resources/unsubscribe. Delivered notifications are tagged with
+	// MetaKeySubscriptionID so the client can correlate them.
+	MethodSubscriptionsListen = "subscriptions/listen"
 )
 
 // DraftVersion is the 2026-07-28 release-candidate ("modern", stateless)

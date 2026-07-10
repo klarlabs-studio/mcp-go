@@ -761,6 +761,7 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodTasksCancel:            h.handleTasksCancel,
 		protocol.MethodTasksList:              h.handleTasksList,
 		protocol.MethodServerDiscover:         h.handleServerDiscover,
+		protocol.MethodSubscriptionsListen:    h.handleSubscriptionsListen,
 	}
 }
 
@@ -1396,6 +1397,56 @@ func (h *requestHandler) handleResourcesUnsubscribe(ctx context.Context, req *pr
 		h.srv.UnsubscribeResource(clientID, params.URI)
 	}
 	return protocol.NewResponse(req.ID, map[string]any{}), nil
+}
+
+// handleSubscriptionsListen serves subscriptions/listen (MCP 2026-07-28, SEP):
+// the stateless replacement for the GET SSE stream plus resources/subscribe and
+// resources/unsubscribe. A modern client declares the notification methods it
+// wants delivered (e.g. notifications/resources/updated) and, optionally, the
+// resource URIs it cares about. The requested URIs are registered on the
+// request-scoped session's SubscriptionManager — the same machinery
+// resources/subscribe drives — and the handler returns a stable, non-empty
+// subscriptionId. Subsequent notifications carry that id under
+// _meta[io.modelcontextprotocol/subscriptionId] so the client can correlate
+// them with this listen call.
+//
+// This increment covers protocol negotiation and server-side registration only.
+// Realizing the long-lived POST-response stream over which the tagged
+// notifications actually flow is a deferred transport follow-up; nothing under
+// transport/ is wired to it yet.
+func (h *requestHandler) handleSubscriptionsListen(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	// subscriptions/listen is a modern (stateless) method: the request-scoped
+	// session is built from the per-request _meta. Its absence means the caller
+	// did not send a modern request, so there is nothing to register against.
+	session := server.SessionFromContext(ctx)
+	if session == nil {
+		return nil, protocol.NewInvalidParams("subscriptions/listen requires a modern request (per-request _meta)")
+	}
+
+	var params struct {
+		Notifications []string `json:"notifications"`
+		URIs          []string `json:"uris"`
+	}
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, protocol.NewInvalidParams(err.Error())
+		}
+	}
+
+	// Register each requested resource URI on the session's subscription
+	// manager. An empty URI is rejected rather than silently registered.
+	for _, uri := range params.URIs {
+		if uri == "" {
+			return nil, protocol.NewInvalidParams("subscriptions/listen uris must be non-empty")
+		}
+		session.Subscribe(uri)
+	}
+
+	id, err := newSubscriptionID()
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewResponse(req.ID, map[string]any{"subscriptionId": id}), nil
 }
 
 func (h *requestHandler) handlePromptsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {

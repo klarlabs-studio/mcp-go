@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -98,6 +100,19 @@ func (h *requestHandler) applyModern(ctx context.Context, method string, m *mode
 
 func isModernVersion(v string) bool {
 	return slices.Contains(modernVersions, v)
+}
+
+// newSubscriptionID mints a stable, non-empty identifier for a
+// subscriptions/listen call (MCP 2026-07-28). It is cryptographically random so
+// a client cannot guess or collide with another listener's id. The value is
+// what would populate _meta[protocol.MetaKeySubscriptionID] on the notifications
+// delivered for this subscription.
+func newSubscriptionID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // inputRequiredResponse converts a paused stateless handler into an MRTR
