@@ -28,6 +28,8 @@ func streamableTestHandler() Handler {
 				_ = sender.SendNotification("notifications/message", map[string]any{"text": "hello"})
 			}
 			return protocol.NewResponse(req.ID, map[string]any{"ok": true}), nil
+		case protocol.MethodSubscriptionsListen:
+			return protocol.NewResponse(req.ID, map[string]any{"subscriptionId": "sub-test"}), nil
 		default:
 			return protocol.NewResponse(req.ID, map[string]any{"echo": req.Method}), nil
 		}

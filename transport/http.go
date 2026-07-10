@@ -792,6 +792,33 @@ func (h *HTTP) resolveStreamableSession(w http.ResponseWriter, r *http.Request, 
 	return sessionID, true
 }
 
+// resolveStreamablePOSTSession applies the POST-path session policy and returns
+// (sessionID, ctx, ok). In stateless mode (MCP 2026-07-28) it enforces the
+// mandatory Mcp-Method header and mints no session id; otherwise it runs the
+// Mcp-Session-Id lifecycle and echoes the id, threading it onto the context. It
+// returns ok=false when it has already written an error response.
+func (h *HTTP) resolveStreamablePOSTSession(w http.ResponseWriter, r *http.Request, ctx context.Context, req *protocol.Request) (string, context.Context, bool) {
+	if h.stateless {
+		if r.Header.Get(mcpMethodHeader) == "" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(req.ID,
+				protocol.NewHeaderMismatch("Mcp-Method header is required in stateless mode")))
+			return "", ctx, false
+		}
+		return "", ctx, true
+	}
+	sessionID, ok := h.resolveStreamableSession(w, r, ctx, req)
+	if !ok {
+		return "", ctx, false
+	}
+	if sessionID != "" {
+		// Echo the session id so the client can capture (initialize) or confirm it.
+		w.Header().Set(mcpSessionHeader, sessionID)
+		ctx = ContextWithClientID(ctx, sessionID)
+	}
+	return sessionID, ctx, true
+}
+
 func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, handler Handler) {
 	if !originAllowed(r, h.allowedOrigins, h.allowAllOrigins) {
 		http.Error(w, "origin not allowed", http.StatusForbidden)
@@ -835,28 +862,21 @@ func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, hand
 		return
 	}
 
-	var sessionID string
-	if h.stateless {
-		// Modern stateless (MCP 2026-07-28): no Mcp-Session-Id lifecycle, and the
-		// Mcp-Method routing header is mandatory (not merely validated-when-present).
-		if r.Header.Get(mcpMethodHeader) == "" {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(req.ID,
-				protocol.NewHeaderMismatch("Mcp-Method header is required in stateless mode")))
+	sessionID, ctx, ok := h.resolveStreamablePOSTSession(w, r, ctx, &req)
+	if !ok {
+		return
+	}
+
+	// subscriptions/listen (MCP 2026-07-28): a single long-lived POST-response
+	// SSE stream that replaces the GET stream + resources/subscribe/unsubscribe.
+	// The handler runs once to register the subscription and return a
+	// subscriptionId; the response then stays open, forwarding subscriptionId-
+	// tagged notifications until the client disconnects. Streamed regardless of
+	// the Accept header, since the method's semantics require a stream.
+	if req.Method == protocol.MethodSubscriptionsListen {
+		if flusher, flushable := w.(http.Flusher); flushable {
+			h.streamableSubscriptionsListen(ctx, w, &req, handler, flusher)
 			return
-		}
-	} else {
-		// Session lifecycle: mint on initialize, require+echo otherwise. On any
-		// failure the helper has already written the response.
-		var ok bool
-		sessionID, ok = h.resolveStreamableSession(w, r, ctx, &req)
-		if !ok {
-			return
-		}
-		if sessionID != "" {
-			// Echo the session id so the client can capture (initialize) or confirm it.
-			w.Header().Set(mcpSessionHeader, sessionID)
-			ctx = ContextWithClientID(ctx, sessionID)
 		}
 	}
 
@@ -923,6 +943,139 @@ func (h *HTTP) streamablePostSSE(ctx context.Context, w http.ResponseWriter, req
 		}
 		_ = sse.WriteData(body)
 	}
+}
+
+// subscriptionStreamBuffer bounds the per-subscription notification backlog,
+// mirroring the standing GET stream's channel depth.
+const subscriptionStreamBuffer = 10
+
+// streamableSubscriptionsListen realizes subscriptions/listen (MCP 2026-07-28)
+// as a long-lived POST-response SSE stream. It runs the handler once to register
+// the subscription and obtain the subscriptionId, opens an SSE response keyed by
+// that id, writes the subscription acknowledgement as the first frame, and then
+// forwards any notifications delivered via NotifySubscription (each tagged with
+// io.modelcontextprotocol/subscriptionId) until the client disconnects.
+func (h *HTTP) streamableSubscriptionsListen(ctx context.Context, w http.ResponseWriter, req *protocol.Request, handler Handler, flusher http.Flusher) {
+	resp, err := handler.HandleRequest(ctx, req)
+	if err != nil {
+		resp = protocol.NewErrorResponse(req.ID, protocol.NewInternalError(err.Error()))
+	}
+	subID := subscriptionIDFromResponse(resp)
+	if resp == nil || resp.Error != nil || subID == "" {
+		// The request did not yield a subscription (e.g. a validation error, or a
+		// non-modern caller): reply with a single JSON object, no stream.
+		w.Header().Set("Content-Type", "application/json")
+		if resp != nil {
+			_ = json.NewEncoder(w).Encode(resp)
+		}
+		return
+	}
+
+	ch := make(chan []byte, subscriptionStreamBuffer)
+	if !h.registerSSEClient(subID, ch) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(req.ID,
+			protocol.NewInternalError("subscription stream unavailable")))
+		return
+	}
+	defer func() {
+		h.sseClientsMu.Lock()
+		if h.sseClients[subID] == ch {
+			delete(h.sseClients, subID)
+		}
+		h.sseClientsMu.Unlock()
+		h.mu.RLock()
+		hook := h.onDisconnect
+		h.mu.RUnlock()
+		if hook != nil {
+			hook(subID)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	sse := NewSSEWriter(w, flusher)
+	if body, mErr := json.Marshal(resp); mErr == nil {
+		_ = sse.WriteData(body)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			_ = sse.WriteData(msg)
+		}
+	}
+}
+
+// subscriptionIDFromResponse extracts the subscriptionId a subscriptions/listen
+// handler returned, or "" if the response does not carry one.
+func subscriptionIDFromResponse(resp *protocol.Response) string {
+	if resp == nil {
+		return ""
+	}
+	m, ok := resp.Result.(map[string]any)
+	if !ok {
+		return ""
+	}
+	id, _ := m["subscriptionId"].(string)
+	return id
+}
+
+// NotifySubscription delivers a notification to an open subscriptions/listen
+// stream, tagging its params with io.modelcontextprotocol/subscriptionId so the
+// client correlates it to the subscription (MCP 2026-07-28). It returns an error
+// if no stream is open for the id or the stream's buffer is full.
+func (h *HTTP) NotifySubscription(subscriptionID, method string, params any) error {
+	tagged, err := tagSubscriptionParams(params, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("notify subscription %s: %w", subscriptionID, err)
+	}
+	msg, err := json.Marshal(protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		Method:  method,
+		Params:  tagged,
+	})
+	if err != nil {
+		return fmt.Errorf("notify subscription %s: marshal notification: %w", subscriptionID, err)
+	}
+	if !h.SendTo(subscriptionID, msg) {
+		return fmt.Errorf("subscription %s: no open stream or buffer full", subscriptionID)
+	}
+	return nil
+}
+
+// tagSubscriptionParams injects io.modelcontextprotocol/subscriptionId into the
+// params' `_meta` object. Non-object params (which cannot carry `_meta`) are
+// returned unchanged.
+func tagSubscriptionParams(params any, subscriptionID string) (json.RawMessage, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, fmt.Errorf("marshal params: %w", err)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return raw, nil // not an object; cannot carry _meta
+	}
+	idRaw, _ := json.Marshal(subscriptionID)
+	meta := map[string]json.RawMessage{}
+	if existing, ok := obj["_meta"]; ok {
+		_ = json.Unmarshal(existing, &meta)
+	}
+	meta[protocol.MetaKeySubscriptionID] = idRaw
+	metaRaw, err := json.Marshal(meta)
+	if err != nil {
+		return nil, fmt.Errorf("marshal _meta: %w", err)
+	}
+	obj["_meta"] = metaRaw
+	return json.Marshal(obj)
 }
 
 // handleStreamableGet opens a standing server->client SSE stream keyed by the
