@@ -197,16 +197,24 @@ clients keep working, then make it the default in v2.
 **Extensions framework (SEP-2133)**
 - [ ] Add the **`extensions` capability map** (reverse-DNS ids) to client/server
   capabilities.
-- [ ] Re-express **MCP Apps** through the extensions framework (today it's raw
-  `_meta.ui.resourceUri`); certify against `io.modelcontextprotocol/apps`.
+- [x] Re-express **MCP Apps** through the extensions framework. RESOLVED: the MCP
+  Apps extension identifier is `io.modelcontextprotocol/ui` (NOT `/apps` — the
+  feature is "MCP Apps" but the negotiated id is `/ui`, per the ext-apps spec
+  2026-01-26). mcp-go already advertises it via `capabilities.extensions`
+  (`ExtensionUI`) and associates tools via `_meta.ui.resourceUri` (+ the flat
+  `_meta["ui/resourceUri"]`, which the spec deprecates for removal before GA — we
+  keep emitting it for host compat). Already conformant.
 - [~] Move **Tasks** to the `io.modelcontextprotocol/tasks` extension: polling
   `tasks/get`, new `tasks/update`, **remove `tasks/list`**, allow unsolicited task
   handles. (tasks/update added; tasks/list gated off for modern; extension
   already advertised. Unsolicited task handles remain.)
 
 **Auth / errors / deprecations**
-- [ ] `iss` validation (RFC 9207); `application_type` in DCR; Client ID Metadata
-  Documents over DCR.
+- [~] `iss` validation (RFC 9207); `application_type` in DCR; Client ID Metadata
+  Documents over DCR. RESOLVED as OUT OF SCOPE: in-library auth was deliberately
+  removed (see Cross-cutting "Auth stance") — enforcement (iss validation, DCR)
+  belongs at the gateway, and mcp-go stays advertise-only. Not implemented by
+  design; revisit only if the auth stance changes.
 - [ ] Error renumbering: resource-not-found `-32002` → `-32602`;
   `HeaderMismatch` `-32001`→`-32020`, etc.; adopt the `-32020..-32099` MCP range.
 - [ ] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the

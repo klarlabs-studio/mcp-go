@@ -144,10 +144,15 @@ func (b *ToolBuilder) Icons(icons ...Icon) *ToolBuilder {
 	return b
 }
 
-// UIResource marks this tool as having an associated MCP App UI resource.
-// The given URI is included in both the nested _meta.ui.resourceUri field
-// (preferred) and the flat _meta["ui/resourceUri"] key (legacy) for maximum
-// host compatibility per the MCP Apps extension spec.
+// UIResource marks this tool as having an associated MCP App UI resource,
+// per the MCP Apps extension (io.modelcontextprotocol/ui, advertised in
+// capabilities.extensions). The given ui:// URI is included in both the nested
+// _meta.ui.resourceUri field (canonical) and the flat _meta["ui/resourceUri"]
+// key for host compatibility.
+//
+// Note: the flat _meta["ui/resourceUri"] form is deprecated by the MCP Apps
+// spec and is slated for removal before GA; it is still emitted here so hosts
+// that only read the flat key keep working. Prefer _meta.ui.resourceUri.
 func (b *ToolBuilder) UIResource(uri string) *ToolBuilder {
 	if b.err != nil {
 		return b
