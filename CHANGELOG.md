@@ -45,6 +45,25 @@ is deliberately NOT yet in `SupportedVersions`.
   legacy (session + RequestSender) path is unchanged. New public types
   `InputRequest`, `InputResponse`, `InputRequiredResult`, sentinel
   `ErrInputRequired`, and `InputKind{Sampling,Elicitation,Roots}`.
+- **`subscriptions/listen`** (SEP; MCP 2026-07-28) — the stateless subscription
+  method that replaces the GET SSE stream + `resources/subscribe`/`unsubscribe`.
+  A client opts into notification types and resource `uris`; the server registers
+  the URIs on the request-scoped session's SubscriptionManager and returns a
+  `subscriptionId` (correlates the `io.modelcontextprotocol/subscriptionId` tag on
+  subsequent notifications). No session → `-32602`. Note: the long-lived
+  POST-response stream that carries the tagged notifications is a deferred
+  transport follow-up; this increment lands the protocol method + registration.
+- **Streamable HTTP routing headers** — `Mcp-Method` / `Mcp-Name` on the
+  streamable POST path are validated against the JSON-RPC body (method, and the
+  name/uri target for `tools/call`/`prompts/get`/`resources/read`); a mismatch
+  returns `-32020` HeaderMismatch (`protocol.NewHeaderMismatch`). Validation is
+  applied when the headers are present; hard-requiring them is a deferred
+  follow-up (likely gated behind the Stateless option).
+- **Modern Icon fields** (SEP-973 evolution) — the `Icon` type gains additive
+  modern fields `src` / `sizes` / `theme` alongside the legacy `uri` / `mimeType`
+  / `size` (legacy JSON output is unchanged). `NewIcon(src)` + `WithMimeType` /
+  `WithSizes` / `WithTheme` builders and `Normalize()` (fills each era's empty
+  fields from the other) ease dual-era construction.
 - **CacheableResult** (SEP-2549) — `WithResultCache(ttlMs, scope)` stamps
   `ttlMs`/`cacheScope` on cacheable results (`tools/list`, `prompts/list`,
   `resources/list`, `resources/read`, `resources/templates/list`) for modern
