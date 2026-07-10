@@ -35,6 +35,7 @@ type Tool struct {
 	hasContext     bool
 	annotations    *ToolAnnotations
 	meta           map[string]any
+	icons          []Icon
 }
 
 // ToolBuilder provides a fluent API for building tools.
@@ -101,6 +102,17 @@ func (b *ToolBuilder) Meta(meta map[string]any) *ToolBuilder {
 		return b
 	}
 	b.tool.meta = meta
+	return b
+}
+
+// Icons sets optional icons advertised for this tool in tools/list, per the
+// MCP 2025-11-25 spec (SEP-973). Icons are for UI display and are purely
+// informational metadata.
+func (b *ToolBuilder) Icons(icons ...Icon) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.icons = icons
 	return b
 }
 
@@ -203,6 +215,12 @@ func (t *Tool) Meta() map[string]any {
 // OutputSchema returns the tool's output schema, or nil if not set.
 func (t *Tool) OutputSchema() any {
 	return t.outputSchema
+}
+
+// Icons returns the tool's icons, used for the icons field in tools/list.
+// Returns nil when no icons were set.
+func (t *Tool) Icons() []Icon {
+	return t.icons
 }
 
 // Execute runs the tool handler with the given JSON input.

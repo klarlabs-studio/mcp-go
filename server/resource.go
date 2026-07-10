@@ -32,6 +32,7 @@ type Resource struct {
 	mimeType    string
 	handler     ResourceHandler
 	annotations *ResourceAnnotations
+	icons       []Icon
 
 	// Compiled regex for URI matching
 	uriRegex   *regexp.Regexp
@@ -46,6 +47,11 @@ func (r *Resource) URITemplate() string { return r.uriTemplate }
 // builder never set one.
 func (r *Resource) Name() string { return r.name }
 
+// Icons returns the resource's icons, used for the icons field in
+// resources/list and resources/templates/list. Returns nil when no icons
+// were set.
+func (r *Resource) Icons() []Icon { return r.icons }
+
 // ResourceInfo represents metadata about a registered resource.
 type ResourceInfo struct {
 	URITemplate string
@@ -53,6 +59,7 @@ type ResourceInfo struct {
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
+	Icons       []Icon
 }
 
 // ResourceTemplateInfo represents metadata about a resource template.
@@ -62,6 +69,7 @@ type ResourceTemplateInfo struct {
 	Description string
 	MimeType    string
 	Annotations *ResourceAnnotations
+	Icons       []Icon
 }
 
 // ResourceBuilder provides a fluent API for building resources.
@@ -95,6 +103,17 @@ func (b *ResourceBuilder) MimeType(mimeType string) *ResourceBuilder {
 		return b
 	}
 	b.resource.mimeType = mimeType
+	return b
+}
+
+// Icons sets optional icons advertised for this resource in resources/list and
+// resources/templates/list, per the MCP 2025-11-25 spec (SEP-973). Icons are
+// for UI display and are purely informational metadata.
+func (b *ResourceBuilder) Icons(icons ...Icon) *ResourceBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.resource.icons = icons
 	return b
 }
 

@@ -54,7 +54,12 @@ type Prompt struct {
 	arguments   []PromptArgument
 	handler     PromptHandler
 	annotations *PromptAnnotations
+	icons       []Icon
 }
+
+// Icons returns the prompt's icons, used for the icons field in prompts/list.
+// Returns nil when no icons were set.
+func (p *Prompt) Icons() []Icon { return p.icons }
 
 // PromptInfo represents metadata about a registered prompt.
 type PromptInfo struct {
@@ -62,6 +67,7 @@ type PromptInfo struct {
 	Description string
 	Arguments   []PromptArgument
 	Annotations *PromptAnnotations
+	Icons       []Icon
 }
 
 // PromptBuilder provides a fluent API for building prompts.
@@ -90,6 +96,17 @@ func (b *PromptBuilder) Argument(name, description string, required bool) *Promp
 		Description: description,
 		Required:    required,
 	})
+	return b
+}
+
+// Icons sets optional icons advertised for this prompt in prompts/list, per the
+// MCP 2025-11-25 spec (SEP-973). Icons are for UI display and are purely
+// informational metadata.
+func (b *PromptBuilder) Icons(icons ...Icon) *PromptBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.prompt.icons = icons
 	return b
 }
 

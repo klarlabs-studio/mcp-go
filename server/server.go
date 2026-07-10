@@ -73,6 +73,7 @@ type ToolInfo struct {
 	OutputSchema any
 	Annotations  *ToolAnnotations
 	Meta         map[string]any
+	Icons        []Icon
 }
 
 // Option configures a Server.
@@ -255,6 +256,7 @@ func (s *Server) Tools() []ToolInfo {
 			OutputSchema: t.outputSchema,
 			Annotations:  t.annotations,
 			Meta:         t.meta,
+			Icons:        t.icons,
 		})
 	}
 	return result
@@ -352,6 +354,7 @@ func (s *Server) Resources() []ResourceInfo {
 			Description: r.description,
 			MimeType:    r.mimeType,
 			Annotations: r.annotations,
+			Icons:       r.icons,
 		})
 	}
 	return result
@@ -429,6 +432,7 @@ func (s *Server) Prompts() []PromptInfo {
 			Description: p.description,
 			Arguments:   p.arguments,
 			Annotations: p.annotations,
+			Icons:       p.icons,
 		})
 	}
 	return result
@@ -525,6 +529,7 @@ func (s *Server) ResourceTemplates() []ResourceTemplateInfo {
 				Description: r.description,
 				MimeType:    r.mimeType,
 				Annotations: r.annotations,
+				Icons:       r.icons,
 			})
 		}
 	}
