@@ -7,7 +7,12 @@ import (
 	"maps"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/server"
 )
 
 // modernParams wraps method params with the required modern per-request _meta.
@@ -69,6 +74,94 @@ func TestModern_UnsupportedVersion(t *testing.T) {
 	}
 	if _, err := handler.HandleRequest(context.Background(), dreq); err != nil {
 		t.Errorf("server/discover should be exempt from version check, got %v", err)
+	}
+}
+
+// TestModern_ParseTraceContext verifies the W3C Trace Context keys are lifted
+// out of a modern request's _meta into modernMeta.
+func TestModern_ParseTraceContext(t *testing.T) {
+	const (
+		traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+		tracestate  = "vendor=abc"
+		baggage     = "userId=alice"
+	)
+	params := mustParams(t, map[string]any{
+		"_meta": map[string]any{
+			protocol.MetaKeyProtocolVersion:    protocol.DraftVersion,
+			protocol.MetaKeyClientInfo:         map[string]any{"name": "c", "version": "1"},
+			protocol.MetaKeyClientCapabilities: map[string]any{},
+			protocol.MetaKeyTraceparent:        traceparent,
+			protocol.MetaKeyTracestate:         tracestate,
+			protocol.MetaKeyBaggage:            baggage,
+		},
+	})
+
+	m, modern, err := parseModernMeta(params)
+	if err != nil || !modern {
+		t.Fatalf("parseModernMeta: modern=%v err=%v", modern, err)
+	}
+	if m.traceparent != traceparent || m.tracestate != tracestate || m.baggage != baggage {
+		t.Fatalf("trace fields mismatch: %+v", m)
+	}
+}
+
+// TestModern_ApplyTraceContext verifies applyModern joins the caller's trace:
+// with a TraceContext propagator installed, the returned context carries the
+// incoming remote span context so handler spans parent onto it.
+func TestModern_ApplyTraceContext(t *testing.T) {
+	const incomingTraceID = "0af7651916cd43dd8448eb211c80319c"
+	traceparent := "00-" + incomingTraceID + "-b7ad6b7169203331-01"
+
+	prev := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	defer otel.SetTextMapPropagator(prev)
+
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	h := newRequestHandler(srv)
+	m := &modernMeta{
+		protocolVersion: protocol.DraftVersion,
+		clientInfo:      json.RawMessage(`{"name":"c","version":"1"}`),
+		clientCaps:      json.RawMessage(`{}`),
+		traceparent:     traceparent,
+	}
+
+	ctx, err := h.applyModern(context.Background(), protocol.MethodToolsList, m)
+	if err != nil {
+		t.Fatalf("applyModern: %v", err)
+	}
+	if server.SessionFromContext(ctx) == nil {
+		t.Fatal("expected request-scoped session on context")
+	}
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() || !sc.IsRemote() {
+		t.Fatalf("expected valid remote span context, got %+v", sc)
+	}
+	if sc.TraceID().String() != incomingTraceID {
+		t.Errorf("expected trace id %q, got %q", incomingTraceID, sc.TraceID().String())
+	}
+}
+
+// TestModern_ApplyNoTraceContext verifies applyModern leaves the context free of
+// a remote span context when no trace context is supplied.
+func TestModern_ApplyNoTraceContext(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	defer otel.SetTextMapPropagator(prev)
+
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	h := newRequestHandler(srv)
+	m := &modernMeta{
+		protocolVersion: protocol.DraftVersion,
+		clientInfo:      json.RawMessage(`{"name":"c","version":"1"}`),
+		clientCaps:      json.RawMessage(`{}`),
+	}
+
+	ctx, err := h.applyModern(context.Background(), protocol.MethodToolsList, m)
+	if err != nil {
+		t.Fatalf("applyModern: %v", err)
+	}
+	if trace.SpanContextFromContext(ctx).IsValid() {
+		t.Error("expected no span context when trace context absent")
 	}
 }
 

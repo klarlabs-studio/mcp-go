@@ -8,6 +8,10 @@ import (
 	"errors"
 	"slices"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"go.klarlabs.de/mcp/protocol"
 	"go.klarlabs.de/mcp/server"
 	"go.klarlabs.de/mcp/transport"
@@ -35,6 +39,12 @@ type modernMeta struct {
 	// input_required result; requestState is the opaque token echoed back.
 	inputResponses []server.InputResponse
 	requestState   json.RawMessage
+	// W3C Trace Context carried in _meta so the server joins the caller's
+	// distributed trace. traceparent/tracestate feed propagation.TraceContext;
+	// baggage feeds propagation.Baggage.
+	traceparent string
+	tracestate  string
+	baggage     string
 }
 
 // parseModernMeta inspects a request's params `_meta`. It returns (meta, true)
@@ -66,6 +76,15 @@ func parseModernMeta(params json.RawMessage) (*modernMeta, bool, error) {
 		_ = json.Unmarshal(ir, &m.inputResponses)
 	}
 	m.requestState = envelope.Meta[protocol.MetaKeyRequestState]
+	if tp, ok := envelope.Meta[protocol.MetaKeyTraceparent]; ok {
+		_ = json.Unmarshal(tp, &m.traceparent)
+	}
+	if ts, ok := envelope.Meta[protocol.MetaKeyTracestate]; ok {
+		_ = json.Unmarshal(ts, &m.tracestate)
+	}
+	if bg, ok := envelope.Meta[protocol.MetaKeyBaggage]; ok {
+		_ = json.Unmarshal(bg, &m.baggage)
+	}
 	return m, true, nil
 }
 
@@ -95,7 +114,35 @@ func (h *requestHandler) applyModern(ctx context.Context, method string, m *mode
 	// roots) resolve statelessly: fulfilled from inputResponses on a retry, or
 	// recorded as pending for an input_required result on the first round.
 	sess.SetInputBroker(server.NewInputBroker(m.inputResponses, m.requestState))
+	ctx = withRemoteTraceContext(ctx, m)
 	return server.ContextWithSession(ctx, sess), nil
+}
+
+// withRemoteTraceContext joins the caller's distributed trace using the W3C
+// Trace Context carried in _meta, so spans started within a handler parent onto
+// the client's trace. It uses the globally-registered propagator (a no-op
+// unless the application installed one). When a span is already active on ctx —
+// the OTel tracing middleware runs outside this path and joins the trace itself
+// — re-extracting would detach handler child spans from that span, so this
+// leaves ctx untouched in that case.
+func withRemoteTraceContext(ctx context.Context, m *modernMeta) context.Context {
+	if m.traceparent == "" && m.tracestate == "" && m.baggage == "" {
+		return ctx
+	}
+	if trace.SpanContextFromContext(ctx).IsValid() {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{}
+	if m.traceparent != "" {
+		carrier["traceparent"] = m.traceparent
+	}
+	if m.tracestate != "" {
+		carrier["tracestate"] = m.tracestate
+	}
+	if m.baggage != "" {
+		carrier["baggage"] = m.baggage
+	}
+	return otel.GetTextMapPropagator().Extract(ctx, carrier)
 }
 
 func isModernVersion(v string) bool {

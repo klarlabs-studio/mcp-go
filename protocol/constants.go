@@ -105,6 +105,14 @@ const (
 	// server's opaque MetaKeyRequestState.
 	MetaKeyInputResponses = "io.modelcontextprotocol/inputResponses"
 	MetaKeyRequestState   = "io.modelcontextprotocol/requestState"
+
+	// W3C Trace Context (MCP 2026-07-28): a modern request carries the caller's
+	// distributed-trace position in _meta so the server span joins the client's
+	// trace. traceparent/tracestate map to the propagation.TraceContext
+	// propagator; baggage to the propagation.Baggage propagator.
+	MetaKeyTraceparent = "io.modelcontextprotocol/traceparent"
+	MetaKeyTracestate  = "io.modelcontextprotocol/tracestate"
+	MetaKeyBaggage     = "io.modelcontextprotocol/baggage"
 )
 
 // Extension identifiers (reverse-DNS) negotiated via capabilities.extensions
