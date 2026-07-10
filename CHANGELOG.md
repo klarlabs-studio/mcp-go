@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added — 2026-07-28 stateless foundation (Phase 4, experimental)
+
+First increment of the modern, stateless MCP revision (RC, SEP-2575). This lays
+the foundation; the full stateless request path (per-request `_meta`, MRTR,
+`subscriptions/listen`, routing headers) is built incrementally and `2026-07-28`
+is deliberately NOT yet in `SupportedVersions`.
+
+- **`server/discover`** (SEP-2575) — the stateless replacement for the
+  `initialize` handshake. Returns `{ resultType:"complete", supportedVersions,
+  capabilities (incl. the extensions map), serverInfo, instructions }` in one
+  cacheable request. mcp-go is dual-era: it keeps `initialize` for legacy clients.
+- **Extensions capability map** (SEP-2133) — `capabilities.extensions` advertises
+  reverse-DNS extension ids: `io.modelcontextprotocol/ui` (MCP Apps, always) and
+  `io.modelcontextprotocol/tasks` (when a tool opts into task augmentation).
+- **Modern error codes** — `-32020` HeaderMismatch, `-32021`
+  MissingRequiredClientCapability, `-32022` UnsupportedProtocolVersion, with
+  `protocol.NewUnsupportedProtocolVersion` / `NewMissingRequiredClientCapability`.
+- **Reserved `_meta` key + resultType constants** — `protocol.MetaKey*`
+  (protocolVersion/clientInfo/clientCapabilities/logLevel/subscriptionId/
+  related-task), `protocol.ResultTypeComplete`/`InputRequired`, `protocol.DraftVersion`.
+
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
 `protocol.SupportedVersions` now includes `2025-11-25` and the default

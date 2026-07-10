@@ -63,6 +63,43 @@ const (
 	MethodTasksResult = "tasks/result"
 	MethodTasksCancel = "tasks/cancel"
 	MethodTasksList   = "tasks/list"
+
+	// Stateless discovery (MCP 2026-07-28, SEP-2575) — replaces initialize for
+	// modern clients.
+	MethodServerDiscover = "server/discover"
+)
+
+// DraftVersion is the 2026-07-28 release-candidate ("modern", stateless)
+// protocol revision. It is advertised via server/discover but is NOT yet in
+// SupportedVersions (which drives the legacy initialize handshake): the modern
+// stateless request path is being built incrementally (docs/revisions-roadmap.md
+// Phase 4).
+const DraftVersion = "2026-07-28"
+
+// Reserved per-request _meta keys for the stateless (modern) request model
+// (MCP 2026-07-28). Every modern request carries protocol version, client
+// identity, and capabilities here instead of via an initialize handshake.
+const (
+	MetaKeyProtocolVersion    = "io.modelcontextprotocol/protocolVersion"
+	MetaKeyClientInfo         = "io.modelcontextprotocol/clientInfo"
+	MetaKeyClientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+	MetaKeyLogLevel           = "io.modelcontextprotocol/logLevel"
+	MetaKeySubscriptionID     = "io.modelcontextprotocol/subscriptionId"
+	MetaKeyRelatedTask        = "io.modelcontextprotocol/related-task"
+)
+
+// Extension identifiers (reverse-DNS) negotiated via capabilities.extensions
+// (MCP 2026-07-28, SEP-2133).
+const (
+	ExtensionUI    = "io.modelcontextprotocol/ui"    // MCP Apps
+	ExtensionTasks = "io.modelcontextprotocol/tasks" // Tasks
+)
+
+// ResultType values for polymorphic results (MCP 2026-07-28). An absent
+// resultType is treated as "complete" for backward compatibility.
+const (
+	ResultTypeComplete      = "complete"
+	ResultTypeInputRequired = "input_required"
 )
 
 // MCP notification methods.

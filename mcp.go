@@ -735,6 +735,7 @@ func (h *requestHandler) methodHandlers() map[string]func(context.Context, *prot
 		protocol.MethodTasksResult:            h.handleTasksResult,
 		protocol.MethodTasksCancel:            h.handleTasksCancel,
 		protocol.MethodTasksList:              h.handleTasksList,
+		protocol.MethodServerDiscover:         h.handleServerDiscover,
 	}
 }
 
@@ -872,13 +873,27 @@ func (h *requestHandler) handleInitialize(ctx context.Context, req *protocol.Req
 
 	capabilities := h.serverCapabilities(manifest)
 
-	// Build serverInfo with required fields
+	result := map[string]any{
+		fieldProtocolVersion: negotiatedVersion,
+		"serverInfo":         serverInfoMap(manifest),
+		"capabilities":       capabilities,
+	}
+
+	// Include instructions if set
+	if instructions := h.srv.Instructions(); instructions != "" {
+		result["instructions"] = instructions
+	}
+
+	return protocol.NewResponse(req.ID, result), nil
+}
+
+// serverInfoMap builds the serverInfo/implementation object shared by
+// initialize and server/discover.
+func serverInfoMap(manifest server.Manifest) map[string]any {
 	serverInfo := map[string]any{
 		fieldName:    manifest.Name,
 		fieldVersion: manifest.Version,
 	}
-
-	// Add optional MCP spec fields if set
 	if manifest.Title != "" {
 		serverInfo["title"] = manifest.Title
 	}
@@ -891,22 +906,47 @@ func (h *requestHandler) handleInitialize(ctx context.Context, req *protocol.Req
 	if len(manifest.Icons) > 0 {
 		serverInfo["icons"] = manifest.Icons
 	}
-	// Add extension field (not in MCP spec)
 	if manifest.BuildInfo != nil {
-		serverInfo["buildInfo"] = manifest.BuildInfo
+		serverInfo["buildInfo"] = manifest.BuildInfo // extension field, not in MCP spec
 	}
+	return serverInfo
+}
+
+// extensionsMap advertises the reverse-DNS extensions the server supports in
+// capabilities.extensions (MCP 2026-07-28). MCP Apps is always offered (mcp-go
+// serves ui:// resources); Tasks when any tool opts into augmentation.
+func (h *requestHandler) extensionsMap() map[string]any {
+	ext := map[string]any{
+		protocol.ExtensionUI: map[string]any{},
+	}
+	if h.srv.HasTaskTools() {
+		ext[protocol.ExtensionTasks] = map[string]any{}
+	}
+	return ext
+}
+
+// handleServerDiscover serves server/discover (MCP 2026-07-28): the stateless
+// replacement for the initialize handshake. It reports the server's supported
+// protocol versions, capabilities (including the extensions map), and identity
+// in a single cacheable result.
+func (h *requestHandler) handleServerDiscover(_ context.Context, req *protocol.Request) (*protocol.Response, error) {
+	manifest := h.srv.Manifest()
+	capabilities := h.serverCapabilities(manifest)
+	capabilities["extensions"] = h.extensionsMap()
+
+	supported := make([]string, 0, len(protocol.SupportedVersions)+1)
+	supported = append(supported, protocol.DraftVersion)
+	supported = append(supported, protocol.SupportedVersions...)
 
 	result := map[string]any{
-		fieldProtocolVersion: negotiatedVersion,
-		"serverInfo":         serverInfo,
-		"capabilities":       capabilities,
+		"resultType":        protocol.ResultTypeComplete,
+		"supportedVersions": supported,
+		"capabilities":      capabilities,
+		"serverInfo":        serverInfoMap(manifest),
 	}
-
-	// Include instructions if set
 	if instructions := h.srv.Instructions(); instructions != "" {
 		result["instructions"] = instructions
 	}
-
 	return protocol.NewResponse(req.ID, result), nil
 }
 
