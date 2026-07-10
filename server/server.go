@@ -94,6 +94,7 @@ type Server struct {
 	tasks        *TaskManager
 	augTasks     *augTaskRegistry
 	resourceSubs *resourceSubscriptions
+	resultCache  *resultCacheConfig
 
 	// regErrs accumulates registration collisions. The fluent builder API
 	// returns the builder rather than an error, so a duplicate tool/resource/
@@ -528,6 +529,30 @@ func (s *Server) HasTaskTools() bool {
 		}
 	}
 	return false
+}
+
+// resultCacheConfig holds the cache hint stamped on cacheable results
+// (tools/list, resources/list, resources/read, …) for modern clients.
+type resultCacheConfig struct {
+	ttlMs int64
+	scope string
+}
+
+// WithResultCache sets the cache hint (ttlMs and cacheScope, "public" or
+// "private") advertised on cacheable list/read results to modern (2026-07-28)
+// clients via CacheableResult. Legacy responses are unaffected.
+func WithResultCache(ttlMs int64, scope string) Option {
+	return func(s *Server) {
+		s.resultCache = &resultCacheConfig{ttlMs: ttlMs, scope: scope}
+	}
+}
+
+// ResultCache returns the configured cache hint, or ok=false when none is set.
+func (s *Server) ResultCache() (ttlMs int64, scope string, ok bool) {
+	if s.resultCache == nil {
+		return 0, "", false
+	}
+	return s.resultCache.ttlMs, s.resultCache.scope, true
 }
 
 // HasCompletions reports whether any prompt/resource completion handler has

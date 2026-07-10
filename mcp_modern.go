@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"go.klarlabs.de/mcp/protocol"
@@ -99,4 +100,48 @@ func withResultType(resp *protocol.Response) {
 			m["resultType"] = protocol.ResultTypeComplete
 		}
 	}
+}
+
+// cacheableMethods are the read/list operations whose results carry a
+// CacheableResult hint (ttlMs/cacheScope) in the modern protocol.
+var cacheableMethods = map[string]bool{
+	protocol.MethodToolsList:              true,
+	protocol.MethodPromptsList:            true,
+	protocol.MethodResourcesList:          true,
+	protocol.MethodResourcesRead:          true,
+	protocol.MethodResourcesTemplatesList: true,
+}
+
+// applyCacheHint stamps ttlMs/cacheScope onto a cacheable modern result when the
+// server has a cache hint configured (WithResultCache). server/discover sets its
+// own hint. A no-op otherwise.
+func (h *requestHandler) applyCacheHint(method string, resp *protocol.Response) {
+	if resp == nil || !cacheableMethods[method] {
+		return
+	}
+	ttlMs, scope, ok := h.srv.ResultCache()
+	if !ok {
+		return
+	}
+	if m, mok := resp.Result.(map[string]any); mok {
+		if _, present := m["ttlMs"]; !present {
+			m["ttlMs"] = ttlMs
+		}
+		if scope != "" {
+			if _, present := m["cacheScope"]; !present {
+				m["cacheScope"] = scope
+			}
+		}
+	}
+}
+
+// modernizeError adapts a legacy protocol error to the modern code scheme: the
+// resource-not-found code (mcp-go emits -32001; the spec's -32002 is likewise
+// retired) is replaced by -32602 (Invalid params), per MCP 2026-07-28.
+func modernizeError(err error) error {
+	var mcpErr *protocol.Error
+	if errors.As(err, &mcpErr) && mcpErr.Code == protocol.CodeNotFound {
+		return &protocol.Error{Code: protocol.CodeInvalidParams, Message: mcpErr.Message, Data: mcpErr.Data}
+	}
+	return err
 }

@@ -91,6 +91,58 @@ func TestModern_MissingRequiredMeta(t *testing.T) {
 	}
 }
 
+// TestModern_CacheHintStamped verifies WithResultCache stamps ttlMs/cacheScope
+// on a cacheable modern result, and only for modern requests.
+func TestModern_CacheHintStamped(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"}, WithResultCache(60000, "public"))
+	srv.Tool("t").Handler(func(_ struct{}) (string, error) { return "ok", nil })
+	handler := newRequestHandler(srv)
+
+	// Modern tools/list → cache hint present.
+	req := &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsList,
+		Params: modernParams(t, protocol.DraftVersion, nil),
+	}
+	resp, _ := handler.HandleRequest(context.Background(), req)
+	res := resp.Result.(map[string]any)
+	if res["ttlMs"] != int64(60000) || res["cacheScope"] != "public" {
+		t.Errorf("expected cache hint on modern result, got %v", res)
+	}
+
+	// Legacy tools/list → no cache hint.
+	lreq := &protocol.Request{JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodToolsList, Params: json.RawMessage(`{}`)}
+	lresp, _ := handler.HandleRequest(context.Background(), lreq)
+	if _, present := lresp.Result.(map[string]any)["ttlMs"]; present {
+		t.Errorf("legacy result must not carry a cache hint")
+	}
+}
+
+// TestModern_ResourceNotFoundRenumbered verifies a resource-not-found error is
+// -32602 on the modern path (vs -32001 on legacy).
+func TestModern_ResourceNotFoundRenumbered(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	handler := newRequestHandler(srv)
+
+	modReq := &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodResourcesRead,
+		Params: modernParams(t, protocol.DraftVersion, map[string]any{"uri": "missing://x"}),
+	}
+	_, err := handler.HandleRequest(context.Background(), modReq)
+	var mcpErr *protocol.Error
+	if !errors.As(err, &mcpErr) || mcpErr.Code != protocol.CodeInvalidParams {
+		t.Fatalf("modern resource-not-found: expected -32602, got %v", err)
+	}
+
+	legReq := &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodResourcesRead,
+		Params: mustParams(t, map[string]any{"uri": "missing://x"}),
+	}
+	_, err = handler.HandleRequest(context.Background(), legReq)
+	if !errors.As(err, &mcpErr) || mcpErr.Code != protocol.CodeNotFound {
+		t.Fatalf("legacy resource-not-found: expected -32001, got %v", err)
+	}
+}
+
 // TestLegacy_NoResultType confirms a legacy request (no modern _meta) is served
 // unchanged — no resultType is stamped.
 func TestLegacy_NoResultType(t *testing.T) {

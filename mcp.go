@@ -455,6 +455,9 @@ var (
 	WithIcons = server.WithIcons
 	// WithBuildInfo sets build metadata for debugging and version verification.
 	WithBuildInfo = server.WithBuildInfo
+	// WithResultCache sets the cache hint (ttlMs, cacheScope) advertised on
+	// cacheable list/read results to modern (2026-07-28) clients.
+	WithResultCache = server.WithResultCache
 )
 
 // ServeStdio runs the server using stdio transport.
@@ -766,10 +769,14 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 
 	resp, err := h.dispatch(ctx, req)
 	if err != nil {
+		if modern {
+			err = modernizeError(err)
+		}
 		return nil, h.publicError(req, err)
 	}
 	if modern {
 		withResultType(resp)
+		h.applyCacheHint(req.Method, resp)
 	}
 	return resp, nil
 }

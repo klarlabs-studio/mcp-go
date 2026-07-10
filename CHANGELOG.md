@@ -33,6 +33,12 @@ is deliberately NOT yet in `SupportedVersions`.
   connection state), and the result is stamped `resultType:"complete"`. A
   request without the modern `_meta` is served unchanged under legacy semantics
   (dual-era).
+- **CacheableResult** (SEP-2549) — `WithResultCache(ttlMs, scope)` stamps
+  `ttlMs`/`cacheScope` on cacheable results (`tools/list`, `prompts/list`,
+  `resources/list`, `resources/read`, `resources/templates/list`) for modern
+  clients; legacy responses are unaffected.
+- **Modern error renumbering** — resource-not-found is `-32602` on the modern
+  path (vs `-32001` on legacy), per the retirement of the `-32002` not-found code.
 
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
