@@ -51,6 +51,13 @@ type HTTP struct {
 	// with an Mcp-Session-Id header minted on initialize and echoed thereafter.
 	streamable bool
 
+	// stateless switches the streamable POST path to the MCP 2026-07-28 model:
+	// the Mcp-Session-Id lifecycle is dropped (no minting, no per-request header
+	// requirement) and the Mcp-Method routing header is hard-required (a POST that
+	// omits it is rejected with -32020) rather than merely validated-when-present.
+	// Implies streamable.
+	stateless bool
+
 	mu         sync.RWMutex
 	listenAddr string
 	server     *http.Server
@@ -244,6 +251,24 @@ func WithMaxSSEConnections(n int) HTTPOption {
 func WithStreamable() HTTPOption {
 	return func(h *HTTP) {
 		h.streamable = true
+	}
+}
+
+// WithStreamableStateless enables the modern Streamable HTTP transport in the
+// stateless (MCP 2026-07-28) model. It implies WithStreamable and additionally:
+//
+//   - drops the Mcp-Session-Id lifecycle — no session id is minted on initialize
+//     and none is required on subsequent POSTs (every request self-describes via
+//     its `_meta`, so no server-side session correlation is needed);
+//   - hard-requires the Mcp-Method routing header on every POST (absent → -32020),
+//     rather than the default validate-when-present behavior.
+//
+// It is opt-in and does not affect the legacy (session-negotiated) streamable
+// path when left off.
+func WithStreamableStateless() HTTPOption {
+	return func(h *HTTP) {
+		h.streamable = true
+		h.stateless = true
 	}
 }
 
@@ -810,16 +835,29 @@ func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, hand
 		return
 	}
 
-	// Session lifecycle: mint on initialize, require+echo otherwise. On any
-	// failure the helper has already written the response.
-	sessionID, ok := h.resolveStreamableSession(w, r, ctx, &req)
-	if !ok {
-		return
-	}
-	if sessionID != "" {
-		// Echo the session id so the client can capture (initialize) or confirm it.
-		w.Header().Set(mcpSessionHeader, sessionID)
-		ctx = ContextWithClientID(ctx, sessionID)
+	var sessionID string
+	if h.stateless {
+		// Modern stateless (MCP 2026-07-28): no Mcp-Session-Id lifecycle, and the
+		// Mcp-Method routing header is mandatory (not merely validated-when-present).
+		if r.Header.Get(mcpMethodHeader) == "" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(req.ID,
+				protocol.NewHeaderMismatch("Mcp-Method header is required in stateless mode")))
+			return
+		}
+	} else {
+		// Session lifecycle: mint on initialize, require+echo otherwise. On any
+		// failure the helper has already written the response.
+		var ok bool
+		sessionID, ok = h.resolveStreamableSession(w, r, ctx, &req)
+		if !ok {
+			return
+		}
+		if sessionID != "" {
+			// Echo the session id so the client can capture (initialize) or confirm it.
+			w.Header().Set(mcpSessionHeader, sessionID)
+			ctx = ContextWithClientID(ctx, sessionID)
+		}
 	}
 
 	// A notification carries no id and MUST NOT be answered with a body. Run it
