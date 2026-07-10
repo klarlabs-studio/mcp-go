@@ -362,6 +362,142 @@ func TestStreamableHTTP_LegacyDefaultUnchanged(t *testing.T) {
 	}
 }
 
+// postMCPWithHeaders is postMCP plus arbitrary extra request headers, used to
+// exercise the modern Mcp-Method / Mcp-Name routing headers.
+func postMCPWithHeaders(t *testing.T, ts *httptest.Server, accept, sessionID string, req protocol.Request, headers map[string]string) *http.Response {
+	t.Helper()
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if accept != "" {
+		httpReq.Header.Set("Accept", accept)
+	}
+	if sessionID != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sessionID)
+	}
+	for k, v := range headers {
+		httpReq.Header.Set(k, v)
+	}
+	resp, err := ts.Client().Do(httpReq)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	return resp
+}
+
+// decodeJSONRPCError reads a single JSON-RPC response and returns its error.
+func decodeJSONRPCError(t *testing.T, resp *http.Response) *protocol.Error {
+	t.Helper()
+	var out protocol.Response
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return out.Error
+}
+
+// TestStreamableHTTP_RoutingHeadersMatch confirms that routing headers agreeing
+// with the body pass validation and the request succeeds.
+func TestStreamableHTTP_RoutingHeadersMatch(t *testing.T) {
+	_, ts := newStreamableServer(t)
+	sid := initSession(t, ts)
+
+	resp := postMCPWithHeaders(t, ts, "application/json", sid, protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		ID:      json.RawMessage(`2`),
+		Method:  protocol.MethodToolsCall,
+		Params:  json.RawMessage(`{"name":"search"}`),
+	}, map[string]string{
+		"Mcp-Method": protocol.MethodToolsCall,
+		"Mcp-Name":   "search",
+	})
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if errObj := decodeJSONRPCError(t, resp); errObj != nil {
+		t.Fatalf("unexpected JSON-RPC error: %+v", errObj)
+	}
+}
+
+// TestStreamableHTTP_RoutingHeaderMethodMismatch confirms an Mcp-Method header
+// disagreeing with the body method is rejected with -32020.
+func TestStreamableHTTP_RoutingHeaderMethodMismatch(t *testing.T) {
+	_, ts := newStreamableServer(t)
+	sid := initSession(t, ts)
+
+	resp := postMCPWithHeaders(t, ts, "application/json", sid, protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		ID:      json.RawMessage(`2`),
+		Method:  "ping",
+	}, map[string]string{
+		"Mcp-Method": protocol.MethodToolsCall,
+	})
+	defer func() { _ = resp.Body.Close() }()
+
+	errObj := decodeJSONRPCError(t, resp)
+	if errObj == nil {
+		t.Fatal("expected a JSON-RPC error, got none")
+	}
+	if errObj.Code != protocol.CodeHeaderMismatch {
+		t.Fatalf("error code = %d, want %d", errObj.Code, protocol.CodeHeaderMismatch)
+	}
+}
+
+// TestStreamableHTTP_RoutingHeaderNameMismatch confirms an Mcp-Name header
+// disagreeing with a tools/call name param is rejected with -32020.
+func TestStreamableHTTP_RoutingHeaderNameMismatch(t *testing.T) {
+	_, ts := newStreamableServer(t)
+	sid := initSession(t, ts)
+
+	resp := postMCPWithHeaders(t, ts, "application/json", sid, protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		ID:      json.RawMessage(`2`),
+		Method:  protocol.MethodToolsCall,
+		Params:  json.RawMessage(`{"name":"search"}`),
+	}, map[string]string{
+		"Mcp-Method": protocol.MethodToolsCall,
+		"Mcp-Name":   "delete",
+	})
+	defer func() { _ = resp.Body.Close() }()
+
+	errObj := decodeJSONRPCError(t, resp)
+	if errObj == nil {
+		t.Fatal("expected a JSON-RPC error, got none")
+	}
+	if errObj.Code != protocol.CodeHeaderMismatch {
+		t.Fatalf("error code = %d, want %d", errObj.Code, protocol.CodeHeaderMismatch)
+	}
+}
+
+// TestStreamableHTTP_RoutingHeadersAbsent confirms the baseline is unaffected
+// when no routing headers are supplied (validate-when-present).
+func TestStreamableHTTP_RoutingHeadersAbsent(t *testing.T) {
+	_, ts := newStreamableServer(t)
+	sid := initSession(t, ts)
+
+	resp := postMCP(t, ts, "application/json", sid, protocol.Request{
+		JSONRPC: protocol.JSONRPCVersion,
+		ID:      json.RawMessage(`2`),
+		Method:  protocol.MethodToolsCall,
+		Params:  json.RawMessage(`{"name":"search"}`),
+	})
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if errObj := decodeJSONRPCError(t, resp); errObj != nil {
+		t.Fatalf("unexpected JSON-RPC error: %+v", errObj)
+	}
+}
+
 // sseDataFrames extracts the payloads of all "data:" frames from an SSE body.
 func sseDataFrames(body string) []string {
 	var frames []string

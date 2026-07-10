@@ -606,6 +606,70 @@ func (h *HTTP) SendTo(clientID string, data []byte) bool {
 // mcpSessionHeader is the HTTP header carrying the Streamable HTTP session id.
 const mcpSessionHeader = "Mcp-Session-Id"
 
+// Modern (MCP 2026-07-28) Streamable HTTP routing headers. They let an
+// intermediary route a POST without parsing its JSON body: Mcp-Method mirrors
+// the JSON-RPC method, and Mcp-Name mirrors the body's primary named target
+// (tools/call -> name, resources/read -> uri, prompts/get -> name).
+const (
+	mcpMethodHeader = "Mcp-Method"
+	mcpNameHeader   = "Mcp-Name"
+)
+
+// routingParams carries the body fields the modern routing headers mirror. Only
+// the primary named target of a name-bearing method is captured; other params
+// are ignored so the parse stays cheap and tolerant of unknown fields.
+type routingParams struct {
+	Name string `json:"name"`
+	URI  string `json:"uri"`
+}
+
+// bodyRouteName returns the primary named target the Mcp-Name header must match
+// for a name-bearing method, and ok=false for methods that have no such target
+// (Mcp-Name is then not validated). tools/call and prompts/get key on the
+// "name" param; resources/read keys on the "uri" param.
+func bodyRouteName(req *protocol.Request) (string, bool) {
+	var field *string
+	var params routingParams
+	switch req.Method {
+	case protocol.MethodToolsCall, protocol.MethodPromptsGet:
+		field = &params.Name
+	case protocol.MethodResourcesRead:
+		field = &params.URI
+	default:
+		return "", false
+	}
+	if len(req.Params) > 0 {
+		// Ignore malformed params here: a body that fails to unmarshal is caught
+		// downstream by the handler; treat the route name as empty for matching.
+		_ = json.Unmarshal(req.Params, &params)
+	}
+	return *field, true
+}
+
+// validateRoutingHeaders enforces the modern routing headers when present
+// (validate-when-present): a supplied Mcp-Method must equal the body method, and
+// a supplied Mcp-Name must equal the body's primary named target for
+// name-bearing methods. It returns a -32020 error on mismatch, else nil.
+//
+// The headers are validated only, not required. The roadmap lists them as
+// "required" for the stateless revision; hard-requiring them (rejecting a POST
+// that omits Mcp-Method) is a deferred follow-up, most likely gated behind an
+// explicit Stateless option, since the modern Streamable transport is still
+// opt-in/experimental here.
+func validateRoutingHeaders(r *http.Request, req *protocol.Request) *protocol.Error {
+	if hdr := r.Header.Get(mcpMethodHeader); hdr != "" && hdr != req.Method {
+		return protocol.NewHeaderMismatch(fmt.Sprintf(
+			"Mcp-Method header %q does not match request method %q", hdr, req.Method))
+	}
+	if hdr := r.Header.Get(mcpNameHeader); hdr != "" {
+		if want, named := bodyRouteName(req); named && hdr != want {
+			return protocol.NewHeaderMismatch(fmt.Sprintf(
+				"Mcp-Name header %q does not match request target %q", hdr, want))
+		}
+	}
+	return nil
+}
+
 // notifierFunc adapts a plain function to the NotificationSender interface so a
 // per-request notification sink can be injected into the handler context.
 type notifierFunc func(method string, params any) error
@@ -734,6 +798,15 @@ func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, hand
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(nil, protocol.NewParseError("Invalid JSON")))
+		return
+	}
+
+	// Modern routing headers (MCP 2026-07-28): when supplied, Mcp-Method and
+	// Mcp-Name must agree with the body so intermediaries can trust them for
+	// routing. A disagreement is a -32020 JSON-RPC error carrying the request id.
+	if verr := validateRoutingHeaders(r, &req); verr != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(protocol.NewErrorResponse(req.ID, verr))
 		return
 	}
 

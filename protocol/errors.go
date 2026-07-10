@@ -124,6 +124,13 @@ func NewUnsupportedProtocolVersion(supported []string, requested string) *Error 
 	}
 }
 
+// NewHeaderMismatch creates a -32020 error (MCP 2026-07-28) reported when a
+// Streamable HTTP routing header (Mcp-Method / Mcp-Name) disagrees with the
+// JSON-RPC request body it is supposed to describe.
+func NewHeaderMismatch(msg string) *Error {
+	return &Error{Code: CodeHeaderMismatch, Message: msg}
+}
+
 // NewMissingRequiredClientCapability creates a -32021 error (MCP 2026-07-28)
 // naming the client capabilities the request required but did not declare.
 func NewMissingRequiredClientCapability(required ...string) *Error {
