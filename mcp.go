@@ -52,6 +52,8 @@ const (
 	fieldProtocolVersion = "protocolVersion"
 	fieldListChanged     = "listChanged"
 	fieldText            = "text"
+	fieldType            = "type"
+	fieldURI             = "uri"
 )
 
 // Re-export core types for convenience
@@ -991,7 +993,7 @@ func buildToolCallResponse(tool *server.Tool, result any) (map[string]any, error
 	}
 	response["content"] = []map[string]any{
 		{
-			"type":    fieldText,
+			fieldType: fieldText,
 			fieldText: textContent,
 		},
 	}
@@ -1028,7 +1030,7 @@ func (h *requestHandler) handleResourcesList(ctx context.Context, req *protocol.
 			continue
 		}
 		item := map[string]any{
-			"uri":     r.URITemplate,
+			fieldURI:  r.URITemplate,
 			fieldName: r.Name,
 		}
 		if r.Description != "" {
@@ -1084,7 +1086,7 @@ func (h *requestHandler) handleResourcesRead(ctx context.Context, req *protocol.
 	result := map[string]any{
 		"contents": []map[string]any{
 			{
-				"uri":      content.URI,
+				fieldURI:   content.URI,
 				"mimeType": content.MimeType,
 				fieldText:  content.Text,
 			},
