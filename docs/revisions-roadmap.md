@@ -246,10 +246,14 @@ clients keep working, then make it the default in v2.
   — the modern log level travels in `_meta`.)
 - [x] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
   `oneOf`/`anyOf`, conditionals).
-- [ ] Make `Stateless` the default; tag **v2.0.0**. **DEFERRED — held at v1 by
-  decision.** All Phase 4 behavior ships behind the `WithStreamableStateless`
-  opt-in so v1 servers are unaffected; the default flip and the `v2.0.0` tag are
-  intentionally not done. Everything above is additive and backward-compatible.
+- [x] Make `Stateless` the default — shipped in **v1.24.0** (NOT v2.0.0, by
+  decision). `WithStreamable()` now defaults to the stateless (2026-07-28) model
+  (drops `Mcp-Session-Id`, hard-requires `Mcp-Method`); `WithStreamableStateful()`
+  is the opt-out into the legacy session-negotiated (2025-03-26) path. This is a
+  behavior change to the streamable HTTP default, released as a minor because the
+  only consumers are the maintainer's own fleet (all stdio — unaffected) and they
+  upgrade in lockstep; there are no external consumers. The `/v2` module-path tax
+  is intentionally avoided. See CHANGELOG [1.24.0].
 
 ---
 
