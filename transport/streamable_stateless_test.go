@@ -71,8 +71,9 @@ func TestStreamableStateless_DoesNotMintSessionID(t *testing.T) {
 	}
 }
 
-// TestStreamableStateless_OffKeepsSessionLifecycle is a guard that the default
-// (non-stateless) streamable path still mints and requires a session id.
+// TestStreamableStateless_OffKeepsSessionLifecycle is a guard that the stateful
+// streamable path (WithStreamableStateful, which newStreamableServer pins by
+// default) still mints and requires a session id.
 func TestStreamableStateless_OffKeepsSessionLifecycle(t *testing.T) {
 	_, ts := newStreamableServer(t)
 

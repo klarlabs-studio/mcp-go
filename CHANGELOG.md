@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.24.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.23.0...v1.24.0) - 2026-07-11
+
+Makes the stateless (MCP 2026-07-28) model the **default** for the Streamable
+HTTP transport. Shipped as a minor (not v2.0.0) by deliberate decision: the only
+consumers are the maintainer's own fleet — all of which serve over **stdio**
+(unaffected by this HTTP-transport change) and upgrade in lockstep — and there
+are no external consumers, so the `/v2` module-path migration is intentionally
+avoided.
+
+### Changed — ⚠️ behavior change (Streamable HTTP)
+
+- **`WithStreamable()` now defaults to stateless.** The Streamable HTTP transport
+  enabled via `WithStreamable()` uses the 2026-07-28 stateless model: it **drops
+  the `Mcp-Session-Id` lifecycle** (none minted on initialize, none required on
+  POSTs) and **hard-requires the `Mcp-Method` routing header** (absent → `-32020`).
+  Previously `WithStreamable()` was session-negotiated (2025-03-26).
+  - **Migration:** to keep the session-negotiated behavior, switch
+    `WithStreamable()` → **`WithStreamableStateful()`** (new). `stdio` servers are
+    unaffected — this only touches the Streamable HTTP transport.
+
+### Added
+
+- **`WithStreamableStateful()`** — opt into the legacy session-negotiated
+  (2025-03-26) Streamable HTTP model (mints/requires `Mcp-Session-Id`, serves the
+  GET SSE stream + DELETE, validates `Mcp-Method` when present). The explicit
+  opt-out from the new stateless default.
+- **`WithStreamableStateless()`** is retained as an explicit spelling of the new
+  default (`== WithStreamable`).
+
 ## [1.23.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.22.0...v1.23.0) - 2026-07-11
 
 Completes the 2026-07-28 stateless surface (Phase 4) on **v1** — additive and

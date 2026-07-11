@@ -230,9 +230,16 @@ func WithMaxSSEConnections(n int) HTTPOption {
 	}
 }
 
-// WithStreamable enables the modern Streamable HTTP transport (MCP 2025-03-26)
-// on the /mcp endpoint, in addition to the legacy POST /mcp + GET /mcp/sse
-// endpoints, which remain available for backward compatibility.
+// WithStreamable enables the modern Streamable HTTP transport on the /mcp
+// endpoint, in addition to the legacy POST /mcp + GET /mcp/sse endpoints, which
+// remain available for backward compatibility.
+//
+// As of v1.24.0 this defaults to the **stateless** (MCP 2026-07-28) model: the
+// Mcp-Session-Id lifecycle is dropped (no id minted on initialize, none required
+// on subsequent POSTs — every request self-describes via its `_meta`) and the
+// Mcp-Method routing header is hard-required on every POST (absent → -32020).
+// Use WithStreamableStateful to opt back into the legacy session-negotiated
+// (MCP 2025-03-26) model.
 //
 // In streamable mode the single /mcp endpoint:
 //   - POST accepts a JSON-RPC request and replies either with a single JSON
@@ -240,31 +247,37 @@ func WithMaxSSEConnections(n int) HTTPOption {
 //     (Content-Type: text/event-stream), negotiated via the request's Accept
 //     header. Notifications sent by handlers during an SSE-framed reply are
 //     streamed as SSE data frames ahead of the final response frame.
-//   - GET opens a standing server->client SSE stream, keyed by Mcp-Session-Id,
-//     for notifications delivered outside a request/response exchange.
-//   - DELETE tears down the session named by Mcp-Session-Id.
 //
-// The server mints an Mcp-Session-Id on the initialize response and requires it
-// to be echoed on every subsequent request. All existing security controls
-// (origin checks, max body size, authorize hook, request-context hook) apply to
-// the streamable paths unchanged.
+// All existing security controls (origin checks, max body size, authorize hook,
+// request-context hook) apply to the streamable paths unchanged.
 func WithStreamable() HTTPOption {
 	return func(h *HTTP) {
 		h.streamable = true
+		h.stateless = true
+	}
+}
+
+// WithStreamableStateful enables the modern Streamable HTTP transport in the
+// legacy session-negotiated (MCP 2025-03-26) model — the opt-out from the
+// stateless default. In this mode the /mcp endpoint:
+//
+//   - mints an Mcp-Session-Id on the initialize response and requires it to be
+//     echoed on every subsequent request;
+//   - serves GET as a standing server->client SSE stream keyed by Mcp-Session-Id;
+//   - serves DELETE to tear down the session named by Mcp-Session-Id;
+//   - validates the Mcp-Method routing header when present (rather than
+//     hard-requiring it).
+func WithStreamableStateful() HTTPOption {
+	return func(h *HTTP) {
+		h.streamable = true
+		h.stateless = false
 	}
 }
 
 // WithStreamableStateless enables the modern Streamable HTTP transport in the
-// stateless (MCP 2026-07-28) model. It implies WithStreamable and additionally:
-//
-//   - drops the Mcp-Session-Id lifecycle — no session id is minted on initialize
-//     and none is required on subsequent POSTs (every request self-describes via
-//     its `_meta`, so no server-side session correlation is needed);
-//   - hard-requires the Mcp-Method routing header on every POST (absent → -32020),
-//     rather than the default validate-when-present behavior.
-//
-// It is opt-in and does not affect the legacy (session-negotiated) streamable
-// path when left off.
+// stateless (MCP 2026-07-28) model. As of v1.24.0 this is the default for
+// WithStreamable; the option is retained as an explicit spelling of that intent
+// and for callers pinned to earlier versions.
 func WithStreamableStateless() HTTPOption {
 	return func(h *HTTP) {
 		h.streamable = true

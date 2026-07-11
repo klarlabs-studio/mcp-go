@@ -38,7 +38,10 @@ func streamableTestHandler() Handler {
 
 func newStreamableServer(t *testing.T, opts ...HTTPOption) (*HTTP, *httptest.Server) {
 	t.Helper()
-	h := NewHTTP("127.0.0.1:0", append([]HTTPOption{WithStreamable()}, opts...)...)
+	// WithStreamable defaults to stateless as of v1.24.0; these helpers back the
+	// session-lifecycle tests, so pin them to the stateful (session-negotiated)
+	// model explicitly. A trailing WithStreamableStateless() in opts still wins.
+	h := NewHTTP("127.0.0.1:0", append([]HTTPOption{WithStreamableStateful()}, opts...)...)
 	ts := httptest.NewServer(h.createHandler(streamableTestHandler()))
 	t.Cleanup(ts.Close)
 	return h, ts
