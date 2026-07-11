@@ -1,4 +1,9 @@
 // Package main demonstrates v1.1 session features: sampling, roots, and logging.
+//
+// These server-initiated features are deprecated as of MCP 2026-07-28 (still
+// functional for a 12-month window; see docs/deprecations.md for the migrations).
+// The example continues to exercise them intentionally, so the calls below carry
+// //nolint:staticcheck to acknowledge the deprecation rather than hide it.
 package main
 
 import (
@@ -36,15 +41,16 @@ func main() {
 			}
 
 			// Log progress
-			session.Info("analyze", fmt.Sprintf("Starting analysis of: %s", input.Topic))
+			session.Info("analyze", fmt.Sprintf("Starting analysis of: %s", input.Topic)) //nolint:staticcheck // demonstrates the deprecated (still-functional) logging API
 
 			// Check if client supports sampling
 			if !session.SupportsFeature("sampling") {
-				session.Warning("analyze", "Client doesn't support sampling, returning static response")
+				session.Warning("analyze", "Client doesn't support sampling, returning static response") //nolint:staticcheck // demonstrates the deprecated (still-functional) logging API
 				return fmt.Sprintf("Analysis of '%s': (sampling not available)", input.Topic), nil
 			}
 
 			// Request LLM completion from client
+			//nolint:staticcheck // demonstrates the deprecated (still-functional) sampling API
 			result, err := session.CreateMessage(ctx, &mcp.CreateMessageRequest{
 				Messages: []mcp.SamplingMessage{
 					{
@@ -55,11 +61,11 @@ func main() {
 				MaxTokens: 200,
 			})
 			if err != nil {
-				session.Error("analyze", fmt.Sprintf("Sampling failed: %v", err))
+				session.Error("analyze", fmt.Sprintf("Sampling failed: %v", err)) //nolint:staticcheck // demonstrates the deprecated (still-functional) logging API
 				return "", fmt.Errorf("sampling failed: %w", err)
 			}
 
-			session.Info("analyze", "Analysis complete")
+			session.Info("analyze", "Analysis complete") //nolint:staticcheck // demonstrates the deprecated (still-functional) logging API
 			return result.Content.Text, nil
 		})
 
@@ -76,6 +82,7 @@ func main() {
 				return nil, fmt.Errorf("client doesn't support roots")
 			}
 
+			//nolint:staticcheck // demonstrates the deprecated (still-functional) roots API
 			result, err := session.ListRoots(ctx)
 			if err != nil {
 				return nil, err
