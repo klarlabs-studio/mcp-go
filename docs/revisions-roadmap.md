@@ -229,17 +229,27 @@ clients keep working, then make it the default in v2.
   removed (see Cross-cutting "Auth stance") — enforcement (iss validation, DCR)
   belongs at the gateway, and mcp-go stays advertise-only. Not implemented by
   design; revisit only if the auth stance changes.
-- [~] Error renumbering: resource-not-found `-32002` → `-32602`;
+- [x] Error renumbering: resource-not-found `-32002` → `-32602`;
   `HeaderMismatch` `-32001`→`-32020`, etc.; adopt the `-32020..-32099` MCP range.
-  (The two named renumberings are done: `modernizeError` maps resource-not-found
-  to `-32602` on the modern path, and the streamable routing-header mismatch
-  emits `-32020`. A broader sweep of the `-32020..-32099` range for the remaining
-  MCP-specific codes is still pending.)
-- [ ] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
-  migrations (tool params / provider APIs / stderr+OTel).
+  (`modernizeError` maps resource-not-found to `-32602` for modern callers while
+  legacy keeps `-32001` — covered by `TestModern_ResourceNotFoundRenumbered`. The
+  modern MCP-specific codes already live in the reserved range: `HeaderMismatch`
+  `-32020`, `MissingRequiredClientCapability` `-32021`, `UnsupportedProtocolVersion`
+  `-32022`, `URLElicitationRequired` `-32042`. mcp-go emits no other legacy
+  `-3200x` code from a handler — auth/rate-limit are HTTP/gateway-terminated in
+  the modern model, not JSON-RPC-renumbered by the spec — so the sweep is complete.)
+- [x] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
+  migrations (tool params / provider APIs / stderr+OTel). (`Session.CreateMessage`/
+  `CreateMessageWithTools`, `Session.ListRoots`, and the `Session.Log`/`Debug`/…/
+  `Emergency` cluster carry Go `// Deprecated:` markers; all stay functional. See
+  `docs/deprecations.md` for the migrations. `SetLogLevel`/`LogLevel` are retained
+  — the modern log level travels in `_meta`.)
 - [x] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
   `oneOf`/`anyOf`, conditionals).
-- [ ] Make `Stateless` the default; tag **v2.0.0**.
+- [ ] Make `Stateless` the default; tag **v2.0.0**. **DEFERRED — held at v1 by
+  decision.** All Phase 4 behavior ships behind the `WithStreamableStateless`
+  opt-in so v1 servers are unaffected; the default flip and the `v2.0.0` tag are
+  intentionally not done. Everything above is additive and backward-compatible.
 
 ---
 
