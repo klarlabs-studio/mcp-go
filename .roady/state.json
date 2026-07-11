@@ -1,6 +1,6 @@
 {
   "project_id": "",
-  "version": 16,
+  "version": 34,
   "task_states": {
     "phase1-healthz": {
       "status": "done",
@@ -51,57 +51,111 @@
       "elapsed_minutes": 18
     },
     "rev0-client-caps": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "af47cf1"
+      ],
+      "started_at": "2026-07-10T12:56:32.776617+02:00",
+      "completed_at": "2026-07-10T12:56:37.674201+02:00",
       "elapsed_minutes": 0
     },
     "rev0-conformance-harness": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "dcaa186"
+      ],
+      "started_at": "2026-07-10T12:59:43.224978+02:00",
+      "completed_at": "2026-07-10T12:59:47.997436+02:00",
       "elapsed_minutes": 0
     },
     "rev0-content-union": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "12ab748"
+      ],
+      "started_at": "2026-07-10T13:03:29.996851+02:00",
+      "completed_at": "2026-07-10T13:03:38.150004+02:00",
       "elapsed_minutes": 0
     },
     "rev0-session-injection": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "af47cf1"
+      ],
+      "started_at": "2026-07-10T12:56:39.420872+02:00",
+      "completed_at": "2026-07-10T12:56:44.576777+02:00",
       "elapsed_minutes": 0
     },
     "rev0-version-negotiation": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "fc177c8"
+      ],
       "started_at": "2026-07-10T12:34:25.287968+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-07-10T12:42:43.661737+02:00",
+      "elapsed_minutes": 8
     },
     "rev0-wire-dead-methods": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "fc177c8"
+      ],
+      "started_at": "2026-07-10T12:42:49.678674+02:00",
+      "completed_at": "2026-07-10T12:42:55.248678+02:00",
       "elapsed_minutes": 0
     },
     "rev1-2025-03-26": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "f839cf9"
+      ],
+      "started_at": "2026-07-10T13:43:08.422075+02:00",
+      "completed_at": "2026-07-10T13:43:16.068875+02:00",
       "elapsed_minutes": 0
     },
     "rev2-2025-06-18": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "f839cf9"
+      ],
+      "started_at": "2026-07-10T13:43:18.659682+02:00",
+      "completed_at": "2026-07-10T13:43:25.366352+02:00",
       "elapsed_minutes": 0
     },
     "rev3-2025-11-25": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "dea1ae3"
+      ],
+      "started_at": "2026-07-10T14:33:05.895891+02:00",
+      "completed_at": "2026-07-10T14:33:12.444504+02:00",
       "elapsed_minutes": 0
     },
     "rev4-2026-07-28": {
-      "status": "pending",
+      "status": "in_progress",
       "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-07-10T14:46:41.752451+02:00",
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-07-10T12:34:25.287968+02:00"
+  "updated_at": "2026-07-10T14:46:41.752451+02:00"
 }
