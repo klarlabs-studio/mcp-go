@@ -35,6 +35,7 @@ func TestMRTR_SamplingRoundTrip(t *testing.T) {
 	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
 	srv.Tool("ask").Handler(func(ctx context.Context, _ struct{}) (string, error) {
 		sess := server.SessionFromContext(ctx)
+		//nolint:staticcheck // exercises the deprecated CreateMessage path, which MRTR still intercepts via the InputBroker.
 		res, err := sess.CreateMessage(ctx, &server.CreateMessageRequest{MaxTokens: 16})
 		if err != nil {
 			return "", err
@@ -151,6 +152,7 @@ func TestMRTR_LegacyStillErrors(t *testing.T) {
 		if sess == nil {
 			return "no-session", nil
 		}
+		//nolint:staticcheck // exercises the deprecated CreateMessage path, which MRTR still intercepts via the InputBroker.
 		_, err := sess.CreateMessage(ctx, &server.CreateMessageRequest{MaxTokens: 1})
 		if err != nil {
 			return "", err

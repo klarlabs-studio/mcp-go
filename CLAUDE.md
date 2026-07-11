@@ -150,6 +150,15 @@ func TestX(t *testing.T) {
 }
 ```
 
+## Known Failure Modes
+
+- **Worktree subagents spawn from an old base.** `Agent(isolation: "worktree")` branches from `main`/the last release tag, **not** the current working branch. Every parallel worktree agent must run `git merge --ff-only <target-branch>` as its first step, and be scoped to **disjoint files** so integration stays cherry-pick/fast-forward-clean. Do the shared-dispatcher (`mcp.go`) / version-integration work yourself, sequentially — never fan it out.
+- **`main` is protected (`strict` + 4 required checks: Lint/Build/Test/Security), but CI only runs on PRs targeting `main`.** Stacked PRs that target intermediate branches can never satisfy the gate. To land a stack: retarget each PR to `main` bottom-up, then merge. `enforce_admins` is off, so `gh pr merge --admin` is the intended path once the work is verified green locally — but the harness safety classifier will block the bypass until the user explicitly authorizes it.
+- **Stale LSP diagnostics leak from `.claude/worktrees/` copies** into the main-checkout view (phantom undefined symbols / unused imports). Don't trust them mid-parallel-run — confirm with a real `go build` / `go test`.
+- **Stale Dependabot "fixed in vX" alerts are a downgrade trap (fleet).** When a consumer's mcp-go bump PR already pulls a transitive dep (`golang.org/x/crypto`, `x/net`, …) *past* the alert's fix version, the alert on `main` is stale and clears once the bump merges. `go get <pkg>@<fix-version>` to "fix" it then *downgrades* the dep — and can drag `go.klarlabs.de/mcp` itself back a version via MVS. Merge the bump; never `go get` a lower pin against a stale alert.
+- **npm trusted publishing (OIDC): no `registry-url`, npm ≥ 11.5.1 — and it's usually the npm-account config, not the workflow (fleet).** `actions/setup-node`'s `registry-url` writes an `.npmrc` that conflicts with OIDC auth → `ENEEDAUTH`/404. The correct GitHub Actions setup is: `setup-node` **without** `registry-url`, npm ≥ 11.5.1 (force it — Node's bundled npm may be older; `npm 12.x` had OIDC trouble, pin `npm@^11.5.1`), `permissions: id-token: write`, `npm publish --provenance`, **no** `NODE_AUTH_TOKEN`. A `404` on publish = trusted-publisher config *mismatch* (org/repo/workflow-file/environment must match exactly); `ENEEDAUTH` = npm found *no effective* trusted-publisher config → fell back to a token that isn't there. Trusted publishing must be configured on npmjs for **every** package (per-platform scoped packages too), which the workflow can't verify. Once the workflow matches npm's docs and still fails, **stop iterating on it** — the gap is the npm-account config; hand back the diagnostic rather than cutting more release tags (the warden saga burned 7 binaries-only tags this way).
+- **`--admin` merge authorization is per-batch, not standing.** User-authorizing an admin bypass for one set of PRs does NOT let the safety classifier admin-merge later *new* agent-authored PRs — those need fresh authorization or a normal `--auto` merge once CI passes.
+
 ## Coverage Targets
 
 Coverage is enforced via `coverctl check`. See `.coverctl.yaml` for thresholds.

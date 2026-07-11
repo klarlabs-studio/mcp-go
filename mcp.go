@@ -791,10 +791,12 @@ func (h *requestHandler) handle(ctx context.Context, req *protocol.Request) (*pr
 		if err != nil {
 			return nil, h.publicError(req, err)
 		}
-		// tasks/list is retired in the modern (2026-07-28) tasks extension, which
-		// favors direct task handles over listing. The legacy method stays for
-		// negotiated 2025-11-25 sessions; a modern caller gets MethodNotFound.
-		if req.Method == protocol.MethodTasksList {
+		// The stateless 2026-07-28 redesign retires the initialize/ping lifecycle,
+		// logging/setLevel, resources subscribe/unsubscribe, the roots list-changed
+		// notification, and tasks/list. Those methods stay for negotiated
+		// <=2025-11-25 sessions (which never reach this path); a modern caller gets
+		// MethodNotFound. See retiredInModern for the rationale per method.
+		if retiredInModern[req.Method] {
 			return nil, h.publicError(req, protocol.NewMethodNotFound(req.Method))
 		}
 	}

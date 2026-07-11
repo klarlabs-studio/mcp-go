@@ -201,9 +201,10 @@ func (s *Session) SupportsFeature(feature string) bool {
 // CreateMessage sends a sampling request to the client.
 // Returns an error if the client doesn't support sampling.
 //
-// Note: sampling is deprecated as of MCP 2026-07-28 (12-month window; still
-// functional). Modern servers should call an LLM provider API directly rather
-// than round-tripping a completion through the client.
+// Deprecated: server-initiated sampling is retired in the MCP 2026-07-28
+// stateless model (12-month window; still functional). Call an LLM provider API
+// directly from the handler instead of round-tripping a completion through the
+// client. See docs/deprecations.md.
 func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) (*CreateMessageResult, error) {
 	return s.createMessage(ctx, req)
 }
@@ -214,6 +215,10 @@ func (s *Session) CreateMessage(ctx context.Context, req *CreateMessageRequest) 
 // path as CreateMessage, so the sampling capability gate and nil-sender guard
 // (ErrNoRequestSender) apply identically. A nil choice leaves tool selection to
 // the client/model.
+//
+// Deprecated: server-initiated sampling is retired in the MCP 2026-07-28
+// stateless model (12-month window; still functional). Call an LLM provider API
+// directly from the handler instead. See docs/deprecations.md.
 func (s *Session) CreateMessageWithTools(ctx context.Context, req *CreateMessageRequest, tools []SamplingTool, choice *SamplingToolChoice) (*CreateMessageResult, error) {
 	req.Tools = tools
 	req.ToolChoice = choice
@@ -278,9 +283,10 @@ func (s *Session) createMessage(ctx context.Context, req *CreateMessageRequest) 
 // ListRoots requests the list of roots from the client.
 // Returns an error if the client doesn't support roots.
 //
-// Note: roots is deprecated as of MCP 2026-07-28 (12-month window; still
-// functional). Modern servers should receive directories/files via tool
-// parameters, resource URIs, or configuration instead.
+// Deprecated: server-initiated roots is retired in the MCP 2026-07-28 stateless
+// model (12-month window; still functional). Receive workspace directories/files
+// via explicit tool parameters, resource URIs, or configuration instead. See
+// docs/deprecations.md.
 func (s *Session) ListRoots(ctx context.Context) (*ListRootsResult, error) {
 	if !s.SupportsFeature("roots") {
 		return nil, fmt.Errorf("client does not support roots")
@@ -358,12 +364,11 @@ func (s *Session) HandleRootsChanged(roots []Root) {
 	}
 }
 
-// Log sends a log message at the specified level.
-//
-// Note: logging is deprecated as of MCP 2026-07-28 (12-month window; still
-// functional). Modern servers should log to stderr or emit OpenTelemetry
-// instead of routing log messages through the client.
-func (s *Session) Log(level LogLevel, logger string, data any) {
+// emitLog is the shared, non-deprecated implementation behind Log and the
+// per-level convenience wrappers. It exists so those deprecated public methods
+// delegate here rather than to one another, keeping internal callers clear of
+// the deprecation (SA1019).
+func (s *Session) emitLog(level LogLevel, logger string, data any) {
 	s.mu.RLock()
 	minLevel := s.logLevel
 	s.mu.RUnlock()
@@ -381,44 +386,70 @@ func (s *Session) Log(level LogLevel, logger string, data any) {
 	_ = s.notifier.SendNotification(protocol.MethodLoggingMessage, msg)
 }
 
+// Log sends a log message at the specified level.
+//
+// Deprecated: server→client logging is retired in the MCP 2026-07-28 stateless
+// model (12-month window; still functional). Write logs to stderr or emit them
+// via OpenTelemetry (the otel middleware) instead of routing them through the
+// client. See docs/deprecations.md.
+func (s *Session) Log(level LogLevel, logger string, data any) {
+	s.emitLog(level, logger, data)
+}
+
 // Debug logs a debug message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Debug(logger string, data any) {
-	s.Log(LogLevelDebug, logger, data)
+	s.emitLog(LogLevelDebug, logger, data)
 }
 
 // Info logs an info message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Info(logger string, data any) {
-	s.Log(LogLevelInfo, logger, data)
+	s.emitLog(LogLevelInfo, logger, data)
 }
 
 // Notice logs a notice message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Notice(logger string, data any) {
-	s.Log(LogLevelNotice, logger, data)
+	s.emitLog(LogLevelNotice, logger, data)
 }
 
 // Warning logs a warning message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Warning(logger string, data any) {
-	s.Log(LogLevelWarning, logger, data)
+	s.emitLog(LogLevelWarning, logger, data)
 }
 
 // Error logs an error message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Error(logger string, data any) {
-	s.Log(LogLevelError, logger, data)
+	s.emitLog(LogLevelError, logger, data)
 }
 
 // Critical logs a critical message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Critical(logger string, data any) {
-	s.Log(LogLevelCritical, logger, data)
+	s.emitLog(LogLevelCritical, logger, data)
 }
 
 // Alert logs an alert message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Alert(logger string, data any) {
-	s.Log(LogLevelAlert, logger, data)
+	s.emitLog(LogLevelAlert, logger, data)
 }
 
 // Emergency logs an emergency message.
+//
+// Deprecated: see [Session.Log].
 func (s *Session) Emergency(logger string, data any) {
-	s.Log(LogLevelEmergency, logger, data)
+	s.emitLog(LogLevelEmergency, logger, data)
 }
 
 // SetLogLevel sets the minimum log level.

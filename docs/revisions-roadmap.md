@@ -159,14 +159,21 @@ an explicit opt-in (`StreamableHTTPOptions.Stateless`, mirroring go-sdk) so v1
 clients keep working, then make it the default in v2.
 
 **Lifecycle / methods**
-- [ ] Implement **`server/discover`** (advertise supported versions, capabilities,
+- [x] Implement **`server/discover`** (advertise supported versions, capabilities,
   identity) — replaces `initialize`. Keep `initialize` as a back-compat probe.
-- [ ] **Stateless request model** — every request self-describes via `_meta`:
+  (`handleServerDiscover` advertises versions + the extensions map + identity; it
+  is exempt from the modern version check so a client uses it to learn versions.
+  `initialize` still serves legacy callers.)
+- [x] **Stateless request model** — every request self-describes via `_meta`:
   `io.modelcontextprotocol/protocolVersion`, `/clientInfo`, `/clientCapabilities`,
-  `/logLevel`. Remove reliance on init-time state.
-- [ ] **Remove** `initialize`/`notifications/initialized`, `ping`,
+  `/logLevel`. Remove reliance on init-time state. (`parseModernMeta`/`applyModern`
+  require the three fields, build a request-scoped session from the declared
+  capabilities, and set the per-request log level — no connection state.)
+- [x] **Remove** `initialize`/`notifications/initialized`, `ping`,
   `logging/setLevel`, `notifications/roots/list_changed`,
   `resources/subscribe`/`unsubscribe`, the GET stream (all gated to this version).
+  (`retiredInModern` returns MethodNotFound for these on the modern path; legacy
+  callers keep them. The GET stream is dropped by `WithStreamableStateless`.)
 - [x] **`subscriptions/listen`** — single long-lived POST-response stream
   replacing the GET endpoint + subscribe/unsubscribe; clients opt into notif
   types; tag with `io.modelcontextprotocol/subscriptionId`. (Protocol method +
@@ -184,19 +191,26 @@ clients keep working, then make it the default in v2.
 **Transport**
 - [x] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).
   (`WithStreamableStateless()` drops the session-id lifecycle on the POST path.)
-- [ ] **Remove SSE resumability** (`Last-Event-ID`, event IDs).
+- [x] **Remove SSE resumability** (`Last-Event-ID`, event IDs). (Vacuous —
+  mcp-go never emitted SSE event IDs nor honored `Last-Event-ID`, so there is no
+  resumability to remove; the modern stream carries only `subscriptionId`-tagged
+  frames.)
 - [x] **Required routing headers** `Mcp-Method`, `Mcp-Name` on Streamable HTTP POST.
   (Validated-when-present by default; `WithStreamableStateless()` hard-requires
   `Mcp-Method` → `-32020` on absence/mismatch.)
-- [ ] **`CacheableResult`** — `ttlMs` + `cacheScope` on `tools/list`,
+- [x] **`CacheableResult`** — `ttlMs` + `cacheScope` on `tools/list`,
   `prompts/list`, `resources/list`, `resources/read`, `resources/templates/list`.
+  (`WithResultCache(ttlMs, scope)` configures the hint; `applyCacheHint` stamps it
+  onto the five `cacheableMethods` results for modern callers only.)
 - [x] **W3C Trace Context** in `_meta` (`traceparent`/`tracestate`/`baggage`) —
   ties into existing OTel middleware.
 - [x] Deterministic ordering of `tools/list`.
 
 **Extensions framework (SEP-2133)**
-- [ ] Add the **`extensions` capability map** (reverse-DNS ids) to client/server
-  capabilities.
+- [x] Add the **`extensions` capability map** (reverse-DNS ids) to client/server
+  capabilities. (`extensionsMap` advertises the reverse-DNS ids the server
+  supports — `io.modelcontextprotocol/ui` today — under `capabilities.extensions`
+  in `server/discover`.)
 - [x] Re-express **MCP Apps** through the extensions framework. RESOLVED: the MCP
   Apps extension identifier is `io.modelcontextprotocol/ui` (NOT `/apps` — the
   feature is "MCP Apps" but the negotiated id is `/ui`, per the ext-apps spec
@@ -215,13 +229,27 @@ clients keep working, then make it the default in v2.
   removed (see Cross-cutting "Auth stance") — enforcement (iss validation, DCR)
   belongs at the gateway, and mcp-go stays advertise-only. Not implemented by
   design; revisit only if the auth stance changes.
-- [ ] Error renumbering: resource-not-found `-32002` → `-32602`;
+- [x] Error renumbering: resource-not-found `-32002` → `-32602`;
   `HeaderMismatch` `-32001`→`-32020`, etc.; adopt the `-32020..-32099` MCP range.
-- [ ] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
-  migrations (tool params / provider APIs / stderr+OTel).
+  (`modernizeError` maps resource-not-found to `-32602` for modern callers while
+  legacy keeps `-32001` — covered by `TestModern_ResourceNotFoundRenumbered`. The
+  modern MCP-specific codes already live in the reserved range: `HeaderMismatch`
+  `-32020`, `MissingRequiredClientCapability` `-32021`, `UnsupportedProtocolVersion`
+  `-32022`, `URLElicitationRequired` `-32042`. mcp-go emits no other legacy
+  `-3200x` code from a handler — auth/rate-limit are HTTP/gateway-terminated in
+  the modern model, not JSON-RPC-renumbered by the spec — so the sweep is complete.)
+- [x] **Deprecate (keep working 12 mo)** Roots, Sampling, Logging; document the
+  migrations (tool params / provider APIs / stderr+OTel). (`Session.CreateMessage`/
+  `CreateMessageWithTools`, `Session.ListRoots`, and the `Session.Log`/`Debug`/…/
+  `Emergency` cluster carry Go `// Deprecated:` markers; all stay functional. See
+  `docs/deprecations.md` for the migrations. `SetLogLevel`/`LogLevel` are retained
+  — the modern log level travels in `_meta`.)
 - [x] Loosen `inputSchema`/`outputSchema` to full JSON Schema 2020-12 (`$ref`,
   `oneOf`/`anyOf`, conditionals).
-- [ ] Make `Stateless` the default; tag **v2.0.0**.
+- [ ] Make `Stateless` the default; tag **v2.0.0**. **DEFERRED — held at v1 by
+  decision.** All Phase 4 behavior ships behind the `WithStreamableStateless`
+  opt-in so v1 servers are unaffected; the default flip and the `v2.0.0` tag are
+  intentionally not done. Everything above is additive and backward-compatible.
 
 ---
 
