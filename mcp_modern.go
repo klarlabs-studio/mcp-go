@@ -193,6 +193,26 @@ func withResultType(resp *protocol.Response) {
 	}
 }
 
+// retiredInModern lists the methods a modern (2026-07-28) caller must not
+// invoke: the stateless redesign removes the initialize/ping lifecycle
+// (server/discover + per-request _meta replace the handshake), logging/setLevel
+// (the log level travels in _meta), the resources subscribe/unsubscribe pair and
+// the roots list-changed notification (subscriptions/listen + MRTR replace
+// them), and tasks/list (the tasks extension favors direct handles). A modern
+// request for any of these gets MethodNotFound. Legacy (<=2025-11-25) callers
+// never enter the modern path, so their initialize/ping back-compat probe is
+// untouched.
+var retiredInModern = map[string]bool{
+	protocol.MethodInitialize:           true,
+	protocol.MethodInitialized:          true,
+	protocol.MethodPing:                 true,
+	protocol.MethodLoggingSetLevel:      true,
+	protocol.MethodResourcesSubscribe:   true,
+	protocol.MethodResourcesUnsubscribe: true,
+	protocol.MethodRootsListChanged:     true,
+	protocol.MethodTasksList:            true,
+}
+
 // cacheableMethods are the read/list operations whose results carry a
 // CacheableResult hint (ttlMs/cacheScope) in the modern protocol.
 var cacheableMethods = map[string]bool{
