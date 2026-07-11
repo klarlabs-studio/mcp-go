@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.23.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.22.0...v1.23.0) - 2026-07-11
+
+Completes the 2026-07-28 stateless surface (Phase 4) on **v1** — additive and
+backward-compatible. Modern behavior stays gated behind the
+`WithStreamableStateless` opt-in and the per-request `_meta`; existing v1 servers
+are unaffected. Making `Stateless` the default and tagging v2.0.0 is deferred.
+
+### Added
+
+- **Retired lifecycle methods on the modern path** — a modern (2026-07-28) caller
+  invoking `initialize`, `notifications/initialized`, `ping`, `logging/setLevel`,
+  `resources/subscribe`/`unsubscribe`, or `notifications/roots/list_changed` now
+  gets `MethodNotFound` (`retiredInModern`); `server/discover` + per-request
+  `_meta` + `subscriptions/listen` replace them. Legacy (`<=2025-11-25`) callers
+  never enter the modern path and keep them as the back-compat probe.
+
+### Deprecated
+
+- **Server-initiated sampling, roots, and logging** now carry Go `// Deprecated:`
+  markers so `gopls`/`staticcheck`/pkg.go.dev flag their use:
+  `Session.CreateMessage`/`CreateMessageWithTools`, `Session.ListRoots`, and the
+  `Session.Log`/`Debug`/…/`Emergency` cluster. They stay fully functional for the
+  12-month window (nothing removed). `SetLogLevel`/`LogLevel` are retained — the
+  modern log level travels in `_meta`. See `docs/deprecations.md` for the
+  migrations (provider APIs / tool params / stderr + OpenTelemetry).
+
+## [1.22.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.21.0...v1.22.0) - 2026-07-10
+
 ### Added — 2026-07-28 stateless foundation (Phase 4, experimental)
 
 First increment of the modern, stateless MCP revision (RC, SEP-2575). This lays
@@ -96,7 +124,7 @@ is deliberately NOT yet in `SupportedVersions`.
 - **Deprecation posture** (SEP-2577) — sampling, roots, and logging are
   documented as deprecated in 2026-07-28 (12-month window; still fully
   functional) with their migration paths (provider APIs / tool params / stderr
-  + OpenTelemetry).
+  + OpenTelemetry). (Formalized with Go `// Deprecated:` markers in 1.23.0.)
 
 ### Certified — 2025-11-25 negotiable (Phase 3 complete)
 
