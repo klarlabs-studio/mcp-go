@@ -15,6 +15,40 @@
       "name": "main.go",
       "type": "prompt",
       "path": "examples/prompts/main.go"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "mcp.go"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "protocol/constants.go"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "protocol/errors.go"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "server/tool.go"
+    },
+    {
+      "name": "mcp",
+      "type": "mcp_runtime",
+      "path": "transport/http.go"
+    }
+  ],
+  "tool_permission_matrix": [
+    {
+      "agent": "mcp.go",
+      "tools": [
+        "process"
+      ],
+      "path": "mcp.go"
     }
   ]
 }
