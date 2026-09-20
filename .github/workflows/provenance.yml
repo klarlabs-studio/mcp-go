@@ -5,18 +5,17 @@ on:
 permissions:
   contents: read
 jobs:
-  # Informational: reports whether the commit carries a warden provenance note
-  # (CI provenance-skip). Non-gating until local warden adoption produces notes.
+  # Reports whether the PR head carries a warden provenance note. The CI
+  # workflow uses the same verify action to provenance-skip expensive jobs;
+  # this workflow is the visible provenance signal on the PR checks list.
   verify:
     name: Warden provenance
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
       - uses: klarlabs-studio/warden/.github/actions/warden-verify@main
         with:
           commit: ${{ github.event.pull_request.head.sha }}

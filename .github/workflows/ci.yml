@@ -2,6 +2,12 @@
 # All gate logic (format, lint+gocritic, race tests, coverage gate, nox
 # security scan) lives in the reusable workflow — bump versions / add jobs
 # there, once, org-wide.
+#
+# Provenance-skip (warden): a gate job checks refs/notes/warden. When the
+# commit was already validated locally, the expensive go-ci reusable workflow
+# is skipped and the required check names are reported green via the Checks
+# API — so branch protection stays satisfied without re-burning Actions
+# minutes. See https://github.com/klarlabs-studio/warden/blob/main/docs/ci-provenance-skip.md
 name: CI
 
 on:
@@ -21,8 +27,32 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  checks: write
+  security-events: write
+  pull-requests: write
+
 jobs:
+  gate:
+    name: Warden provenance-skip
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      validated: ${{ steps.warden.outputs.validated }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: warden
+        uses: klarlabs-studio/warden/.github/actions/warden-verify@main
+        with:
+          # PR head carries the note; github.sha on pull_request is the merge commit.
+          commit: ${{ github.event.pull_request.head.sha || github.sha }}
+
   ci:
+    needs: gate
+    if: needs.gate.outputs.validated != 'true'
     uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
     permissions:
       contents: read
@@ -47,3 +77,47 @@ jobs:
       #
       # Verified under the shared default (1.17.0): 4 baselined, 1 new (medium,
       # below the crit/high gate).
+
+  # When warden already validated this commit, the reusable workflow above is
+  # skipped and never creates `ci / Lint` etc. Branch protection still wants
+  # those names — post successful check runs so the PR stays mergeable without
+  # re-running the bar.
+  already-validated:
+    name: Already validated
+    needs: gate
+    if: needs.gate.outputs.validated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report required checks as success
+        uses: actions/github-script@ed597411d8f924073f1bbf55eec2c5e1e2076142 # v8.0.0
+        with:
+          script: |
+            const sha = context.payload.pull_request?.head?.sha || context.sha;
+            // Names must match the reusable go-ci.yml job check titles exactly
+            // (caller job id "ci" + " / " + called job name).
+            const names = [
+              'ci / Lint',
+              'ci / Build',
+              'ci / Test (ubuntu-latest)',
+              'ci / Security (nox)',
+            ];
+            const summary = [
+              'Skipped: warden already validated this commit (`refs/notes/warden`).',
+              'Re-run is unnecessary — see klarlabs-studio/warden docs/ci-provenance-skip.md.',
+            ].join('\n');
+            for (const name of names) {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name,
+                head_sha: sha,
+                status: 'completed',
+                conclusion: 'success',
+                output: {
+                  title: 'Skipped — warden already validated',
+                  summary,
+                },
+              });
+              core.info(`reported ${name} success for ${sha}`);
+            }

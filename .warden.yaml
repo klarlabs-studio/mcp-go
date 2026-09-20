@@ -3,6 +3,10 @@
 # enforced pre-commit / pre-push. Arm locally with `make hooks` (runs
 # `warden init`). Policy below mirrors the klarlabs shared go-ci.yml bar:
 # format → vet → lint(+gocritic) on commit; build → race tests on push.
+#
+# After a passing gate, warden writes refs/notes/warden. GitHub Actions then
+# provenance-skips the expensive go-ci reusable workflow for that commit
+# (.github/workflows/ci.yml), so validated pushes do not re-burn minutes.
 hooks: {pre_commit: true, pre_push: true}
 commands:
   fmt: "test -z \"$(gofmt -l .)\""
