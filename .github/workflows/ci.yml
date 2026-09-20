@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Report required checks as success
-        uses: actions/github-script@ed597411d8f924073f1bbf55eec2c5e1e2076142 # v8.0.0
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const sha = context.payload.pull_request?.head?.sha || context.sha;
