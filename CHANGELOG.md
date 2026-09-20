@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Warden provenance-skip for CI.** `ci.yml` runs `warden-verify` first; when
+  the commit already carries `refs/notes/warden`, the expensive go-ci reusable
+  workflow is skipped and required check names are reported green via the
+  Checks API. Arm locally with `make hooks` so validated pushes do not re-burn
+  Actions minutes.
 - **SEP-2243 `x-mcp-header` / `Mcp-Param-*`.** Mark tool params with
   `jsonschema:"header=Region"` (emits `"x-mcp-header"`). Streamable HTTP
   clients cache schemas from `ListTools`, exclude invalid annotations, and
