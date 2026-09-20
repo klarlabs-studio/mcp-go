@@ -120,6 +120,136 @@ func (b *SkillBuilder) FromDir(dir string) error {
 	return b.server.Err()
 }
 
+// FromArchive registers a packed skill (.tar.gz or .zip) as a single skill://
+// resource and adds a type:"archive" entry to skill://index.json.
+//
+// The archive URI is skill://{skillPath}{suffix} (e.g. skill://pdf.tar.gz).
+// Hosts unpack into skill://{skillPath}/… per SEP-2640. The archive MUST
+// contain SKILL.md at its root; this method only validates the path, suffix,
+// and frontmatter name when a sibling SKILL.md is not required on disk —
+// callers are responsible for archive contents.
+//
+// Experimental: SEP-2640 is still in definition; see the package comment.
+func (b *SkillBuilder) FromArchive(archivePath string) error {
+	if b == nil || b.server == nil {
+		return fmt.Errorf("skill: nil builder")
+	}
+	if b.skillPath == "" {
+		return fmt.Errorf("skill: empty skill path")
+	}
+	if err := validateSkillPath(b.skillPath); err != nil {
+		return err
+	}
+	abs, err := filepath.Abs(archivePath)
+	if err != nil {
+		return fmt.Errorf("skill %q: resolve archive: %w", b.skillPath, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return fmt.Errorf("skill %q: %w", b.skillPath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("skill %q: archive path %q is a directory", b.skillPath, abs)
+	}
+	suffix, mime, err := skillArchiveSuffix(abs)
+	if err != nil {
+		return fmt.Errorf("skill %q: %w", b.skillPath, err)
+	}
+	uri := SkillScheme + "://" + b.skillPath + suffix
+	final := filepath.Base(b.skillPath)
+	desc := "Archived skill " + final
+	// Best-effort: if a sibling SKILL.md exists next to the archive, use its
+	// frontmatter description (common layout: skill-dir/SKILL.md + skill-dir.tar.gz).
+	if sibling := filepath.Join(filepath.Dir(abs), SkillEntryPoint); fileExists(sibling) {
+		raw, readErr := os.ReadFile(sibling) //nolint:gosec // sibling path is under the caller-supplied archive dir.
+		if readErr == nil {
+			if fm, fmErr := parseSkillFrontmatter(string(raw)); fmErr == nil {
+				if fm.Name != final {
+					return fmt.Errorf("skill %q: frontmatter name %q must equal final path segment %q", b.skillPath, fm.Name, final)
+				}
+				desc = fm.Description
+			}
+		}
+	}
+	b.server.Resource(uri).
+		Name(final).
+		Description(desc).
+		MimeType(mime).
+		Handler(func(_ context.Context, reqURI string, _ map[string]string) (*ResourceContent, error) {
+			data, err := os.ReadFile(abs) //nolint:gosec // abs came from filepath.Abs of caller path.
+			if err != nil {
+				return nil, err
+			}
+			return &ResourceContent{
+				URI:      reqURI,
+				MimeType: mime,
+				Blob:     base64.StdEncoding.EncodeToString(data),
+			}, nil
+		})
+	b.server.addSkillIndexEntry(SkillIndexEntry{
+		Name:        final,
+		Type:        SkillIndexTypeArchive,
+		Description: desc,
+		URL:         uri,
+	})
+	return b.server.Err()
+}
+
+func skillArchiveSuffix(path string) (suffix, mime string, err error) {
+	lower := strings.ToLower(path)
+	switch {
+	case strings.HasSuffix(lower, ".tar.gz"):
+		return ".tar.gz", "application/gzip", nil
+	case strings.HasSuffix(lower, ".tgz"):
+		return ".tar.gz", "application/gzip", nil
+	case strings.HasSuffix(lower, ".zip"):
+		return ".zip", "application/zip", nil
+	default:
+		return "", "", fmt.Errorf("archive must be .tar.gz, .tgz, or .zip")
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// SkillTemplate registers a parameterized skill namespace as an MCP resource
+// template and a type:"mcp-resource-template" index entry (no name).
+// uriTemplate must be an RFC 6570-style skill:// template that resolves to a
+// SKILL.md URI, e.g. "skill://docs/{product}/SKILL.md". Chain Handler to serve
+// concrete URIs after variable binding.
+//
+// Experimental: SEP-2640 is still in definition; see the package comment.
+func (s *Server) SkillTemplate(uriTemplate, description string) *ResourceBuilder {
+	if s == nil {
+		return &ResourceBuilder{err: fmt.Errorf("skill template: nil server")}
+	}
+	uriTemplate = strings.TrimSpace(uriTemplate)
+	description = strings.TrimSpace(description)
+	if uriTemplate == "" {
+		return &ResourceBuilder{server: s, err: fmt.Errorf("skill template: empty uri template")}
+	}
+	if description == "" {
+		return &ResourceBuilder{server: s, err: fmt.Errorf("skill template: empty description")}
+	}
+	if !strings.HasPrefix(uriTemplate, SkillScheme+"://") {
+		return &ResourceBuilder{server: s, err: fmt.Errorf("skill template: uri must start with %s://", SkillScheme)}
+	}
+	if !strings.Contains(uriTemplate, "{") {
+		return &ResourceBuilder{server: s, err: fmt.Errorf("skill template: uri must include at least one {variable}")}
+	}
+	s.addSkillIndexEntry(SkillIndexEntry{
+		Type:        SkillIndexTypeTemplate,
+		Description: description,
+		URL:         uriTemplate,
+	})
+	return s.Resource(uriTemplate).
+		Name("skill-template").
+		Description(description).
+		MimeType(SkillMarkdownMIME)
+}
+
 func (b *SkillBuilder) loadSkillRoot(dir string) (root string, fm SkillFrontmatter, err error) {
 	root, err = filepath.Abs(dir)
 	if err != nil {

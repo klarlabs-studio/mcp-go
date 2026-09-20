@@ -660,6 +660,8 @@ type resultCacheConfig struct {
 // WithResultCache sets the cache hint (ttlMs and cacheScope, "public" or
 // "private") advertised on cacheable list/read results to modern (2026-07-28)
 // clients via CacheableResult. Legacy responses are unaffected.
+// When unset, mcp-go defaults to ttlMs=60000 (one minute) and
+// cacheScope="private". Pass ttlMs 0 for immediately-stale results.
 func WithResultCache(ttlMs int64, scope string) Option {
 	return func(s *Server) {
 		s.resultCache = &resultCacheConfig{ttlMs: ttlMs, scope: scope}
@@ -667,8 +669,8 @@ func WithResultCache(ttlMs int64, scope string) Option {
 }
 
 // ResultCache returns the configured cache hint. ok is true when
-// WithResultCache was set; otherwise applyCacheHint uses the immediately-stale
-// / private defaults required by CacheableResult.
+// WithResultCache was set; otherwise applyCacheHint uses the one-minute
+// private default.
 func (s *Server) ResultCache() (ttlMs int64, scope string, ok bool) {
 	if s.resultCache == nil {
 		return 0, "", false

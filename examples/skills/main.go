@@ -30,6 +30,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Optional: archive and template index entries (SEP-2640).
+	// srv.Skill("pdf-pack").FromArchive("pdf-pack.tar.gz")
+	// srv.SkillTemplate("skill://docs/{product}/SKILL.md", "Product docs").
+	//     Handler(...)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

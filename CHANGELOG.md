@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **SEP-2243 `x-mcp-header` / `Mcp-Param-*`.** Mark tool params with
+  `jsonschema:"header=Region"` (emits `"x-mcp-header"`). Streamable HTTP
+  clients cache schemas from `ListTools`, exclude invalid annotations, and
+  mirror arguments into `Mcp-Param-*` on `tools/call`. HTTP servers validate
+  header↔body matches (`-32020` on mismatch).
+- **Skills archive + template index entries (SEP-2640, experimental).**
+  `Skill(path).FromArchive(file)` serves `.tar.gz`/`.zip` with
+  `type:"archive"`; `SkillTemplate(uri, desc)` registers
+  `type:"mcp-resource-template"` plus an MCP resource template.
+- **`client.Connect`.** Prefers `server/discover`, falls back to `Initialize`
+  on MethodNotFound.
+
+### Changed
+
+- **Client defaults to modern (`2026-07-28`).** `client.New` attaches
+  per-request `_meta` without a prior Discover. Use
+  `WithProtocolVersion(protocol.MCPVersion)` for initialize-era-only peers.
+- **Default CacheableResult TTL is 60s private** (was immediately stale /
+  `ttlMs: 0`). Override with `WithResultCache`; pass `ttlMs: 0` for the old
+  behavior.
+- **Deprecation docs** steer new code to Connect/Discover and provider APIs;
+  `examples/typed-client` uses `Connect`.
+
 ## [1.27.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.26.0...v1.27.0) - 2026-08-15
 
 ### Added

@@ -467,6 +467,7 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	if h.requestContextFn != nil {
 		ctx = h.requestContextFn(ctx, r)
 	}
+	ctx = ContextWithHTTPHeaders(ctx, r.Header)
 	// Correlate this request with the client's server-push stream so handlers
 	// like resources/subscribe can target it. The client echoes the clientId
 	// it received on its SSE connection.
@@ -966,6 +967,7 @@ func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, hand
 	if h.requestContextFn != nil {
 		ctx = h.requestContextFn(ctx, r)
 	}
+	ctx = ContextWithHTTPHeaders(ctx, r.Header)
 
 	if h.maxRequestBytes > 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBytes)

@@ -129,6 +129,110 @@ func TestSkills_DiscoverAndRead(t *testing.T) {
 	}
 }
 
+func TestSkills_ArchiveAndTemplate(t *testing.T) {
+	root := t.TempDir()
+	archive := filepath.Join(root, "pdf-pack.zip")
+	if err := os.WriteFile(archive, []byte("PK\x03\x04fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Sibling SKILL.md for description / name check.
+	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte("---\nname: pdf-pack\ndescription: Pack PDFs\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServer(ServerInfo{Name: "skills-demo", Version: "1"})
+	if err := srv.Skill("pdf-pack").FromArchive(archive); err != nil {
+		t.Fatalf("FromArchive: %v", err)
+	}
+	srv.SkillTemplate("skill://docs/{product}/SKILL.md", "Product docs skills").
+		Handler(func(_ context.Context, uri string, params map[string]string) (*ResourceContent, error) {
+			return &ResourceContent{URI: uri, MimeType: SkillMarkdownMIME, Text: "# " + params["product"]}, nil
+		})
+	if err := srv.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := newRequestHandler(srv)
+	idxResp, err := handler.HandleRequest(context.Background(), &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodResourcesRead,
+		Params: mustJSON(t, map[string]any{"uri": SkillIndexURI}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	idxText := resourceText(t, idxResp.Result)
+	var idx SkillIndex
+	if err := json.Unmarshal([]byte(idxText), &idx); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Skills) != 2 {
+		t.Fatalf("index entries = %#v", idx.Skills)
+	}
+	types := map[string]bool{}
+	for _, e := range idx.Skills {
+		types[e.Type] = true
+		switch e.Type {
+		case SkillIndexTypeArchive:
+			if e.Name != "pdf-pack" || e.URL != "skill://pdf-pack.zip" {
+				t.Errorf("archive entry = %#v", e)
+			}
+		case SkillIndexTypeTemplate:
+			if e.Name != "" || e.URL != "skill://docs/{product}/SKILL.md" {
+				t.Errorf("template entry = %#v", e)
+			}
+		}
+	}
+	if !types[SkillIndexTypeArchive] || !types[SkillIndexTypeTemplate] {
+		t.Fatalf("types = %v", types)
+	}
+
+	readArch, err := handler.HandleRequest(context.Background(), &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodResourcesRead,
+		Params: mustJSON(t, map[string]any{"uri": "skill://pdf-pack.zip"}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := resourceBlob(t, readArch.Result)
+	if blob == "" {
+		t.Fatal("expected archive blob")
+	}
+}
+
+func resourceText(t *testing.T, result any) string {
+	t.Helper()
+	res, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type %T", result)
+	}
+	switch contents := res["contents"].(type) {
+	case []any:
+		return contents[0].(map[string]any)["text"].(string)
+	case []map[string]any:
+		return contents[0]["text"].(string)
+	default:
+		t.Fatalf("contents type %T", res["contents"])
+		return ""
+	}
+}
+
+func resourceBlob(t *testing.T, result any) string {
+	t.Helper()
+	res, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type %T", result)
+	}
+	switch contents := res["contents"].(type) {
+	case []any:
+		return contents[0].(map[string]any)["blob"].(string)
+	case []map[string]any:
+		return contents[0]["blob"].(string)
+	default:
+		t.Fatalf("contents type %T", res["contents"])
+		return ""
+	}
+}
+
 func TestSkills_NotAdvertisedWithoutRegistration(t *testing.T) {
 	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
 	srv.Tool("t").Description("").Handler(func(_ struct{}) (string, error) { return "ok", nil })

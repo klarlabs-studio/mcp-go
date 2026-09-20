@@ -1344,6 +1344,14 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 		return nil, protocol.NewInvalidParams("tool not found: " + params.Name)
 	}
 
+	// SEP-2243: when the tool advertises x-mcp-header, Streamable HTTP callers
+	// must mirror those arguments into Mcp-Param-* headers.
+	if hdrs := transport.HTTPHeadersFromContext(ctx); hdrs != nil {
+		if err := protocol.ValidateParamHeaders(hdrs, tool.InputSchema(), params.Arguments); err != nil {
+			return nil, protocol.NewHeaderMismatch(err.Error())
+		}
+	}
+
 	augmented, err := resolveTaskAugmentation(ctx, tool.TaskSupport(), params.Name, params.Task != nil)
 	if err != nil {
 		return nil, err

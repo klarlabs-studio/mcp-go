@@ -89,6 +89,14 @@ type Tool struct {
 // request (MCP 2025-11-25). Empty is treated as "forbidden".
 func (t *Tool) TaskSupport() TaskSupport { return t.taskSupport }
 
+// InputSchema returns the JSON Schema advertised for this tool's arguments.
+func (t *Tool) InputSchema() any {
+	if t == nil {
+		return nil
+	}
+	return t.inputSchema
+}
+
 // ToolBuilder provides a fluent API for building tools.
 type ToolBuilder struct {
 	tool   *Tool

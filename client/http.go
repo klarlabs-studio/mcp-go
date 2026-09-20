@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // HTTPTransport speaks JSON-RPC to an MCP server over HTTP. It mirrors
@@ -274,6 +275,13 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 	for k, vs := range t.headers {
 		for _, v := range vs {
 			httpReq.Header.Add(k, v)
+		}
+	}
+	if extra := transport.RequestHeadersFromContext(ctx); extra != nil {
+		for k, vs := range extra {
+			for _, v := range vs {
+				httpReq.Header.Set(k, v)
+			}
 		}
 	}
 	t.mu.Lock()
