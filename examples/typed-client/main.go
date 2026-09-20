@@ -50,8 +50,8 @@ func main() {
 	c := client.New(tr)
 	defer func() { _ = c.Close() }()
 
-	if _, err := c.Initialize(ctx); err != nil {
-		log.Fatalf("initialize: %v", err)
+	if _, err := c.Connect(ctx); err != nil {
+		log.Fatalf("connect: %v", err)
 	}
 
 	// 1. Recommended: one-shot typed call.

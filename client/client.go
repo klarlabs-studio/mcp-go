@@ -2,6 +2,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mcp/protocol"
+	"go.klarlabs.de/mcp/transport"
 )
 
 // Sentinel errors for client operations.
@@ -59,6 +61,9 @@ type Client struct {
 	// modern is true after Discover (or when constructed with ModernVersion):
 	// subsequent calls attach per-request _meta instead of relying on initialize.
 	modern bool
+	// toolSchemas caches inputSchema from ListTools for SEP-2243 Mcp-Param-*
+	// header emission on tools/call.
+	toolSchemas map[string]any
 }
 
 // Icon represents an icon for UI display.
@@ -200,22 +205,38 @@ func WithProtocolVersion(version string) Option {
 }
 
 // New creates a new MCP client with the given transport.
+//
+// By default the client speaks the published stateless revision
+// (protocol.ModernVersion): requests carry per-request `_meta`, and
+// Connect/Discover are the preferred handshakes. Pass
+// WithProtocolVersion(protocol.MCPVersion) (or another initialize-era
+// revision) for legacy initialize-only servers.
 func New(transport Transport, opts ...Option) *Client {
 	options := clientOptions{
 		timeout:     30 * time.Second,
 		clientName:  "mcp-go-client",
 		clientVer:   "1.0.0",
-		protocolVer: protocol.MCPVersion,
+		protocolVer: protocol.ModernVersion,
 	}
 
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	return &Client{
-		transport: transport,
-		opts:      options,
+	c := &Client{
+		transport:   transport,
+		opts:        options,
+		modern:      isModernProtocol(options.protocolVer),
+		toolSchemas: map[string]any{},
 	}
+	if setter, ok := transport.(protocolVersionSetter); ok && options.protocolVer != "" {
+		setter.SetProtocolVersion(options.protocolVer)
+	}
+	return c
+}
+
+func isModernProtocol(v string) bool {
+	return v == protocol.ModernVersion
 }
 
 // parseIcons parses an array of icon data into Icon structs.
@@ -292,10 +313,18 @@ func applyImplementation(info *ServerInfo, raw any) {
 	}
 }
 
-// Initialize performs the MCP handshake with the server.
+// Initialize performs the legacy MCP initialize handshake with the server.
+// Prefer Connect or Discover for 2026-07-28 servers. Initialize clears modern
+// mode so subsequent calls do not attach per-request `_meta`.
 func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
+	ver := c.opts.protocolVer
+	if isModernProtocol(ver) {
+		// initialize-era negotiation stops at MCPVersion; requesting the
+		// modern revision only falls back on the server side.
+		ver = protocol.MCPVersion
+	}
 	params := map[string]any{
-		fieldProtocolVersion: c.opts.protocolVer,
+		fieldProtocolVersion: ver,
 		"clientInfo": map[string]any{
 			fieldName:    c.opts.clientName,
 			fieldVersion: c.opts.clientVer,
@@ -335,6 +364,7 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 
 	c.mu.Lock()
 	c.serverInfo = info
+	c.modern = false
 	c.mu.Unlock()
 
 	if setter, ok := c.transport.(protocolVersionSetter); ok && info.ProtocolVersion != "" {
@@ -342,6 +372,20 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 	}
 
 	return info, nil
+}
+
+// Connect prefers server/discover (stateless 2026-07-28). When the peer does
+// not implement discover (MethodNotFound), it falls back to Initialize.
+func (c *Client) Connect(ctx context.Context) (*ServerInfo, error) {
+	info, err := c.Discover(ctx)
+	if err == nil {
+		return info, nil
+	}
+	var rpcErr *protocol.Error
+	if errors.As(err, &rpcErr) && rpcErr.Code == protocol.CodeMethodNotFound {
+		return c.Initialize(ctx)
+	}
+	return nil, err
 }
 
 type protocolVersionSetter interface {
@@ -403,6 +447,8 @@ func (c *Client) Discover(ctx context.Context) (*ServerInfo, error) {
 }
 
 // ListTools returns the list of tools available on the server.
+// On Streamable HTTP, tools with invalid x-mcp-header annotations are
+// excluded (SEP-2243). Valid inputSchemas are cached for Mcp-Param emission.
 func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	resp, err := c.call(ctx, protocol.MethodToolsList, nil)
 	if err != nil {
@@ -419,7 +465,9 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 		return nil, fmt.Errorf("list tools: %w", ErrInvalidResult)
 	}
 
+	filterHeaders := c.emitsHTTPHeaders()
 	tools := make([]ToolInfo, 0, len(toolsRaw))
+	schemas := make(map[string]any, len(toolsRaw))
 	for _, tr := range toolsRaw {
 		tm, ok := tr.(map[string]any)
 		if !ok {
@@ -435,20 +483,50 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 		}
 		if schema, ok := tm["inputSchema"]; ok {
 			tool.InputSchema = schema
+			if filterHeaders {
+				if _, err := protocol.ExtractParamHeaders(schema); err != nil {
+					continue // exclude malformed x-mcp-header tools
+				}
+			}
+			if tool.Name != "" {
+				schemas[tool.Name] = schema
+			}
 		}
 		tools = append(tools, tool)
 	}
+
+	c.mu.Lock()
+	c.toolSchemas = schemas
+	c.mu.Unlock()
 
 	return tools, nil
 }
 
 // CallTool calls a tool on the server with the given arguments.
+// When the tool's inputSchema was learned via ListTools and carries
+// x-mcp-header annotations, Streamable HTTP requests include matching
+// Mcp-Param-* headers (SEP-2243).
 func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*ToolResult, error) {
 	params := map[string]any{
 		"name": name,
 	}
 	if arguments != nil {
 		params["arguments"] = arguments
+	}
+
+	if c.emitsHTTPHeaders() {
+		c.mu.RLock()
+		schema := c.toolSchemas[name]
+		c.mu.RUnlock()
+		if schema != nil {
+			hdrs, err := protocol.BuildParamHeaders(schema, arguments)
+			if err != nil {
+				return nil, fmt.Errorf("call tool %q: mcp-param: %w", name, err)
+			}
+			if len(hdrs) > 0 {
+				ctx = transport.ContextWithRequestHeaders(ctx, hdrs)
+			}
+		}
 	}
 
 	resp, err := c.call(ctx, protocol.MethodToolsCall, params)
@@ -500,6 +578,11 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*Too
 	}
 
 	return toolResult, nil
+}
+
+func (c *Client) emitsHTTPHeaders() bool {
+	_, ok := c.transport.(*HTTPTransport)
+	return ok
 }
 
 // ListResources returns the list of resources available on the server.
@@ -714,6 +797,9 @@ func (c *Client) Close() error {
 // (protocolVersion, clientInfo, clientCapabilities). Existing _meta is left
 // untouched so Discover (which already sends it) is unchanged. Legacy clients
 // that only called Initialize never set c.modern.
+//
+// Injection splices into the raw JSON object so CallTool argument key order and
+// integer encoding are preserved (no map re-marshal round-trip).
 func (c *Client) withModernMeta(params json.RawMessage) (json.RawMessage, error) {
 	c.mu.RLock()
 	modern := c.modern
@@ -722,24 +808,63 @@ func (c *Client) withModernMeta(params json.RawMessage) (json.RawMessage, error)
 	if !modern {
 		return params, nil
 	}
-	obj := map[string]any{}
-	if len(params) > 0 {
-		if err := json.Unmarshal(params, &obj); err != nil {
-			return params, nil
-		}
-	}
-	if _, ok := obj["_meta"]; ok {
+	if rawHasTopLevelMeta(params) {
 		return params, nil
 	}
-	obj["_meta"] = map[string]any{
+	meta := map[string]any{
 		protocol.MetaKeyProtocolVersion:    protocol.ModernVersion,
 		protocol.MetaKeyClientInfo:         map[string]any{fieldName: name, fieldVersion: ver},
 		protocol.MetaKeyClientCapabilities: map[string]any{},
 	}
-	out, err := json.Marshal(obj)
+	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return nil, fmt.Errorf("marshal modern _meta: %w", err)
 	}
+	return spliceObjectField(params, "_meta", metaJSON)
+}
+
+// rawHasTopLevelMeta reports whether params is a JSON object that already
+// carries a top-level "_meta" key.
+func rawHasTopLevelMeta(params json.RawMessage) bool {
+	if len(params) == 0 {
+		return false
+	}
+	var probe struct {
+		Meta json.RawMessage `json:"_meta"`
+	}
+	if err := json.Unmarshal(params, &probe); err != nil {
+		return false
+	}
+	return len(probe.Meta) > 0 && string(probe.Meta) != "null"
+}
+
+// spliceObjectField inserts `"key": valueJSON` into a JSON object without
+// re-encoding sibling fields. Empty/null params become a one-field object.
+func spliceObjectField(params json.RawMessage, key string, valueJSON []byte) (json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(params)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		out := make([]byte, 0, 8+len(key)+len(valueJSON))
+		out = append(out, '{', '"')
+		out = append(out, key...)
+		out = append(out, '"', ':')
+		out = append(out, valueJSON...)
+		out = append(out, '}')
+		return out, nil
+	}
+	if trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {
+		return params, nil
+	}
+	inner := bytes.TrimSpace(trimmed[1 : len(trimmed)-1])
+	out := make([]byte, 0, len(trimmed)+len(key)+len(valueJSON)+4)
+	out = append(out, '{', '"')
+	out = append(out, key...)
+	out = append(out, '"', ':')
+	out = append(out, valueJSON...)
+	if len(inner) > 0 {
+		out = append(out, ',')
+		out = append(out, inner...)
+	}
+	out = append(out, '}')
 	return out, nil
 }
 
@@ -755,9 +880,13 @@ func (c *Client) call(ctx context.Context, method string, params any) (*protocol
 			return nil, fmt.Errorf("marshal params: %w", err)
 		}
 	}
-	paramsRaw, err := c.withModernMeta(paramsRaw)
-	if err != nil {
-		return nil, err
+	// initialize-era handshake must not carry modern `_meta`.
+	if method != protocol.MethodInitialize {
+		var err error
+		paramsRaw, err = c.withModernMeta(paramsRaw)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	idRaw, err := json.Marshal(id)

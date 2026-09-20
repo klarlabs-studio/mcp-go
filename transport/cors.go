@@ -83,7 +83,7 @@ type CORSConfig struct {
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
 		AllowOrigins: []string{"*"},
-		AllowMethods: []string{"GET", "POST", "OPTIONS"},
+		AllowMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		AllowHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
 		MaxAge:       86400,
 	}
@@ -93,7 +93,7 @@ func DefaultCORSConfig() CORSConfig {
 func CORSHandler(config CORSConfig, next http.Handler) http.Handler {
 	// Set defaults
 	if len(config.AllowMethods) == 0 {
-		config.AllowMethods = []string{"GET", "POST", "OPTIONS"}
+		config.AllowMethods = []string{http.MethodGet, http.MethodPost, http.MethodOptions}
 	}
 	if len(config.AllowHeaders) == 0 {
 		config.AllowHeaders = []string{"Content-Type", "Authorization", "X-Request-ID"}

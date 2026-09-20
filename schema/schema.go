@@ -52,6 +52,11 @@ type Schema struct {
 	Maximum              *float64           `json:"maximum,omitempty"`
 	Items                *Schema            `json:"items,omitempty"`
 
+	// XMcpHeader is the SEP-2243 annotation that mirrors this property into an
+	// HTTP header named Mcp-Param-{value} on Streamable HTTP tools/call.
+	// Set via `jsonschema:"header=Region"` (or the longer `mcp-header=` form).
+	XMcpHeader string `json:"x-mcp-header,omitempty"`
+
 	// JSON Schema 2020-12 referencing and composition keywords. These make
 	// inputSchema/outputSchema express the full 2020-12 vocabulary rather than
 	// the flat object/array subset. Ref points at a definition inside Defs
@@ -320,6 +325,8 @@ var directivePrefixes = []string{
 	"maximum=",
 	"default=",
 	"enum=",
+	"header=",
+	"mcp-header=",
 }
 
 // parseJSONSchemaTag reads a `jsonschema:"..."` struct tag into schema.
@@ -392,6 +399,12 @@ func parseJSONSchemaTag(tag string, schema *Schema, required *[]string, fieldNam
 					schema.Enum = append(schema.Enum, parseTagValue(v))
 				}
 			}
+			lastDescription = nil
+		case strings.HasPrefix(trimmed, "header="):
+			schema.XMcpHeader = strings.TrimPrefix(trimmed, "header=")
+			lastDescription = nil
+		case strings.HasPrefix(trimmed, "mcp-header="):
+			schema.XMcpHeader = strings.TrimPrefix(trimmed, "mcp-header=")
 			lastDescription = nil
 		}
 	}

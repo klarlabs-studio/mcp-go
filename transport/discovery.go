@@ -81,6 +81,31 @@ type ServerAuth struct {
 	// .well-known/openid-configuration document (OpenID Connect Discovery).
 	// Advertisement only; this library performs no token validation.
 	OIDCConfiguration string `json:"oidcConfiguration,omitempty"`
+
+	// Extensions advertises agent-identity / Enterprise-Managed Auth hints
+	// (DPoP, token exchange, ID-JAG). Advertisement only — mcp-go never
+	// validates tokens or runs identity flows. See docs/agent-identity.md.
+	Extensions *AuthExtensions `json:"extensions,omitempty"`
+}
+
+// AuthExtensions carries advertise-only agent-identity hints for discovery
+// and Server Cards. Enforcement belongs at the gateway.
+type AuthExtensions struct {
+	// DPoP indicates the resource expects Demonstrating Proof-of-Possession
+	// (RFC 9449) bound access tokens.
+	DPoP bool `json:"dpop,omitempty"`
+
+	// TokenExchange indicates RFC 8693 token exchange is accepted for
+	// obtaining audience-restricted tokens for this resource.
+	TokenExchange bool `json:"tokenExchange,omitempty"`
+
+	// IDJAG is the Identity Assertion JWT Authorization Grant endpoint hint
+	// used by Enterprise-Managed Authorization (EMA / SEP-990).
+	IDJAG string `json:"idJag,omitempty"`
+
+	// WorkloadIdentityFederation hints that WIF (SEP-1933-style) federation
+	// can mint tokens for this resource. Opaque URL or issuer; not validated.
+	WorkloadIdentityFederation string `json:"workloadIdentityFederation,omitempty"`
 }
 
 type ServerDiscovery struct {
@@ -125,17 +150,32 @@ type OAuthMetadata struct {
 // clients. The library performs no token validation or OAuth flow handling.
 func WithDiscoveryOAuthMetadata(meta OAuthMetadata) DiscoveryOption {
 	return func(d *ServerDiscovery) {
-		if d.Authentication == nil {
-			d.Authentication = &ServerAuth{
-				Required: true,
-				Methods:  []AuthMethod{AuthOAuth2},
-			}
-		}
+		ensureAuth(d)
 		d.Authentication.AuthorizationServers = meta.AuthorizationServers
 		d.Authentication.ProtectedResourceMetadata = meta.ProtectedResourceMetadata
 		d.Authentication.ResourceIndicator = meta.ResourceIndicator
 		d.Authentication.ScopesSupported = meta.ScopesSupported
 		d.Authentication.OIDCConfiguration = meta.OIDCConfiguration
+	}
+}
+
+// WithDiscoveryAuthExtensions advertises agent-identity / EMA hints
+// (DPoP, RFC 8693 token exchange, ID-JAG, workload identity federation).
+// Advertisement only — no token handling occurs in this library.
+func WithDiscoveryAuthExtensions(ext AuthExtensions) DiscoveryOption {
+	return func(d *ServerDiscovery) {
+		ensureAuth(d)
+		cp := ext
+		d.Authentication.Extensions = &cp
+	}
+}
+
+func ensureAuth(d *ServerDiscovery) {
+	if d.Authentication == nil {
+		d.Authentication = &ServerAuth{
+			Required: true,
+			Methods:  []AuthMethod{AuthOAuth2},
+		}
 	}
 }
 

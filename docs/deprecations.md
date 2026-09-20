@@ -8,6 +8,19 @@ documents each deprecation and its migration.
 Deprecated symbols carry a Go `// Deprecated:` marker, so `gopls`, `staticcheck`,
 and pkg.go.dev flag their use.
 
+## Prefer modern clients
+
+New clients default to the published stateless revision (`2026-07-28`). Prefer:
+
+```go
+c := client.New(tr)
+info, err := c.Connect(ctx) // Discover, with Initialize fallback
+```
+
+`Initialize` remains for initialize-era peers (`2025-11-25` and earlier). Pass
+`client.WithProtocolVersion(protocol.MCPVersion)` when you only speak the
+legacy handshake.
+
 ## Sampling — `Session.CreateMessage`, `Session.CreateMessageWithTools`
 
 Server-initiated sampling asks the connected client to run an LLM completion on
@@ -26,6 +39,9 @@ srv.Tool("summarize").Handler(func(ctx context.Context, in Input) (string, error
     return resp.Text, nil
 })
 ```
+
+For mid-call user input on a stateless server, use Multi Round-Trip Requests
+(MRTR) via `mcp.ElicitFromContext` / `input_required` rather than sampling.
 
 This keeps the completion in-process, removes the client round-trip, and makes
 the handler testable without a sampling-capable client.
@@ -69,12 +85,18 @@ stateless model the client's desired log level travels in each request's `_meta`
 (`io.modelcontextprotocol/logLevel`) and is applied per request. A modern
 request that omits that field does not receive `notifications/message`.
 
+## Example that still exercises deprecated APIs
+
+`examples/session` intentionally calls sampling, roots, and logging so the
+legacy path stays covered. New servers should follow the migrations above; see
+also `examples/typed-client` for a Discover/Connect-first HTTP client.
+
 ## Timeline
 
 | Milestone            | Behavior                                                        |
-| -------------------- | -------------------------------------------------------------- |
-| Now (v1)             | Deprecated, fully functional. Compiler/tooling warnings only.  |
-| +12 months           | Eligible for removal in a future major (v2).                   |
+| -------------------- | --------------------------------------------------------------- |
+| Now (v1)             | Deprecated, fully functional. Compiler/tooling warnings only.   |
+| +12 months (~2027-07)| Eligible for removal in a future major (v2).                    |
 
 The stateless request path is the **default for `ServeHTTP`** (`WithStreamable`,
 MCP 2026-07-28). `stdio` servers and `WithStreamableStateful()` /

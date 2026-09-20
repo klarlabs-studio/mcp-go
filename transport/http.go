@@ -36,6 +36,7 @@ type HTTP struct {
 	corsConfig       *CORSConfig
 	sessionStore     SessionStore
 	discovery        *ServerDiscovery
+	serverCard       *ServerCard
 	tlsConfig        *tls.Config
 	requestContextFn func(context.Context, *http.Request) context.Context
 	authorizeFn      func(*http.Request) error
@@ -123,6 +124,16 @@ func WithSessionStore(store SessionStore) HTTPOption {
 func WithDiscovery(discovery *ServerDiscovery) HTTPOption {
 	return func(h *HTTP) {
 		h.discovery = discovery
+	}
+}
+
+// WithServerCard registers a SEP-2127 Server Card. The HTTP transport serves
+// it at GET /mcp/server-card (the reserved location relative to the Streamable
+// HTTP endpoint) and publishes AI Catalog entries at
+// /.well-known/ai-catalog.json and /.well-known/mcp/catalog.json.
+func WithServerCard(card *ServerCard) HTTPOption {
+	return func(h *HTTP) {
+		h.serverCard = card
 	}
 }
 
@@ -395,6 +406,15 @@ func (h *HTTP) createHandler(handler Handler) http.Handler {
 		}
 	}
 
+	if h.serverCard != nil {
+		mux.HandleFunc("/mcp/server-card", h.serverCard.ServeHTTP)
+		serveCatalog := func(w http.ResponseWriter, r *http.Request) {
+			h.serverCard.ServeCatalog(w, r, absoluteURL(r, "/mcp/server-card"))
+		}
+		mux.HandleFunc(aiCatalogWellKnown, serveCatalog)
+		mux.HandleFunc(mcpCatalogWellKnown, serveCatalog)
+	}
+
 	mux.HandleFunc("/mcp/sse", func(w http.ResponseWriter, r *http.Request) {
 		h.handleSSE(w, r)
 	})
@@ -467,6 +487,7 @@ func (h *HTTP) handleMCP(w http.ResponseWriter, r *http.Request, handler Handler
 	if h.requestContextFn != nil {
 		ctx = h.requestContextFn(ctx, r)
 	}
+	ctx = ContextWithHTTPHeaders(ctx, r.Header)
 	// Correlate this request with the client's server-push stream so handlers
 	// like resources/subscribe can target it. The client echoes the clientId
 	// it received on its SSE connection.
@@ -966,6 +987,7 @@ func (h *HTTP) handleStreamablePost(w http.ResponseWriter, r *http.Request, hand
 	if h.requestContextFn != nil {
 		ctx = h.requestContextFn(ctx, r)
 	}
+	ctx = ContextWithHTTPHeaders(ctx, r.Header)
 
 	if h.maxRequestBytes > 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, h.maxRequestBytes)

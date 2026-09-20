@@ -38,6 +38,27 @@ func TestJSONSchemaTag_DescriptionKeepsCommas(t *testing.T) {
 	}
 }
 
+func TestJSONSchemaTag_HeaderAnnotation(t *testing.T) {
+	type args struct {
+		Region string `json:"region" jsonschema:"required,header=Region"`
+		Query  string `json:"query" jsonschema:"description=SQL"`
+	}
+	s, err := Generate(args{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Properties["region"].XMcpHeader != "Region" {
+		t.Fatalf("XMcpHeader = %q", s.Properties["region"].XMcpHeader)
+	}
+	raw, err := json.Marshal(s.Properties["region"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"x-mcp-header":"Region"`) {
+		t.Fatalf("marshaled schema missing x-mcp-header: %s", raw)
+	}
+}
+
 // required must keep working wherever it sits in the tag, including after a
 // description that contains commas.
 func TestJSONSchemaTag_RequiredAlongsideCommaDescription(t *testing.T) {

@@ -41,6 +41,10 @@
 //	    // jsonschema:"description=..." adds description
 //	    Desc string `json:"desc" jsonschema:"description=Field description"`
 //
+//	    // jsonschema:"header=Region" emits "x-mcp-header":"Region" so Streamable
+//	    // HTTP clients mirror the argument into Mcp-Param-Region (SEP-2243).
+//	    Region string `json:"region" jsonschema:"required,header=Region"`
+//
 //	    // json:"-" excludes field
 //	    Ignored string `json:"-"`
 //	}

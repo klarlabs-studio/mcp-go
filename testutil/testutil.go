@@ -445,7 +445,8 @@ func (h *requestHandler) handleToolsList(req *protocol.Request) (*protocol.Respo
 	tools := h.srv.Tools()
 
 	toolList := make([]map[string]any, 0, len(tools))
-	for _, t := range tools {
+	for i := range tools {
+		t := &tools[i]
 		toolList = append(toolList, map[string]any{
 			fieldName:     t.Name,
 			"description": t.Description,

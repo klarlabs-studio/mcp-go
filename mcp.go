@@ -539,6 +539,16 @@ func ServeStdio(ctx context.Context, srv *Server, opts ...ServeOption) error {
 	return t.Serve(ctx, handler)
 }
 
+// ServeStdioHTTP runs the server using Streamable-HTTP-over-stdio framing:
+// newline-delimited HTTPFrame envelopes that carry Mcp-Method and JSON-RPC
+// bodies. Use this when the client speaks the pragmatic HTTP-over-stdio
+// binding (MCP roadmap); classic NDJSON JSON-RPC remains ServeStdio.
+func ServeStdioHTTP(ctx context.Context, srv *Server, opts ...ServeOption) error {
+	t := transport.NewStdioHTTP()
+	handler := newRequestHandler(srv, opts...)
+	return t.Serve(ctx, handler)
+}
+
 // ServeHTTP runs the server using Streamable HTTP (the MCP HTTP transport
 // since 2025-03-26). The default is the stateless 2026-07-28 model
 // (WithStreamable). Pass WithStreamableStateful for session-negotiated
@@ -594,6 +604,57 @@ func WithWriteTimeout(d time.Duration) HTTPOption {
 func WithDiscovery(discovery *transport.ServerDiscovery) HTTPOption {
 	return transport.WithDiscovery(discovery)
 }
+
+// WithServerCard registers a SEP-2127 Server Card (GET /mcp/server-card) and
+// AI Catalog entries at /.well-known/ai-catalog.json and
+// /.well-known/mcp/catalog.json.
+func WithServerCard(card *transport.ServerCard) HTTPOption {
+	return transport.WithServerCard(card)
+}
+
+// Server Card / discovery constructors re-exported for the public API.
+var (
+	NewServerDiscovery              = transport.NewServerDiscovery
+	NewServerCard                   = transport.NewServerCard
+	NewServerCardFromDiscovery      = transport.NewServerCardFromDiscovery
+	WithDiscoveryEndpoints          = transport.WithDiscoveryEndpoints
+	WithDiscoveryAuth               = transport.WithDiscoveryAuth
+	WithDiscoveryOAuthMetadata      = transport.WithDiscoveryOAuthMetadata
+	WithDiscoveryAuthExtensions     = transport.WithDiscoveryAuthExtensions
+	WithServerCardName              = transport.WithServerCardName
+	WithServerCardRemote            = transport.WithServerCardRemote
+	WithServerCardRepository        = transport.WithServerCardRepository
+	WithServerCardMeta              = transport.WithServerCardMeta
+	WithServerCardCatalogIdentifier = transport.WithServerCardCatalogIdentifier
+)
+
+// Discovery / Server Card types.
+type (
+	ServerDiscovery = transport.ServerDiscovery
+	ServerCard      = transport.ServerCard
+	ServerEndpoint  = transport.ServerEndpoint
+	ServerAuth      = transport.ServerAuth
+	AuthMethod      = transport.AuthMethod
+	OAuthMetadata   = transport.OAuthMetadata
+	AuthExtensions  = transport.AuthExtensions
+	Remote          = transport.Remote
+	Repository      = transport.Repository
+	WebhookNotifier = transport.WebhookNotifier
+	MultiNotifier   = transport.MultiNotifier
+	HTTPFrame       = transport.HTTPFrame
+)
+
+// Auth method constants.
+const (
+	AuthNone   = transport.AuthNone
+	AuthAPIKey = transport.AuthAPIKey
+	AuthOAuth2 = transport.AuthOAuth2
+	AuthBearer = transport.AuthBearer
+	AuthMTLS   = transport.AuthMTLS
+)
+
+// NewWebhookNotifier creates an out-of-band notification delivery target.
+var NewWebhookNotifier = transport.NewWebhookNotifier
 
 // WithTLSConfig enables HTTPS termination on the HTTP transport. The
 // supplied *tls.Config is used verbatim — bring your own certificate
@@ -1120,16 +1181,71 @@ func isModern(ctx context.Context) bool {
 }
 
 func parseListCursor(params json.RawMessage) (string, error) {
-	if len(params) == 0 {
-		return "", nil
-	}
-	var p struct {
-		Cursor string `json:"cursor"`
-	}
-	if err := json.Unmarshal(params, &p); err != nil {
-		return "", protocol.NewInvalidParams(err.Error())
+	p, err := parseToolsListParams(params)
+	if err != nil {
+		return "", err
 	}
 	return p.Cursor, nil
+}
+
+// toolsListParams extends the standard cursor with progressive-discovery
+// filters (best-effort ahead of a Core Primitives SEP).
+type toolsListParams struct {
+	Cursor string   `json:"cursor"`
+	Group  string   `json:"group,omitempty"`
+	Tags   []string `json:"tags,omitempty"`
+	Detail string   `json:"detail,omitempty"` // "names" | "full" (default full)
+}
+
+const (
+	toolsListDetailNames = "names"
+	toolsListDetailFull  = "full"
+)
+
+func parseToolsListParams(params json.RawMessage) (toolsListParams, error) {
+	var p toolsListParams
+	if len(params) == 0 {
+		return p, nil
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return p, protocol.NewInvalidParams(err.Error())
+	}
+	switch p.Detail {
+	case "", toolsListDetailNames, toolsListDetailFull:
+	default:
+		return p, protocol.NewInvalidParams(`detail must be "names" or "full"`)
+	}
+	return p, nil
+}
+
+func toolMatchesDiscovery(t server.ToolInfo, p toolsListParams) bool {
+	if p.Group != "" && t.Group != p.Group {
+		return false
+	}
+	if len(p.Tags) == 0 {
+		return true
+	}
+	have := make(map[string]struct{}, len(t.Tags))
+	for _, tag := range t.Tags {
+		have[tag] = struct{}{}
+	}
+	for _, want := range p.Tags {
+		if _, ok := have[want]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func omitToolSchemas(t server.ToolInfo, detail string) bool {
+	if detail == toolsListDetailNames {
+		return true
+	}
+	// DeferSchema tools hide schemas unless the client explicitly asks for full.
+	if t.DeferSchema && detail != toolsListDetailFull {
+		return true
+	}
+	return false
 }
 
 func paginate[T any](items []T, cursor string, key func(T) string) ([]T, string, error) {
@@ -1165,7 +1281,7 @@ func withNextCursor(result map[string]any, next string) {
 }
 
 func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
-	cursor, err := parseListCursor(req.Params)
+	params, err := parseToolsListParams(req.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -1180,31 +1296,44 @@ func (h *requestHandler) handleToolsList(ctx context.Context, req *protocol.Requ
 	})
 
 	filtered := make([]server.ToolInfo, 0, len(tools))
-	for _, t := range tools {
+	for i := range tools {
+		t := &tools[i]
 		if h.toolFilter != nil && !h.toolFilter(ctx, t.Name) {
 			continue
 		}
-		filtered = append(filtered, t)
+		if !toolMatchesDiscovery(*t, params) {
+			continue
+		}
+		filtered = append(filtered, *t)
 	}
-	page, next, err := paginate(filtered, cursor, func(t server.ToolInfo) string { return t.Name })
+	page, next, err := paginate(filtered, params.Cursor, func(t server.ToolInfo) string { return t.Name })
 	if err != nil {
 		return nil, err
 	}
 
 	ver := protocolVersionFrom(ctx)
 	toolList := make([]map[string]any, 0, len(page))
-	for _, t := range page {
+	for i := range page {
+		t := &page[i]
 		item := map[string]any{
 			fieldName:     t.Name,
 			"description": t.Description,
-			"inputSchema": t.InputSchema,
+		}
+		if !omitToolSchemas(*t, params.Detail) {
+			item["inputSchema"] = t.InputSchema
+			if t.OutputSchema != nil {
+				item["outputSchema"] = t.OutputSchema
+			}
+		}
+		if t.Group != "" {
+			item["group"] = t.Group
+		}
+		if len(t.Tags) > 0 {
+			item["tags"] = t.Tags
 		}
 		// Top-level title (MCP 2025-06-18); tools carry it inside annotations.
 		if t.Annotations != nil && t.Annotations.Title != "" {
 			item["title"] = t.Annotations.Title
-		}
-		if t.OutputSchema != nil {
-			item["outputSchema"] = t.OutputSchema
 		}
 		if t.Annotations != nil {
 			item["annotations"] = t.Annotations
@@ -1342,6 +1471,14 @@ func (h *requestHandler) handleToolsCall(ctx context.Context, req *protocol.Requ
 	}
 	if h.toolFilter != nil && !h.toolFilter(ctx, params.Name) {
 		return nil, protocol.NewInvalidParams("tool not found: " + params.Name)
+	}
+
+	// SEP-2243: when the tool advertises x-mcp-header, Streamable HTTP callers
+	// must mirror those arguments into Mcp-Param-* headers.
+	if hdrs := transport.HTTPHeadersFromContext(ctx); hdrs != nil {
+		if err := protocol.ValidateParamHeaders(hdrs, tool.InputSchema(), params.Arguments); err != nil {
+			return nil, protocol.NewHeaderMismatch(err.Error())
+		}
 	}
 
 	augmented, err := resolveTaskAugmentation(ctx, tool.TaskSupport(), params.Name, params.Task != nil)

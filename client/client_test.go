@@ -149,6 +149,64 @@ func TestClient_Initialize(t *testing.T) {
 		}
 	})
 
+	t.Run("New defaults to modern _meta without Discover", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				{JSONRPC: "2.0", ID: json.RawMessage(`1`), Result: map[string]any{"tools": []any{}}},
+			},
+		}
+		c := client.New(transport)
+		if _, err := c.ListTools(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		var params map[string]any
+		if err := json.Unmarshal(transport.requests[0].Params, &params); err != nil {
+			t.Fatal(err)
+		}
+		meta, _ := params["_meta"].(map[string]any)
+		if meta[protocol.MetaKeyProtocolVersion] != protocol.ModernVersion {
+			t.Errorf("_meta = %#v", meta)
+		}
+	})
+
+	t.Run("Connect falls back to Initialize on MethodNotFound", func(t *testing.T) {
+		transport := &mockTransport{
+			responses: []protocol.Response{
+				{
+					JSONRPC: "2.0",
+					ID:      json.RawMessage(`1`),
+					Error:   &protocol.Error{Code: protocol.CodeMethodNotFound, Message: "not found"},
+				},
+				{
+					JSONRPC: "2.0",
+					ID:      json.RawMessage(`2`),
+					Result: map[string]any{
+						"protocolVersion": "2025-11-25",
+						"serverInfo":      map[string]any{"name": "legacy", "version": "1"},
+						"capabilities":    map[string]any{},
+					},
+				},
+			},
+		}
+		c := client.New(transport)
+		info, err := c.Connect(context.Background())
+		if err != nil {
+			t.Fatalf("Connect: %v", err)
+		}
+		if info.Name != "legacy" {
+			t.Errorf("name = %q", info.Name)
+		}
+		if len(transport.requests) != 2 {
+			t.Fatalf("requests = %d", len(transport.requests))
+		}
+		if transport.requests[0].Method != protocol.MethodServerDiscover {
+			t.Errorf("first method = %s", transport.requests[0].Method)
+		}
+		if transport.requests[1].Method != protocol.MethodInitialize {
+			t.Errorf("second method = %s", transport.requests[1].Method)
+		}
+	})
+
 	t.Run("returns error on failed handshake", func(t *testing.T) {
 		transport := &mockTransport{
 			responses: []protocol.Response{

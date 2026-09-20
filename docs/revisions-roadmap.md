@@ -28,14 +28,15 @@ There is **no `/v2` Go module path**. Phase 4 shipped on v1 (stateless default i
 |---|---|
 | OAuth token enforcement, `iss` validation, DCR, CIMD | **Out of library.** Auth stays advertise-only; enforcement belongs at the gateway. RFC 9728 `/.well-known/oauth-protected-resource` is served when discovery OAuth metadata is configured. |
 | JSON-RPC batching | **Closed — will not implement.** Optional in 2025-03-26, removed in 2025-06-18. Never batching is conformant. |
-| `x-mcp-header` → `Mcp-Param-*` (SEP-2243) | **Optional for servers (MAY).** mcp-go does not emit the annotation, so the HTTP client is not required to mirror headers until a listed tool carries it. Follow-up only if we annotate schemas or consume third-party servers that do. `Mcp-Method` / `Mcp-Name` are already enforced. |
+| `x-mcp-header` → `Mcp-Param-*` (SEP-2243) | **In library.** Servers emit via `jsonschema:"header=Region"`; Streamable HTTP clients mirror arguments into `Mcp-Param-*` after `ListTools` (invalid annotations excluded); servers validate header↔body on HTTP tools/call. |
 | Unsolicited task handles (SEP-2663) | **In library, modern path.** A `TaskSupportRequired` tool returns a flat `CreateTaskResult` (`resultType: "task"`) on a plain `tools/call` when the client declares `io.modelcontextprotocol/tasks`. The retired `task` field is ignored (optional tools run synchronously). Missing the extension is `-32021`. Legacy callers keep the 2025-11-25 nested `{task: …}` opt-in. |
 | `tasks/result` / `notifications/elicitation/complete` | **Gated off for modern** (`-32601`). Clients poll `tasks/get` (inlined `result`/`error`) and retry the original method under MRTR. Legacy keeps both methods. |
 | `tasks/update` `inputResponses` | **In library.** A task that needs elicitation/sampling/roots pauses at `input_required` with a keyed `inputRequests` map. `tasks/update` accepts map (or array) `inputResponses`, ignores unknown keys, and replays the handler. TTL refresh via `ttl`/`ttlMs` is still accepted. Modern ack is empty. |
 | `notifications/tasks` | **In library.** `subscriptions/listen` accepts `notifications.taskIds` (requires the tasks extension). Status changes push `notifications/tasks` carrying the same DetailedTask as `tasks/get`. |
 | OpenAPI tool descriptors | **Not in library.** Typed Go handlers remain the registration surface. |
-| Skills extension (SEP-2640) | **In library, experimental.** Draft SEP — `Skill(path).FromDir` / `SkillsFromDir` serve `skill://` resources and `skill://index.json`; advertise `io.modelcontextprotocol/skills`. Archive / template index entries deferred. API may change until the SEP is Final. |
+| Skills extension (SEP-2640) | **In library, experimental.** `Skill(path).FromDir` / `FromArchive` / `SkillsFromDir` / `SkillTemplate` serve `skill://` resources and `skill://index.json` (`skill-md`, `archive`, `mcp-resource-template`). Advertise `io.modelcontextprotocol/skills`. API may change until the SEP is Final. |
 | Roots / Sampling / Logging / HTTP+SSE / `includeContext` thisServer\|allServers | **Deprecated, kept** for the 12-month window. |
+| Client modern default | **In library.** `client.New` defaults to `ModernVersion` + per-request `_meta`; `Connect` prefers `server/discover` with `Initialize` fallback. |
 
 Phase 1–3 checkboxes below that are still unmarked were implemented in v1.22–v1.25 (Streamable HTTP, audio, progress `message`, sampling-with-tools, icons, JSON Schema 2020-12, `Implementation.description`, input validation as `isError`). Treat the table above as the live remainder.
 

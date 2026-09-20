@@ -235,11 +235,12 @@ var cacheableMethods = map[string]bool{
 }
 
 // defaultCacheTTLMs / defaultCacheScope are the CacheableResult values used
-// when the server has not configured WithResultCache. ttlMs 0 means
-// immediately stale (clients MAY re-fetch every time); cacheScope "private"
-// is the conservative default (do not share across authorization contexts).
+// when the server has not configured WithResultCache. A one-minute private
+// TTL is a sensible default for mostly-static catalogs (tools/list etc.):
+// clients MAY cache briefly without sharing across authorization contexts.
+// Pass WithResultCache(0, "private") to advertise immediately-stale results.
 const (
-	defaultCacheTTLMs int64 = 0
+	defaultCacheTTLMs int64 = 60_000
 	defaultCacheScope       = "private"
 )
 
