@@ -33,6 +33,10 @@ const (
 	SkillIndexMIME = "application/json"
 	// SkillMarkdownMIME is the recommended mimeType for SKILL.md.
 	SkillMarkdownMIME = "text/markdown"
+	// SkillArchiveMIMEGzip is the mimeType for .tar.gz skill archives (SEP-2640).
+	SkillArchiveMIMEGzip = "application/gzip"
+	// SkillArchiveMIMEZip is the mimeType for .zip skill archives (SEP-2640).
+	SkillArchiveMIMEZip = "application/zip"
 
 	// SkillIndex entry types.
 	SkillIndexTypeSkillMD  = "skill-md"
@@ -199,11 +203,11 @@ func skillArchiveSuffix(path string) (suffix, mime string, err error) {
 	lower := strings.ToLower(path)
 	switch {
 	case strings.HasSuffix(lower, ".tar.gz"):
-		return ".tar.gz", "application/gzip", nil
+		return ".tar.gz", SkillArchiveMIMEGzip, nil
 	case strings.HasSuffix(lower, ".tgz"):
-		return ".tar.gz", "application/gzip", nil
+		return ".tar.gz", SkillArchiveMIMEGzip, nil
 	case strings.HasSuffix(lower, ".zip"):
-		return ".zip", "application/zip", nil
+		return ".zip", SkillArchiveMIMEZip, nil
 	default:
 		return "", "", fmt.Errorf("archive must be .tar.gz, .tgz, or .zip")
 	}
@@ -575,9 +579,9 @@ func skillMIME(rel string) string {
 	case ".pdf":
 		return "application/pdf"
 	case ".zip":
-		return "application/zip"
+		return SkillArchiveMIMEZip
 	case ".gz":
-		return "application/gzip"
+		return SkillArchiveMIMEGzip
 	default:
 		return "application/octet-stream"
 	}

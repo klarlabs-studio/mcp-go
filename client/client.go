@@ -236,7 +236,7 @@ func New(transport Transport, opts ...Option) *Client {
 }
 
 func isModernProtocol(v string) bool {
-	return v == protocol.ModernVersion || v == protocol.DraftVersion
+	return v == protocol.ModernVersion
 }
 
 // parseIcons parses an array of icon data into Icon structs.
@@ -844,8 +844,7 @@ func spliceObjectField(params json.RawMessage, key string, valueJSON []byte) (js
 	trimmed := bytes.TrimSpace(params)
 	if len(trimmed) == 0 || string(trimmed) == "null" {
 		out := make([]byte, 0, 8+len(key)+len(valueJSON))
-		out = append(out, '{')
-		out = append(out, '"')
+		out = append(out, '{', '"')
 		out = append(out, key...)
 		out = append(out, '"', ':')
 		out = append(out, valueJSON...)
@@ -857,8 +856,7 @@ func spliceObjectField(params json.RawMessage, key string, valueJSON []byte) (js
 	}
 	inner := bytes.TrimSpace(trimmed[1 : len(trimmed)-1])
 	out := make([]byte, 0, len(trimmed)+len(key)+len(valueJSON)+4)
-	out = append(out, '{')
-	out = append(out, '"')
+	out = append(out, '{', '"')
 	out = append(out, key...)
 	out = append(out, '"', ':')
 	out = append(out, valueJSON...)

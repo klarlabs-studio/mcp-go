@@ -257,21 +257,9 @@ func joinURL(base *url.URL, path string) string {
 	return cloned.String()
 }
 
-// Send marshals the JSON-RPC request, POSTs it to the configured
-// endpoint, and returns the decoded response. Network errors and
-// non-2xx HTTP statuses surface as errors; a JSON-RPC-level error
-// (resp.Error != nil) is preserved on the returned response so the
-// Client can surface protocol errors cleanly.
-func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.postURL(), bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
+// applyOutboundHeaders stamps static transport headers, per-request context
+// headers (e.g. Mcp-Param-*), session id, and the SEP-2243 routing headers.
+func (t *HTTPTransport) applyOutboundHeaders(ctx context.Context, httpReq *http.Request, req *protocol.Request) {
 	for k, vs := range t.headers {
 		for _, v := range vs {
 			httpReq.Header.Add(k, v)
@@ -299,6 +287,24 @@ func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*proto
 	if name, ok := clientRouteName(req); ok && name != "" {
 		httpReq.Header.Set(protocol.HeaderName, name)
 	}
+}
+
+// Send marshals the JSON-RPC request, POSTs it to the configured
+// endpoint, and returns the decoded response. Network errors and
+// non-2xx HTTP statuses surface as errors; a JSON-RPC-level error
+// (resp.Error != nil) is preserved on the returned response so the
+// Client can surface protocol errors cleanly.
+func (t *HTTPTransport) Send(ctx context.Context, req *protocol.Request) (*protocol.Response, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.postURL(), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	t.applyOutboundHeaders(ctx, httpReq, req)
 
 	resp, err := t.httpClient.Do(httpReq)
 	if err != nil {

@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -154,7 +155,7 @@ func BuildParamHeaders(inputSchema any, arguments any) (http.Header, error) {
 			continue
 		}
 		val, err := EncodeParamValue(raw)
-		if err == errOmitHeader {
+		if errors.Is(err, errOmitHeader) {
 			continue
 		}
 		if err != nil {
@@ -242,12 +243,20 @@ func isTchar(r rune) bool {
 func isPrimitiveSchema(prop map[string]any) bool {
 	t, _ := prop["type"].(string)
 	switch t {
-	case "string", "number", "integer", "boolean":
+	case jsonSchemaTypeString, jsonSchemaTypeNumber, jsonSchemaTypeInteger, jsonSchemaTypeBoolean:
 		return true
 	default:
 		return false
 	}
 }
+
+// JSON Schema type keywords used when validating x-mcp-header annotations.
+const (
+	jsonSchemaTypeString  = "string"
+	jsonSchemaTypeNumber  = "number"
+	jsonSchemaTypeInteger = "integer"
+	jsonSchemaTypeBoolean = "boolean"
+)
 
 func asObject(v any) (map[string]any, bool) {
 	switch m := v.(type) {
