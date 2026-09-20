@@ -6,6 +6,24 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **SEP-2127 Server Cards (experimental).** `NewServerCard` /
+  `NewServerCardFromDiscovery` build static connection metadata. `WithServerCard`
+  serves `GET /mcp/server-card` (`application/mcp-server-card+json`, CORS + ETag)
+  and AI Catalog entries at `/.well-known/ai-catalog.json` and
+  `/.well-known/mcp/catalog.json`.
+- **Progressive tool discovery helpers.** `ToolBuilder.Group` / `Tags` /
+  `DeferSchema`; `tools/list` accepts `group`, `tags` (AND), and
+  `detail` (`names`|`full`). Best-effort ahead of a Core Primitives SEP.
+- **Streamable HTTP over stdio (pragmatic).** `ServeStdioHTTP` /
+  `transport.NewStdioHTTP` speak NDJSON `HTTPFrame` envelopes (request /
+  response / notification) preserving `Mcp-Method` until HTTP/2-over-stdio
+  lands in the Transports WG.
+- **Webhook notification delivery.** `WebhookNotifier` POSTs JSON-RPC
+  notifications to a client URL; `MultiNotifier` fans out to multiple
+  senders (compose with session/SSE notifiers).
+- **Agent-identity advertise fields.** `WithDiscoveryAuthExtensions` adds
+  DPoP / token-exchange / ID-JAG / WIF hints on discovery. Docs:
+  `docs/agent-identity.md`. Enforcement remains gateway-side.
 - **Warden provenance-skip for CI.** `ci.yml` runs `warden-verify` first; when
   the commit already carries `refs/notes/warden`, the expensive go-ci reusable
   workflow is skipped and required check names are reported green via the

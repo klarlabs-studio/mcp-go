@@ -83,6 +83,9 @@ type Tool struct {
 	meta           map[string]any
 	icons          []Icon
 	taskSupport    TaskSupport
+	group          string
+	tags           []string
+	deferSchema    bool
 }
 
 // TaskSupport reports whether this tool may be invoked as a task-augmented
@@ -207,6 +210,41 @@ func (b *ToolBuilder) UIResource(uri string) *ToolBuilder {
 		},
 		"ui/resourceUri": uri,
 	}
+	return b
+}
+
+// Group assigns this tool to a progressive-discovery group. Clients can pass
+// {"group":"..."} on tools/list to narrow the catalog. Best-effort ahead of a
+// dedicated progressive-discovery SEP — the wire field is "group".
+func (b *ToolBuilder) Group(group string) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.group = group
+	return b
+}
+
+// Tags attaches free-form discovery tags. Clients can pass {"tags":[...]} on
+// tools/list; a tool matches when it carries every requested tag.
+func (b *ToolBuilder) Tags(tags ...string) *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.tags = append([]string(nil), tags...)
+	return b
+}
+
+// DeferSchema omits inputSchema (and outputSchema) from tools/list unless the
+// client passes {"detail":"full"}. Full schemas remain enforced on tools/call.
+// Pair with Group/Tags so clients discover a narrow surface first.
+//
+// Best-effort progressive-discovery helper until the Core Primitives WG lands
+// a wire contract (e.g. tools/get).
+func (b *ToolBuilder) DeferSchema() *ToolBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.tool.deferSchema = true
 	return b
 }
 

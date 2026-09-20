@@ -183,6 +183,9 @@ type ToolInfo struct {
 	Meta         map[string]any
 	Icons        []Icon
 	TaskSupport  TaskSupport
+	Group        string
+	Tags         []string
+	DeferSchema  bool
 }
 
 // Option configures a Server.
@@ -381,6 +384,9 @@ func (s *Server) Tools() []ToolInfo {
 			Meta:         t.meta,
 			Icons:        t.icons,
 			TaskSupport:  t.taskSupport,
+			Group:        t.group,
+			Tags:         append([]string(nil), t.tags...),
+			DeferSchema:  t.deferSchema,
 		})
 	}
 	return result

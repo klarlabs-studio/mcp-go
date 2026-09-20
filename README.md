@@ -507,16 +507,35 @@ mcp.ServeHTTP(ctx, srv, ":8080",
 
 #### Server Discovery
 
-Clients can discover MCP servers via `/.well-known/mcp`:
+Clients can discover MCP servers via `/.well-known/mcp`. For SEP-2127 Server
+Cards, also publish `/mcp/server-card` and an AI Catalog:
 
 ```go
-mcp.ServeHTTP(ctx, srv, ":8080",
-    mcp.WithDiscovery(mcp.ServerDiscovery{
-        Name:        "my-server",
-        Description: "My MCP server",
+manifest := srv.Manifest()
+discovery := mcp.NewServerDiscovery(&manifest,
+    mcp.WithDiscoveryEndpoints(mcp.ServerEndpoint{
+        StreamableHTTP: "https://example.com/mcp",
+    }),
+    mcp.WithDiscoveryOAuthMetadata(mcp.OAuthMetadata{
+        AuthorizationServers: []string{"https://auth.example.com"},
+        ResourceIndicator:    "https://example.com/mcp",
+    }),
+    mcp.WithDiscoveryAuthExtensions(mcp.AuthExtensions{
+        DPoP:  true,
+        IDJAG: "https://auth.example.com/oauth/id-jag",
     }),
 )
+card := mcp.NewServerCardFromDiscovery(discovery,
+    mcp.WithServerCardName("com.example/my-server"),
+)
+
+mcp.ServeHTTP(ctx, srv, ":8080",
+    mcp.WithDiscovery(discovery),
+    mcp.WithServerCard(card),
+)
 ```
+
+See `docs/agent-identity.md` for the advertise-only EMA / DPoP stance.
 
 #### Tasks for Long-Running Operations
 
