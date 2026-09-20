@@ -607,12 +607,14 @@ func WithDiscovery(discovery *transport.ServerDiscovery) HTTPOption {
 
 // WithServerCard registers a SEP-2127 Server Card (GET /mcp/server-card) and
 // AI Catalog entries at /.well-known/ai-catalog.json and
-// /.well-known/mcp/catalog.json.
+// /.well-known/mcp/catalog.json. Experimental — extension schema may change
+// until SEP-2127 graduates.
 func WithServerCard(card *transport.ServerCard) HTTPOption {
 	return transport.WithServerCard(card)
 }
 
-// Server Card / discovery constructors re-exported for the public API.
+// Server Card / discovery constructors re-exported for the public API
+// (SEP-2127 experimental).
 var (
 	NewServerDiscovery              = transport.NewServerDiscovery
 	NewServerCard                   = transport.NewServerCard
