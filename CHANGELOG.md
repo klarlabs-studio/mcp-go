@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.28.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.27.0...v1.28.0) - 2026-09-20
+
 ### Added
 
 - **SEP-2127 Server Cards (experimental).** `NewServerCard` /
