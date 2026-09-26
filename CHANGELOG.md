@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.28.1](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.0...v1.28.1) - 2026-09-26
+
 ### Fixed
 
 - **Tool results without a structured payload no longer send
