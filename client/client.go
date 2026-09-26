@@ -323,6 +323,14 @@ func (c *Client) Initialize(ctx context.Context) (*ServerInfo, error) {
 		// modern revision only falls back on the server side.
 		ver = protocol.MCPVersion
 	}
+	// The header must say what the body says: an HTTP server rejects a request
+	// whose MCP-Protocol-Version disagrees with the body's protocolVersion
+	// (-32020). The transport may carry a different one — New stamps the
+	// modern default, and Connect's Discover attempt stamps the modern
+	// revision before falling back here — so set it every time.
+	if setter, ok := c.transport.(protocolVersionSetter); ok {
+		setter.SetProtocolVersion(ver)
+	}
 	params := map[string]any{
 		fieldProtocolVersion: ver,
 		"clientInfo": map[string]any{
