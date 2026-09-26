@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.28.2](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.1...v1.28.2) - 2026-09-26
+
+### Fixed
+
+- **The default client can initialize against the default server over HTTP
+  again.** Since 1.28.0 `client.New` defaults to the stateless `2026-07-28`
+  revision and stamps it on the HTTP transport's `MCP-Protocol-Version` header,
+  while `Initialize` sends `2025-11-25` in the body; `ServeHTTP` rejected the
+  mismatch with `-32020`. `Initialize` now sends the version it negotiates on
+  the header too, which also covers `Connect` falling back from `Discover`
+  (#155).
+
 ## [1.28.1](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.0...v1.28.1) - 2026-09-26
 
 ### Fixed
