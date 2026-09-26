@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tool results without a structured payload no longer send
+  `"structuredContent": null`.** `StructuredResult.MarshalJSON` omitted a nil
+  payload (v1.24.1), but the tools/call dispatch does not marshal the struct:
+  `buildToolCallResponse` copies its fields into a response map and wrote the
+  field unconditionally, so every error result on the wire still carried the
+  null that strict clients reject (reported downstream as roady #92). The
+  dispatch now omits a nil payload and keeps an explicit empty map as `{}`,
+  and a test asserts on the dispatch output rather than the struct.
+
 ## [1.28.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.27.0...v1.28.0) - 2026-09-20
 
 ### Added

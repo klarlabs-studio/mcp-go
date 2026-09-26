@@ -1616,7 +1616,13 @@ func applyStructuredResult(response map[string]any, v *server.StructuredResult) 
 	} else {
 		response[fieldContent] = []map[string]any{}
 	}
-	response["structuredContent"] = v.StructuredContent
+	// Omit rather than encode null: structuredContent is optional, and null
+	// matches no object schema, so a strict client rejects the whole result,
+	// including the text explaining the failure. An explicit empty map is
+	// still sent as {}, matching StructuredResult's own MarshalJSON.
+	if v.StructuredContent != nil {
+		response["structuredContent"] = v.StructuredContent
+	}
 	if v.IsError {
 		response["isError"] = true
 	}
