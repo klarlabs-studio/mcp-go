@@ -9,7 +9,7 @@
       "priority": "medium",
       "estimate": "8h",
       "depends_on": [],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -21,7 +21,7 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -33,7 +33,7 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -45,7 +45,7 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -57,7 +57,7 @@
       "depends_on": [
         "phase1-session-store"
       ],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -69,7 +69,7 @@
       "depends_on": [
         "phase2-discovery"
       ],
-      "feature_id": "2026 Roadmap Alignment",
+      "feature_id": "2026-roadmap-alignment",
       "source": {}
     },
     {
@@ -79,7 +79,7 @@
       "priority": "high",
       "estimate": "6h",
       "depends_on": [],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -91,7 +91,7 @@
       "depends_on": [
         "rev0-version-negotiation"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -103,7 +103,7 @@
       "depends_on": [
         "rev0-client-caps"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -115,7 +115,7 @@
       "depends_on": [
         "rev0-version-negotiation"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -125,7 +125,7 @@
       "priority": "high",
       "estimate": "5h",
       "depends_on": [],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -138,7 +138,7 @@
         "rev0-wire-dead-methods",
         "rev0-session-injection"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -152,7 +152,7 @@
         "rev0-content-union",
         "rev0-conformance-harness"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -164,7 +164,7 @@
       "depends_on": [
         "rev1-2025-03-26"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -177,7 +177,7 @@
         "rev2-2025-06-18",
         "rev0-wire-dead-methods"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     },
     {
@@ -189,7 +189,7 @@
       "depends_on": [
         "rev3-2025-11-25"
       ],
-      "feature_id": "Spec Revisions Alignment (2024-11-05 → 2026-07-28)",
+      "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
     }
   ],
