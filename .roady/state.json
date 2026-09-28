@@ -1,6 +1,6 @@
 {
   "project_id": "mcp-go",
-  "version": 45,
+  "version": 46,
   "task_states": {
     "e2e-dispatcher-collapse": {
       "status": "pending",
@@ -13,7 +13,12 @@
       "owner": "felixgeelhaar",
       "started_at": "2026-03-20T21:21:41.592673+01:00",
       "completed_at": "2026-03-20T21:21:41.600148+01:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "phase1-redis-example": {
       "status": "done",
@@ -21,7 +26,12 @@
       "owner": "felixgeelhaar",
       "started_at": "2026-03-20T21:21:41.575361+01:00",
       "completed_at": "2026-03-20T21:21:41.584642+01:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "phase1-session-store": {
       "status": "done",
@@ -29,7 +39,12 @@
       "owner": "ai-agent",
       "started_at": "2026-03-20T21:21:23.830403+01:00",
       "completed_at": "2026-03-20T21:21:31.942118+01:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "phase2-discovery": {
       "status": "done",
@@ -37,7 +52,12 @@
       "owner": "ai-agent",
       "started_at": "2026-03-20T21:22:47.0395+01:00",
       "completed_at": "2026-03-20T21:30:49.753601+01:00",
-      "elapsed_minutes": 8
+      "elapsed_minutes": 8,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "phase3-tasks": {
       "status": "done",
@@ -45,7 +65,12 @@
       "owner": "ai-agent",
       "started_at": "2026-03-20T21:31:38.666039+01:00",
       "completed_at": "2026-03-20T21:40:33.39134+01:00",
-      "elapsed_minutes": 8
+      "elapsed_minutes": 8,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "phase4-enterprise": {
       "status": "done",
@@ -53,7 +78,12 @@
       "owner": "ai-agent",
       "started_at": "2026-03-20T21:41:30.475932+01:00",
       "completed_at": "2026-03-20T22:00:05.605804+01:00",
-      "elapsed_minutes": 18
+      "elapsed_minutes": 18,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "progressive-discovery-wire": {
       "status": "blocked",
@@ -74,7 +104,12 @@
       ],
       "started_at": "2026-07-10T12:56:32.776617+02:00",
       "completed_at": "2026-07-10T12:56:37.674201+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev0-conformance-harness": {
       "status": "done",
@@ -85,7 +120,12 @@
       ],
       "started_at": "2026-07-10T12:59:43.224978+02:00",
       "completed_at": "2026-07-10T12:59:47.997436+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev0-content-union": {
       "status": "done",
@@ -96,7 +136,12 @@
       ],
       "started_at": "2026-07-10T13:03:29.996851+02:00",
       "completed_at": "2026-07-10T13:03:38.150004+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev0-session-injection": {
       "status": "done",
@@ -107,7 +152,12 @@
       ],
       "started_at": "2026-07-10T12:56:39.420872+02:00",
       "completed_at": "2026-07-10T12:56:44.576777+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev0-version-negotiation": {
       "status": "done",
@@ -118,7 +168,12 @@
       ],
       "started_at": "2026-07-10T12:34:25.287968+02:00",
       "completed_at": "2026-07-10T12:42:43.661737+02:00",
-      "elapsed_minutes": 8
+      "elapsed_minutes": 8,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev0-wire-dead-methods": {
       "status": "done",
@@ -129,7 +184,12 @@
       ],
       "started_at": "2026-07-10T12:42:49.678674+02:00",
       "completed_at": "2026-07-10T12:42:55.248678+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev1-2025-03-26": {
       "status": "done",
@@ -140,7 +200,12 @@
       ],
       "started_at": "2026-07-10T13:43:08.422075+02:00",
       "completed_at": "2026-07-10T13:43:16.068875+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev2-2025-06-18": {
       "status": "done",
@@ -151,7 +216,12 @@
       ],
       "started_at": "2026-07-10T13:43:18.659682+02:00",
       "completed_at": "2026-07-10T13:43:25.366352+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev3-2025-11-25": {
       "status": "done",
@@ -162,7 +232,12 @@
       ],
       "started_at": "2026-07-10T14:33:05.895891+02:00",
       "completed_at": "2026-07-10T14:33:12.444504+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "rev4-2026-07-28": {
       "status": "done",
@@ -173,7 +248,12 @@
       ],
       "started_at": "2026-07-10T14:46:41.752451+02:00",
       "completed_at": "2026-09-28T07:50:13.711968+02:00",
-      "elapsed_minutes": 114783
+      "elapsed_minutes": 114783,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "skills-extension": {
       "status": "done",
@@ -184,7 +264,12 @@
       ],
       "started_at": "2026-09-28T07:50:13.726175+02:00",
       "completed_at": "2026-09-28T07:50:13.739211+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     },
     "stabilise-server-cards": {
       "status": "blocked",
@@ -230,8 +315,13 @@
       ],
       "started_at": "2026-09-28T07:50:13.752663+02:00",
       "completed_at": "2026-09-28T07:50:13.765479+02:00",
-      "elapsed_minutes": 0
+      "elapsed_minutes": 0,
+      "accepted": {
+        "by": "Felix Geelhaar",
+        "reason": "finished before mcp-go's plan had acceptance checks; each shipped in a tagged release",
+        "at": "2026-09-28T08:05:13.75422+02:00"
+      }
     }
   },
-  "updated_at": "2026-09-28T07:50:13.818116+02:00"
+  "updated_at": "2026-09-28T08:05:13.75448+02:00"
 }
