@@ -1,6 +1,6 @@
 {
-  "project_id": "",
-  "version": 34,
+  "project_id": "mcp-go",
+  "version": 35,
   "task_states": {
     "phase1-healthz": {
       "status": "done",
