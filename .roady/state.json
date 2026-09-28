@@ -1,7 +1,12 @@
 {
   "project_id": "mcp-go",
-  "version": 35,
+  "version": 45,
   "task_states": {
+    "e2e-dispatcher-collapse": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
     "phase1-healthz": {
       "status": "done",
       "path": "",
@@ -49,6 +54,16 @@
       "started_at": "2026-03-20T21:41:30.475932+01:00",
       "completed_at": "2026-03-20T22:00:05.605804+01:00",
       "elapsed_minutes": 18
+    },
+    "progressive-discovery-wire": {
+      "status": "blocked",
+      "path": "",
+      "elapsed_minutes": 0,
+      "block": {
+        "detail": "waiting for the MCP working group to settle the wire contract",
+        "by": "Felix Geelhaar",
+        "at": "2026-09-28T07:50:13.805002+02:00"
+      }
     },
     "rev0-client-caps": {
       "status": "done",
@@ -150,12 +165,73 @@
       "elapsed_minutes": 0
     },
     "rev4-2026-07-28": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "afc4f3e"
+      ],
       "started_at": "2026-07-10T14:46:41.752451+02:00",
+      "completed_at": "2026-09-28T07:50:13.711968+02:00",
+      "elapsed_minutes": 114783
+    },
+    "skills-extension": {
+      "status": "done",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "90493d6"
+      ],
+      "started_at": "2026-09-28T07:50:13.726175+02:00",
+      "completed_at": "2026-09-28T07:50:13.739211+02:00",
+      "elapsed_minutes": 0
+    },
+    "stabilise-server-cards": {
+      "status": "blocked",
+      "path": "",
+      "elapsed_minutes": 0,
+      "block": {
+        "detail": "waiting for SEP-2127 to reach Final",
+        "by": "Felix Geelhaar",
+        "at": "2026-09-28T07:50:13.791716+02:00"
+      }
+    },
+    "stabilise-skills": {
+      "status": "blocked",
+      "path": "",
+      "elapsed_minutes": 0,
+      "block": {
+        "detail": "waiting for SEP-2640 to reach Final",
+        "by": "Felix Geelhaar",
+        "at": "2026-09-28T07:50:13.77788+02:00"
+      }
+    },
+    "stdio-http2-framing": {
+      "status": "blocked",
+      "path": "",
+      "elapsed_minutes": 0,
+      "block": {
+        "detail": "waiting for the Transports WG to land HTTP/2 over stdio",
+        "by": "Felix Geelhaar",
+        "at": "2026-09-28T07:50:13.817876+02:00"
+      }
+    },
+    "tasks-capability-version-gating": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "v1-28-extensions": {
+      "status": "done",
+      "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "f2546d6"
+      ],
+      "started_at": "2026-09-28T07:50:13.752663+02:00",
+      "completed_at": "2026-09-28T07:50:13.765479+02:00",
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-07-10T14:46:41.752451+02:00"
+  "updated_at": "2026-09-28T07:50:13.818116+02:00"
 }
