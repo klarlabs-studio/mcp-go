@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **mcp-go** is a Go framework for building Model Context Protocol (MCP) servers. The goal is to provide Gin-like developer experience for MCP, enabling Go developers to expose tools, resources, and prompts with strong typing, middleware support, and production-ready defaults.
 
+## Planning
+
+The plan lives in roady (`.roady/`): `roady next` for the task to work on, `roady status` for the whole plan, `roady drift detect` before calling work done. Tag commits `[roady:<task-id>]` and run `roady git sync`. Spec-revision status and what is deliberately out of library: `docs/revisions-roadmap.md` (its status table is authoritative). `memory/` is an archive of earlier sessions, not the plan.
+
 ## Build Commands
 
 ```bash

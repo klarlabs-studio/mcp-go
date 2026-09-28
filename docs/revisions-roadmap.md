@@ -3,7 +3,7 @@
 Plan to bring mcp-go current across **every** MCP spec revision, from the pinned
 `2024-11-05` baseline through the `2026-07-28` release candidate.
 
-**Status of the world (August 2026):**
+**Status of the world (September 2026, v1.28.2):**
 
 | Revision | Role | mcp-go today |
 |---|---|---|
@@ -17,8 +17,10 @@ The official spec released `2026-07-28` on that date. mcp-go serves it on the
 modern path and advertises it from `server/discover`. The initialize handshake
 stops at `2025-11-25` because 2026-07-28 retires initialize.
 
-Phases 0–4 of this document shipped across v1.22–v1.26. Checkboxes below are
-historical planning notes; treat the status table as authoritative.
+Phases 0–4 of this document shipped across v1.22–v1.26; the extensions in the
+table below followed in v1.27–v1.28. Checkboxes below are historical planning
+notes; treat the tables as authoritative. Open work is tracked in roady
+(`roady status`).
 
 ### Remaining (evaluated)
 
