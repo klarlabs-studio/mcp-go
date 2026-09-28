@@ -14,5 +14,13 @@ features:
       title: Spec Revisions Alignment (2024-11-05 → 2026-07-28)
       description: 'Bring mcp-go current across every MCP spec revision. Backbone: protocol version negotiation. Phases 0–4 shipped on v1 (no /v2 module path): version negotiation, Streamable HTTP, RFC 9728 advertise-only auth metadata, tasks/icons/sampling-tools, then the 2026-07-28 stateless rewrite (server/discover, MRTR, subscriptions/listen, routing headers, CacheableResult, extensions). Auth stays out-of-library by design. Preserve differentiators: MCP Apps, WebSocket, gRPC, middleware suite. Detailed plan in docs/revisions-roadmap.md.'
       requirements: []
+    - id: spec-extensions
+      title: Spec extensions after 2026-07-28
+      description: 'Extensions and SEPs adopted on v1 once the 2026-07-28 revision shipped: Skills, Server Cards, progressive tool discovery, Streamable HTTP over stdio, webhooks and EMA, Mcp-Param headers, and the client defaulting to the modern protocol. Several stay experimental until their SEP or working group settles.'
+      requirements: []
+    - id: maintenance
+      title: Maintenance and correctness
+      description: Open correctness and test-infrastructure work that is not a spec revision.
+      requirements: []
 constraints: []
 version: 0.1.0

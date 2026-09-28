@@ -182,8 +182,8 @@
     },
     {
       "id": "rev4-2026-07-28",
-      "title": "Rev Phase 4: 2026-07-28 RC stateless rewrite (v2.0.0)",
-      "description": "server/discover, MRTR/InputRequiredResult with resultType, subscriptions/listen, drop Mcp-Session-Id, Mcp-Method/Mcp-Name headers, CacheableResult (ttlMs/cacheScope), W3C trace context, extensions capability map, MCP Apps + Tasks as extensions, error renumbering, deprecate roots/sampling/logging. Behind Stateless opt-in until spec final.",
+      "title": "Rev Phase 4: 2026-07-28 shipped on v1 (stateless default); no v2",
+      "description": "Stateless became the Streamable HTTP default in v1.24.0 (a minor, not v2: mcp-go has only first-party consumers). Spec alignment through 2026-07-28 completed in v1.26.0 (#141). No /v2 module path is planned.",
       "priority": "low",
       "estimate": "40h",
       "depends_on": [
@@ -191,9 +191,105 @@
       ],
       "feature_id": "spec-revisions-alignment-(2024-11-05-→-2026-07-28)",
       "source": {}
+    },
+    {
+      "id": "skills-extension",
+      "title": "Skills extension (SEP-2640), experimental",
+      "description": "skill:// resources and skill://index.json from a directory, archive or template; advertises io.modelcontextprotocol/skills. Shipped in v1.27.0 (#143).",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "v1-28-extensions",
+      "title": "Server Cards, progressive discovery, stdio HTTP, webhooks, Mcp-Param headers, modern client default",
+      "description": "Shipped together in v1.28.0 (#150). Server Cards (SEP-2127) and progressive discovery helpers are experimental; stdio HTTP uses NDJSON frames; webhooks and EMA are advertise plus delivery helpers; client.New defaults to ModernVersion.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "tasks-capability-version-gating",
+      "title": "Decide whether to advertise the tasks capability only from 2025-11-25",
+      "description": "tasks is advertised whenever a tool opts into augmentation, whatever version was negotiated.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "maintenance",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "e2e-dispatcher-collapse",
+      "title": "Run e2e compliance tests on the real dispatcher",
+      "description": "e2e/compliance_test.go has its own testHandler that drifts from the dispatcher in mcp.go; it hid a SEP-1303 bug. Collapse it onto the real handler.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "maintenance",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "stabilise-skills",
+      "title": "Stabilise the Skills API when SEP-2640 is Final",
+      "description": "",
+      "priority": "low",
+      "estimate": "",
+      "depends_on": [
+        "skills-extension"
+      ],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "stabilise-server-cards",
+      "title": "Stabilise Server Cards when SEP-2127 is Final",
+      "description": "",
+      "priority": "low",
+      "estimate": "",
+      "depends_on": [
+        "v1-28-extensions"
+      ],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "progressive-discovery-wire",
+      "title": "Adopt the progressive-discovery wire contract once the working group settles it",
+      "description": "",
+      "priority": "low",
+      "estimate": "",
+      "depends_on": [
+        "v1-28-extensions"
+      ],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
+    },
+    {
+      "id": "stdio-http2-framing",
+      "title": "Replace NDJSON stdio-HTTP frames when the Transports WG lands HTTP/2 over stdio",
+      "description": "",
+      "priority": "low",
+      "estimate": "",
+      "depends_on": [
+        "v1-28-extensions"
+      ],
+      "feature_id": "spec-extensions",
+      "origin": "human",
+      "source": {}
     }
   ],
   "approval_status": "approved",
   "created_at": "2026-03-20T21:10:16.232146+01:00",
-  "updated_at": "2026-07-10T12:30:39.890085+02:00"
+  "updated_at": "2026-09-28T07:50:13.698875+02:00"
 }
