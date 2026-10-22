@@ -27,8 +27,9 @@ import (
 const (
 	// jsonNull is the JSON null literal.
 	jsonNull = "null"
-	// schemaTypeObject is the JSON Schema object type.
-	schemaTypeObject = "object"
+	// emptyObjectSchema is the requestedSchema of a form elicitation that names
+	// none: an object with no properties.
+	emptyObjectSchema = `{"type":"object","properties":{}}`
 )
 
 // Input request kinds carried in an InputRequest.Kind (MCP 2026-07-28, MRTR).
@@ -362,7 +363,9 @@ func (b *InputBroker) elicit(req *ElicitRequest) (*ElicitResult, error) {
 	// names none asks for an empty object.
 	wire := *req
 	if wire.Mode != ElicitModeURL && wire.RequestedSchema == nil {
-		wire.RequestedSchema = map[string]any{"type": schemaTypeObject, "properties": map[string]any{}}
+		if err := json.Unmarshal([]byte(emptyObjectSchema), &wire.RequestedSchema); err != nil {
+			return nil, fmt.Errorf("default requestedSchema: %w", err)
+		}
 	}
 	payload, err := json.Marshal(&wire)
 	if err != nil {
