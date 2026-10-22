@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.30.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.29.0...v1.30.0) - 2026-10-22
+
 ### Fixed
 
 - **`input_required` results now match the published 2026-07-28 schema, so
