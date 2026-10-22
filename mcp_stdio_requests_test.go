@@ -81,10 +81,15 @@ func (p *stdioPeer) next() map[string]json.RawMessage {
 // initialize runs the initialize-era handshake declaring caps.
 func (p *stdioPeer) initialize(caps map[string]any) {
 	p.t.Helper()
-	p.send(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{
-		"protocolVersion": "2025-11-25",
-		"capabilities":    caps,
-		"clientInfo":      map[string]any{"name": "peer", "version": "1"},
+	type initParams struct {
+		ProtocolVersion string         `json:"protocolVersion"`
+		Capabilities    map[string]any `json:"capabilities"`
+		ClientInfo      map[string]any `json:"clientInfo"`
+	}
+	p.send(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": initParams{
+		ProtocolVersion: "2025-11-25",
+		Capabilities:    caps,
+		ClientInfo:      map[string]any{"name": "peer", "version": "1"},
 	}})
 	if m := p.next(); string(m["id"]) != "1" || m["error"] != nil {
 		p.t.Fatalf("initialize failed: %v", m)
