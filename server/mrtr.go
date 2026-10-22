@@ -24,6 +24,13 @@ import (
 // is matched back to the same call on the next. This is a replay/continuation
 // model — analogous to algebraic effects simulated by re-execution.
 
+const (
+	// jsonNull is the JSON null literal.
+	jsonNull = "null"
+	// schemaTypeObject is the JSON Schema object type.
+	schemaTypeObject = "object"
+)
+
 // Input request kinds carried in an InputRequest.Kind (MCP 2026-07-28, MRTR).
 // On the wire each kind is the method of the request object it stands for; see
 // InputKindMethod.
@@ -88,7 +95,7 @@ func (r InputRequest) MarshalJSON() ([]byte, error) {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params,omitempty"`
 	}{Method: InputKindMethod(r.Kind)}
-	if p := bytes.TrimSpace(r.Payload); len(p) > 0 && !bytes.Equal(p, []byte("null")) {
+	if p := bytes.TrimSpace(r.Payload); len(p) > 0 && !bytes.Equal(p, []byte(jsonNull)) {
 		wire.Params = p
 	}
 	return json.Marshal(wire)
@@ -135,7 +142,7 @@ type InputResponse struct {
 // responses; any other JSON value is an error.
 func ParseInputResponses(raw json.RawMessage) ([]InputResponse, error) {
 	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte(jsonNull)) {
 		return nil, nil
 	}
 	switch raw[0] {
@@ -244,7 +251,7 @@ func (r *InputRequiredResult) UnmarshalJSON(data []byte) error {
 // and "" for empty or null input.
 func RequestStateString(raw json.RawMessage) string {
 	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	if len(raw) == 0 || bytes.Equal(raw, []byte(jsonNull)) {
 		return ""
 	}
 	var s string
@@ -355,7 +362,7 @@ func (b *InputBroker) elicit(req *ElicitRequest) (*ElicitResult, error) {
 	// names none asks for an empty object.
 	wire := *req
 	if wire.Mode != ElicitModeURL && wire.RequestedSchema == nil {
-		wire.RequestedSchema = map[string]any{"type": "object", "properties": map[string]any{}}
+		wire.RequestedSchema = map[string]any{"type": schemaTypeObject, "properties": map[string]any{}}
 	}
 	payload, err := json.Marshal(&wire)
 	if err != nil {
