@@ -28,7 +28,6 @@
 package mcp
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"crypto/tls"
@@ -2194,7 +2193,7 @@ func (h *requestHandler) handleTasksUpdate(ctx context.Context, req *protocol.Re
 	if err := requireTasksIfModern(ctx); err != nil {
 		return nil, err
 	}
-	responses, err := parseTaskInputResponses(params.InputResponses)
+	responses, err := server.ParseInputResponses(params.InputResponses)
 	if err != nil {
 		return nil, protocol.NewInvalidParams(err.Error())
 	}
@@ -2217,29 +2216,6 @@ func requireTasksIfModern(ctx context.Context) error {
 		return nil
 	}
 	return requireTasksExtension(ctx)
-}
-
-func parseTaskInputResponses(raw json.RawMessage) ([]server.InputResponse, error) {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return nil, nil
-	}
-	if raw[0] == '[' {
-		var arr []server.InputResponse
-		if err := json.Unmarshal(raw, &arr); err != nil {
-			return nil, err
-		}
-		return arr, nil
-	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, err
-	}
-	out := make([]server.InputResponse, 0, len(m))
-	for id, payload := range m {
-		out = append(out, server.InputResponse{ID: id, Payload: payload})
-	}
-	return out, nil
 }
 
 // handleTasksList serves tasks/list with cursor pagination.

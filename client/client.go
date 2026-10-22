@@ -180,6 +180,8 @@ type clientOptions struct {
 	clientName  string
 	clientVer   string
 	protocolVer string
+	// capabilities is the clientCapabilities object sent in modern _meta.
+	capabilities map[string]any
 }
 
 // WithTimeout sets the default timeout for requests.
@@ -194,6 +196,16 @@ func WithClientInfo(name, version string) Option {
 	return func(o *clientOptions) {
 		o.clientName = name
 		o.clientVer = version
+	}
+}
+
+// WithCapabilities sets the client capabilities a 2026-07-28 request declares
+// in its _meta (io.modelcontextprotocol/clientCapabilities), for example
+// {"elicitation": {}} or {"sampling": {}}. A server only puts input requests
+// the client declared into an input_required result. The default is {}.
+func WithCapabilities(capabilities map[string]any) Option {
+	return func(o *clientOptions) {
+		o.capabilities = capabilities
 	}
 }
 
@@ -411,7 +423,7 @@ func (c *Client) Discover(ctx context.Context) (*ServerInfo, error) {
 		"_meta": map[string]any{
 			protocol.MetaKeyProtocolVersion:    protocol.ModernVersion,
 			protocol.MetaKeyClientInfo:         map[string]any{fieldName: c.opts.clientName, fieldVersion: c.opts.clientVer},
-			protocol.MetaKeyClientCapabilities: map[string]any{},
+			protocol.MetaKeyClientCapabilities: c.declaredCapabilities(),
 		},
 	}
 	resp, err := c.call(ctx, protocol.MethodServerDiscover, params)
@@ -813,6 +825,7 @@ func (c *Client) withModernMeta(params json.RawMessage) (json.RawMessage, error)
 	modern := c.modern
 	name, ver := c.opts.clientName, c.opts.clientVer
 	c.mu.RUnlock()
+	caps := c.declaredCapabilities()
 	if !modern {
 		return params, nil
 	}
@@ -822,13 +835,22 @@ func (c *Client) withModernMeta(params json.RawMessage) (json.RawMessage, error)
 	meta := map[string]any{
 		protocol.MetaKeyProtocolVersion:    protocol.ModernVersion,
 		protocol.MetaKeyClientInfo:         map[string]any{fieldName: name, fieldVersion: ver},
-		protocol.MetaKeyClientCapabilities: map[string]any{},
+		protocol.MetaKeyClientCapabilities: caps,
 	}
 	metaJSON, err := json.Marshal(meta)
 	if err != nil {
 		return nil, fmt.Errorf("marshal modern _meta: %w", err)
 	}
 	return spliceObjectField(params, "_meta", metaJSON)
+}
+
+// declaredCapabilities is the clientCapabilities object for modern _meta:
+// WithCapabilities, or {} when unset.
+func (c *Client) declaredCapabilities() map[string]any {
+	if c.opts.capabilities == nil {
+		return map[string]any{}
+	}
+	return c.opts.capabilities
 }
 
 // rawHasTopLevelMeta reports whether params is a JSON object that already
@@ -895,6 +917,10 @@ func (c *Client) call(ctx context.Context, method string, params any) (*protocol
 		if err != nil {
 			return nil, err
 		}
+		paramsRaw, err = withInputRetry(ctx, method, paramsRaw)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	idRaw, err := json.Marshal(id)
@@ -921,6 +947,11 @@ func (c *Client) call(ctx context.Context, method string, params any) (*protocol
 
 	if resp.Error != nil {
 		return nil, resp.Error
+	}
+	// MRTR: an input_required result is not the method's result; surface it
+	// as an *InputRequiredError so the caller can fulfill it and retry.
+	if err := inputRequiredFrom(resp.Result); err != nil {
+		return nil, err
 	}
 
 	return resp, nil

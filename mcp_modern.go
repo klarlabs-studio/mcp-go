@@ -30,7 +30,8 @@ type modernMeta struct {
 	clientCaps      json.RawMessage
 	logLevel        string
 	// MRTR retry fields: inputResponses fulfills the inputRequests of an earlier
-	// input_required result; requestState is the opaque token echoed back.
+	// input_required result; requestState is the opaque string echoed back,
+	// held as raw JSON (a JSON string).
 	inputResponses []server.InputResponse
 	requestState   json.RawMessage
 	// W3C Trace Context carried in _meta so the server joins the caller's
@@ -50,6 +51,9 @@ func parseModernMeta(params json.RawMessage) (*modernMeta, bool, error) {
 	}
 	var envelope struct {
 		Meta map[string]json.RawMessage `json:"_meta"`
+		// MRTR retry fields travel in params (InputResponseRequestParams).
+		InputResponses json.RawMessage `json:"inputResponses"`
+		RequestState   json.RawMessage `json:"requestState"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return nil, false, protocol.NewInvalidParams(err.Error())
@@ -66,10 +70,9 @@ func parseModernMeta(params json.RawMessage) (*modernMeta, bool, error) {
 	if ll, ok := envelope.Meta[protocol.MetaKeyLogLevel]; ok {
 		_ = json.Unmarshal(ll, &m.logLevel)
 	}
-	if ir, ok := envelope.Meta[protocol.MetaKeyInputResponses]; ok {
-		_ = json.Unmarshal(ir, &m.inputResponses)
+	if err := m.parseRetry(envelope.InputResponses, envelope.RequestState, envelope.Meta); err != nil {
+		return nil, false, err
 	}
-	m.requestState = envelope.Meta[protocol.MetaKeyRequestState]
 	if tp, ok := envelope.Meta[protocol.MetaKeyTraceparent]; ok {
 		_ = json.Unmarshal(tp, &m.traceparent)
 	}
@@ -80,6 +83,36 @@ func parseModernMeta(params json.RawMessage) (*modernMeta, bool, error) {
 		_ = json.Unmarshal(bg, &m.baggage)
 	}
 	return m, true, nil
+}
+
+// parseRetry reads the MRTR retry fields. The spec (MCP 2026-07-28,
+// InputResponseRequestParams) carries inputResponses and requestState directly
+// in params; they are validated strictly there. Before following the published
+// schema, mcp-go read them from the _meta keys MetaKeyInputResponses and
+// MetaKeyRequestState; those are still accepted, leniently and only when the
+// params field is absent, so older callers keep working.
+func (m *modernMeta) parseRetry(responses, state json.RawMessage, meta map[string]json.RawMessage) error {
+	if len(responses) > 0 && string(responses) != "null" {
+		parsed, err := server.ParseInputResponses(responses)
+		if err != nil {
+			return protocol.NewInvalidParams(err.Error())
+		}
+		m.inputResponses = parsed
+	} else if legacy, ok := meta[protocol.MetaKeyInputResponses]; ok {
+		m.inputResponses, _ = server.ParseInputResponses(legacy)
+	}
+	if len(state) > 0 && string(state) != "null" {
+		var s string
+		if err := json.Unmarshal(state, &s); err != nil {
+			return protocol.NewInvalidParams("requestState must be a string")
+		}
+		m.requestState = state
+	} else if legacy, ok := meta[protocol.MetaKeyRequestState]; ok {
+		if s := server.RequestStateString(legacy); s != "" {
+			m.requestState, _ = json.Marshal(s)
+		}
+	}
+	return nil
 }
 
 // applyModern validates a modern request's metadata and, on success, returns a

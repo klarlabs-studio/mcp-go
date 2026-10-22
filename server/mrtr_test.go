@@ -137,6 +137,100 @@ func TestInputBroker_CapabilityGateStillApplies(t *testing.T) {
 	}
 }
 
+func TestParseInputResponses(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    []InputResponse
+		wantErr bool
+	}{
+		{name: "empty", raw: ``},
+		{name: "null", raw: `null`},
+		{
+			name: "spec map, sorted by id",
+			raw:  `{"b":{"action":"decline"},"a":{"roots":[]}}`,
+			want: []InputResponse{
+				{ID: "a", Payload: json.RawMessage(`{"roots":[]}`)},
+				{ID: "b", Payload: json.RawMessage(`{"action":"decline"}`)},
+			},
+		},
+		{
+			name: "pre-spec array",
+			raw:  `[{"id":"ir-0","payload":{"action":"accept"}}]`,
+			want: []InputResponse{{ID: "ir-0", Payload: json.RawMessage(`{"action":"accept"}`)}},
+		},
+		{name: "string", raw: `"x"`, wantErr: true},
+		{name: "broken map", raw: `{"a":`, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseInputResponses(json.RawMessage(tt.raw))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %+v, want %+v", got, tt.want)
+			}
+			for i := range got {
+				if got[i].ID != tt.want[i].ID || string(got[i].Payload) != string(tt.want[i].Payload) {
+					t.Errorf("[%d] = %+v, want %+v", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestInputRequest_JSON(t *testing.T) {
+	raw, err := json.Marshal(InputRequest{ID: "ir-0", Kind: InputKindRoots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `{"method":"roots/list"}` {
+		t.Errorf("roots request = %s, want {\"method\":\"roots/list\"}", raw)
+	}
+	var back InputRequest
+	if err := json.Unmarshal([]byte(`{"method":"sampling/createMessage","params":{"maxTokens":1}}`), &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.Kind != InputKindSampling || string(back.Payload) != `{"maxTokens":1}` {
+		t.Errorf("decoded = %+v", back)
+	}
+	if err := json.Unmarshal([]byte(`{"params":{}}`), &back); err == nil {
+		t.Error("a request object without a method must not decode")
+	}
+	if got := InputKindMethod("custom/method"); got != "custom/method" {
+		t.Errorf("unknown kind maps to %q, want it unchanged", got)
+	}
+}
+
+func TestInputRequiredResult_RejectsBadIDs(t *testing.T) {
+	for name, reqs := range map[string][]InputRequest{
+		"empty id":     {{Kind: InputKindRoots}},
+		"duplicate id": {{ID: "a", Kind: InputKindRoots}, {ID: "a", Kind: InputKindRoots}},
+	} {
+		if _, err := json.Marshal(InputRequiredResult{InputRequests: reqs}); err == nil {
+			t.Errorf("%s: marshal succeeded, want an error", name)
+		}
+	}
+}
+
+func TestInputBroker_FillsRequiredParams(t *testing.T) {
+	broker := NewInputBroker(nil, nil)
+	s := brokerSession(t, broker)
+	_, _ = NewElicitor(s).Elicit(context.Background(), &ElicitRequest{Message: "?"})
+	_, _ = s.CreateMessage(context.Background(), &CreateMessageRequest{MaxTokens: 1})
+	raw, err := json.Marshal(broker.Result())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"resultType":"input_required","inputRequests":{` +
+		`"ir-0":{"method":"elicitation/create","params":{"message":"?","requestedSchema":{"properties":{},"type":"object"}}},` +
+		`"ir-1":{"method":"sampling/createMessage","params":{"messages":[],"maxTokens":1}}}}`
+	if string(raw) != want {
+		t.Errorf("result = %s\nwant     %s", raw, want)
+	}
+}
+
 func TestInputBroker_RequestStateEcho(t *testing.T) {
 	state := json.RawMessage(`{"round":2}`)
 	broker := NewInputBroker(nil, state)
@@ -144,5 +238,16 @@ func TestInputBroker_RequestStateEcho(t *testing.T) {
 	_, _ = s.CreateMessage(context.Background(), &CreateMessageRequest{MaxTokens: 1})
 	if string(broker.Result().RequestState) != `{"round":2}` {
 		t.Errorf("requestState = %s, want the echoed token", broker.Result().RequestState)
+	}
+	// On the wire the state is the opaque string the spec requires.
+	raw, err := json.Marshal(broker.Result())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		RequestState string `json:"requestState"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil || wire.RequestState != `{"round":2}` {
+		t.Errorf("wire requestState = %s (%v), want the string {\"round\":2}", raw, err)
 	}
 }

@@ -695,6 +695,24 @@ tools, _ := c.ListTools(ctx)
 result, _ := c.CallTool(ctx, "search", SearchInput{Query: "hello"})
 ```
 
+Against a 2026-07-28 server, a call that needs sampling, elicitation, or roots
+returns a `*client.InputRequiredError` (`errors.Is(err, client.ErrInputRequired)`).
+Declare what the client can answer with `client.WithCapabilities`, answer each
+input request by its id, and retry:
+
+```go
+c := client.New(transport, client.WithCapabilities(map[string]any{"elicitation": map[string]any{}}))
+_, err := c.CallTool(ctx, "greet", args)
+var ir *client.InputRequiredError
+if errors.As(err, &ir) {
+    answers := map[string]any{}
+    for id := range ir.InputRequests { // each is {Method, Params}
+        answers[id] = map[string]any{"action": "accept", "content": map[string]any{"name": "Ada"}}
+    }
+    result, err = c.CallTool(ir.Retry(ctx, answers), "greet", args)
+}
+```
+
 ### Testing
 
 Test MCP servers without transport overhead:

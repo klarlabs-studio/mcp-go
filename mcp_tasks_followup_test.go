@@ -64,13 +64,25 @@ func TestModern_TaskElicitationRoundTrip(t *testing.T) {
 	}
 
 	got := waitTaskStatus(t, handler, id, "input_required")
-	reqs, ok := got[fieldInputRequests].(map[string]any)
-	if !ok || len(reqs) != 1 {
-		t.Fatalf("inputRequests = %#v, want one outstanding elicitation", got[fieldInputRequests])
+	// Inspect the wire encoding: inputRequests is a map of request id to a
+	// {"method", "params"} request object (SEP-2663 reuses MRTR's InputRequests).
+	wire, err := json.Marshal(got[fieldInputRequests])
+	if err != nil {
+		t.Fatalf("marshal inputRequests: %v", err)
+	}
+	var reqs map[string]struct {
+		Method string         `json:"method"`
+		Params map[string]any `json:"params"`
+	}
+	if err := json.Unmarshal(wire, &reqs); err != nil || len(reqs) != 1 {
+		t.Fatalf("inputRequests = %s (%v), want one outstanding elicitation", wire, err)
 	}
 	var reqID string
-	for k := range reqs {
+	for k, r := range reqs {
 		reqID = k
+		if r.Method != protocol.MethodElicitationCreate || r.Params["message"] != "name?" {
+			t.Fatalf("inputRequests[%q] = %+v, want elicitation/create asking name?", k, r)
+		}
 	}
 
 	_, err = handler.HandleRequest(context.Background(), &protocol.Request{

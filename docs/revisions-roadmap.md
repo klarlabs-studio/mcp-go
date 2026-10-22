@@ -203,7 +203,12 @@ no `/v2` module path.
   `elicitation/create` with `InputRequiredResult` + client retry carrying
   `inputResponses`; correlate via `requestState`. (Replay/continuation model:
   broker fulfills input calls from client-supplied responses or records them as
-  pending `input_required`; handler is re-run each round.)
+  pending `input_required`; handler is re-run each round.) Wire shape follows
+  the published schema: `inputRequests` is a map of id → `{method, params}`,
+  `requestState` a string, and the retry carries `inputResponses` (id → result)
+  and `requestState` in params. The pre-spec `_meta` array retry is still
+  accepted. `client` surfaces `input_required` as `*InputRequiredError` and
+  retries via `WithInputResponses`.
 
 **Transport**
 - [x] **Drop `Mcp-Session-Id`** (sessions removed from the protocol layer).

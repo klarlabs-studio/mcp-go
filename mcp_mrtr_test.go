@@ -11,20 +11,29 @@ import (
 )
 
 // modernMRTRParams builds tools/call params carrying the modern per-request
-// _meta with the given client capabilities plus optional MRTR retry fields.
+// _meta with the given client capabilities plus optional extra _meta keys.
 func modernMRTRParams(t *testing.T, caps map[string]any, extra map[string]any) json.RawMessage {
+	t.Helper()
+	return modernMRTRRetryParams(t, caps, extra, nil)
+}
+
+// modernMRTRRetryParams is modernMRTRParams plus top-level params fields — where
+// the spec's InputResponseRequestParams carries inputResponses and requestState.
+func modernMRTRRetryParams(t *testing.T, caps, extraMeta, retry map[string]any) json.RawMessage {
 	t.Helper()
 	meta := map[string]any{
 		protocol.MetaKeyProtocolVersion:    protocol.ModernVersion,
 		protocol.MetaKeyClientInfo:         map[string]any{"name": "c", "version": "1"},
 		protocol.MetaKeyClientCapabilities: caps,
 	}
-	maps.Copy(meta, extra)
-	return mustParams(t, map[string]any{
+	maps.Copy(meta, extraMeta)
+	p := map[string]any{
 		"name":      "ask",
 		"arguments": map[string]any{},
 		"_meta":     meta,
-	})
+	}
+	maps.Copy(p, retry)
+	return mustParams(t, p)
 }
 
 // TestMRTR_SamplingRoundTrip drives the full stateless sampling round-trip: the
@@ -67,16 +76,16 @@ func TestMRTR_SamplingRoundTrip(t *testing.T) {
 	}
 	irID := res1.InputRequests[0].ID
 
-	// Round 2: supply the completion, retry the same call.
+	// Round 2: supply the completion in params.inputResponses, keyed by the
+	// input request id, and retry the same call.
 	completion := map[string]any{
 		"role": "assistant", "model": "test", "content": map[string]any{"type": "text", "text": "hello"},
 	}
-	retryMeta := map[string]any{
-		protocol.MetaKeyInputResponses: []any{map[string]any{"id": irID, "payload": completion}},
-	}
 	req2 := &protocol.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodToolsCall,
-		Params: modernMRTRParams(t, caps, retryMeta),
+		Params: modernMRTRRetryParams(t, caps, nil, map[string]any{
+			"inputResponses": map[string]any{irID: completion},
+		}),
 	}
 	resp2, err := handler.HandleRequest(context.Background(), req2)
 	if err != nil {
@@ -125,12 +134,11 @@ func TestMRTR_ElicitationRoundTrip(t *testing.T) {
 	}
 
 	answer := map[string]any{"action": "accept", "content": map[string]any{"name": "Ada"}}
-	retryMeta := map[string]any{
-		protocol.MetaKeyInputResponses: []any{map[string]any{"id": res1.InputRequests[0].ID, "payload": answer}},
-	}
 	req2 := &protocol.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: protocol.MethodToolsCall,
-		Params: modernMRTRParams(t, caps, retryMeta),
+		Params: modernMRTRRetryParams(t, caps, nil, map[string]any{
+			"inputResponses": map[string]any{res1.InputRequests[0].ID: answer},
+		}),
 	}
 	resp2, err := handler.HandleRequest(context.Background(), req2)
 	if err != nil {
@@ -139,6 +147,86 @@ func TestMRTR_ElicitationRoundTrip(t *testing.T) {
 	content := resp2.Result.(map[string]any)["content"].([]map[string]any)
 	if content[0]["text"] != "hi Ada" {
 		t.Errorf("round 2 text = %v, want %q", content[0]["text"], "hi Ada")
+	}
+}
+
+// TestMRTR_PreSpecMetaRetryAccepted: before following the published schema,
+// mcp-go read the retry from _meta (an array of {id, payload} under
+// MetaKeyInputResponses, any JSON under MetaKeyRequestState). Callers built
+// against that still resolve, and their state goes back out as a string.
+func TestMRTR_PreSpecMetaRetryAccepted(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	srv.Tool("ask").Handler(func(ctx context.Context, _ struct{}) (string, error) {
+		first, err := server.ElicitFromContext(ctx).Elicit(ctx, &server.ElicitRequest{Message: "first?"})
+		if err != nil {
+			return "", err
+		}
+		second, err := server.ElicitFromContext(ctx).Elicit(ctx, &server.ElicitRequest{Message: "second?"})
+		if err != nil {
+			return "", err
+		}
+		return first.Action + "+" + second.Action, nil
+	})
+	handler := newRequestHandler(srv)
+	caps := map[string]any{"elicitation": map[string]any{}}
+
+	resp, err := handler.HandleRequest(context.Background(), &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsCall,
+		Params: modernMRTRParams(t, caps, map[string]any{
+			protocol.MetaKeyInputResponses: []any{map[string]any{"id": "ir-0", "payload": map[string]any{"action": "accept"}}},
+			protocol.MetaKeyRequestState:   map[string]any{"round": 2},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("pre-spec retry: %v", err)
+	}
+	raw, err := json.Marshal(resp.Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res struct {
+		InputRequests map[string]struct {
+			Method string `json:"method"`
+		} `json:"inputRequests"`
+		RequestState any `json:"requestState"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	// ir-0 resolved from the _meta array; ir-1 is the next request.
+	if len(res.InputRequests) != 1 || res.InputRequests["ir-1"].Method != protocol.MethodElicitationCreate {
+		t.Fatalf("result = %s, want only ir-1 outstanding", raw)
+	}
+	if res.RequestState != `{"round":2}` {
+		t.Fatalf("requestState = %#v, want the string {\"round\":2}", res.RequestState)
+	}
+}
+
+// TestMRTR_ParamsRetryWinsOverMeta: when both locations are present, the
+// spec's params fields are used.
+func TestMRTR_ParamsRetryWinsOverMeta(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "s", Version: "1"})
+	srv.Tool("ask").Handler(func(ctx context.Context, _ struct{}) (string, error) {
+		res, err := server.ElicitFromContext(ctx).Elicit(ctx, &server.ElicitRequest{Message: "?"})
+		if err != nil {
+			return "", err
+		}
+		return res.Action, nil
+	})
+	handler := newRequestHandler(srv)
+	resp, err := handler.HandleRequest(context.Background(), &protocol.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: protocol.MethodToolsCall,
+		Params: modernMRTRRetryParams(t, map[string]any{"elicitation": map[string]any{}},
+			map[string]any{protocol.MetaKeyInputResponses: []any{map[string]any{"id": "ir-0", "payload": map[string]any{"action": "decline"}}}},
+			map[string]any{"inputResponses": map[string]any{"ir-0": map[string]any{"action": "accept"}}},
+		),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := resp.Result.(map[string]any)["content"].([]map[string]any)
+	if content[0]["text"] != "accept" {
+		t.Fatalf("text = %v, want accept (from params.inputResponses)", content[0]["text"])
 	}
 }
 

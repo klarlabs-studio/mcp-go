@@ -156,10 +156,11 @@ const (
 	MetaKeySubscriptionID     = "io.modelcontextprotocol/subscriptionId"
 	MetaKeyRelatedTask        = "io.modelcontextprotocol/related-task"
 
-	// MRTR (Multi Round-Trip Requests, MCP 2026-07-28): a client retrying a
-	// call that returned resultType "input_required" carries its fulfillment of
-	// the earlier inputRequests under MetaKeyInputResponses and echoes the
-	// server's opaque MetaKeyRequestState.
+	// MRTR (Multi Round-Trip Requests, MCP 2026-07-28): the spec carries a
+	// retry's inputResponses and requestState directly in the request params
+	// (InputResponseRequestParams), not in _meta. These _meta keys are what
+	// mcp-go read before it followed the published schema; the server still
+	// accepts them from older callers but no conforming client sends them.
 	MetaKeyInputResponses = "io.modelcontextprotocol/inputResponses"
 	MetaKeyRequestState   = "io.modelcontextprotocol/requestState"
 

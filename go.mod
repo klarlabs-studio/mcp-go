@@ -6,6 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.21.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.klarlabs.de/fortify v1.8.1
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/metric v1.45.0
