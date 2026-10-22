@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.30.1](https://github.com/klarlabs-studio/mcp-go/compare/v1.30.0...v1.30.1) - 2026-10-22
+
 ### Fixed
 
 - **A `tools/call` without `arguments` reaches the tool.** The MCP schema
