@@ -596,6 +596,13 @@ srv.PromptCompletion("code-review").
 
 Servers can make requests back to clients via sessions:
 
+Sampling, roots, and elicitation reach the client only when it declared the
+capability. How they travel depends on the revision: a stateless 2026-07-28
+request resolves them through an `input_required` result the client retries
+with its answers, on any transport. An initialize-era session sends a real
+server→client request, which `ServeStdio` supports; the other transports
+return `ErrNoRequestSender` for now.
+
 ```go
 // Request LLM completion from client (sampling)
 session := mcp.SessionFromContext(ctx)

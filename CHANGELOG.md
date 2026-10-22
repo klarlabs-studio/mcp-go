@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Sampling, elicitation, and roots work over stdio.** `transport.Stdio`
+  now implements `server.RequestSender`, so an initialize-era client that
+  declared the capability receives `sampling/createMessage`,
+  `elicitation/create`, and `roots/list` instead of the handler getting
+  `ErrNoRequestSender`. Requests go out under `"mcp-go-srv-<n>"` string ids;
+  the reader goroutine routes responses itself, so a tool blocked on the
+  client never stops the read path, while client requests are still handled
+  one at a time in arrival order. A cancelled context sends
+  `notifications/cancelled` and frees the request; EOF fails waiting
+  requests with the new `transport.ErrConnectionClosed`. Capability checks
+  are unchanged, and stateless 2026-07-28 requests keep the MRTR
+  `input_required` path. WebSocket still reports `ErrNoRequestSender`.
+
 ## [1.28.2](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.1...v1.28.2) - 2026-09-26
 
 ### Fixed
