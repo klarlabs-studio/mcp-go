@@ -2,7 +2,8 @@ package server
 
 import (
 	"context"
-	"fmt"
+
+	"go.klarlabs.de/mcp/protocol"
 )
 
 // TextContent represents text content in a prompt message.
@@ -139,7 +140,7 @@ func (p *Prompt) Get(ctx context.Context, args map[string]string) (*PromptResult
 	for _, arg := range p.arguments {
 		if arg.Required {
 			if args == nil || args[arg.Name] == "" {
-				return nil, fmt.Errorf("missing required argument: %s", arg.Name)
+				return nil, protocol.NewInvalidParams("missing required argument: " + arg.Name)
 			}
 		}
 	}
