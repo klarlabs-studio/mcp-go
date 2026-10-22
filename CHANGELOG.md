@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `tools/call` without `arguments` reaches the tool.** The MCP schema
+  (2025-11-25 and 2026-07-28) makes `CallToolRequestParams.arguments`
+  optional, but `Tool.Execute` validated the missing value as JSON and every
+  such call failed with "input validation failed: invalid JSON: unexpected end
+  of JSON input", even for a `struct{}` input. An explicit `"arguments": null`
+  was worse: it passed validation and ran the handler with zero values, skipping
+  required fields. Both are now treated as `{}` before validation and decoding,
+  on every transport: an all-optional input gets its zero value, and a missing
+  required field is reported as an `isError` result naming it ("query: required
+  field is missing").
+- **A missing required prompt argument is `-32602`, not an opaque `-32603`.**
+  `prompts/get` without a required argument returned a plain error, which the
+  dispatcher sanitized to "internal error". It is now Invalid params with
+  "missing required argument: <name>", as the spec asks. Absent `arguments` on
+  `prompts/get` already worked.
+
 ## [1.30.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.29.0...v1.30.0) - 2026-10-22
 
 ### Fixed
