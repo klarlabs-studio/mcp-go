@@ -206,8 +206,8 @@ func TestServeStdio_ModernRequestStaysStateless(t *testing.T) {
 	}
 	var res struct {
 		ResultType    string `json:"resultType"`
-		InputRequests []struct {
-			Kind string `json:"kind"`
+		InputRequests map[string]struct {
+			Method string `json:"method"`
 		} `json:"inputRequests"`
 	}
 	if err := json.Unmarshal(resp["result"], &res); err != nil {
@@ -215,5 +215,10 @@ func TestServeStdio_ModernRequestStaysStateless(t *testing.T) {
 	}
 	if res.ResultType != protocol.ResultTypeInputRequired || len(res.InputRequests) != 1 {
 		t.Fatalf("result = %s, want input_required with one input request", resp["result"])
+	}
+	for _, r := range res.InputRequests {
+		if r.Method != protocol.MethodElicitationCreate {
+			t.Fatalf("input request method = %q, want %q", r.Method, protocol.MethodElicitationCreate)
+		}
 	}
 }

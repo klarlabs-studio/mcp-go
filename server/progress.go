@@ -141,7 +141,7 @@ func ExtractProgressToken(params json.RawMessage) ProgressToken {
 // yield the empty token.
 func parseProgressToken(raw json.RawMessage) ProgressToken {
 	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 || string(raw) == jsonNull {
 		return ""
 	}
 

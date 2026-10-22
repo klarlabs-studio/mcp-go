@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`input_required` results now match the published 2026-07-28 schema, so
+  spec-following clients accept them.** mcp-go sent `inputRequests` as an array
+  of `{"id", "kind", "payload"}` entries. The spec defines a map from a
+  server-assigned id to a plain request object, `{"method":
+  "elicitation/create", "params": {…}}` (likewise `sampling/createMessage`,
+  `roots/list`). Clients that validate the result rejected it: Claude Code
+  2.1.307 refused elicitations from tools built on mcp-go with "input_required
+  carries neither inputRequests nor requestState". `requestState` is now always
+  a string, and a result with neither field cannot be marshalled. Form
+  elicitations without a `requestedSchema` ask for an empty object, and
+  sampling requests always carry `messages`, since the schema requires both.
+- **The retry is read where the spec puts it.** `inputResponses` (a map from
+  input request id to the bare `ElicitResult` / `CreateMessageResult` /
+  `ListRootsResult`) and `requestState` travel in the request params
+  (`InputResponseRequestParams`), not in `_meta`. A malformed value there is
+  `-32602`. The earlier `_meta` keys `io.modelcontextprotocol/inputResponses`
+  (array of `{"id", "payload", "error"}`) and `io.modelcontextprotocol/requestState`
+  are still accepted when the params fields are absent; mcp-go never emits the
+  old shape. The Go types keep their fields: `InputRequest`,
+  `InputRequiredResult`, and the new `server.ParseInputResponses` encode and
+  decode the spec shape. Task `inputRequests` on `tasks/get` and `tasks/update`
+  share the same encoding.
+- **The client no longer mistakes `input_required` for an empty result.**
+  `client.Client` returned a `ToolResult` with no content when a 2026-07-28
+  server asked for input. It now returns `*client.InputRequiredError`
+  (`errors.Is(err, client.ErrInputRequired)`) with the keyed requests and the
+  request state; `err.Retry(ctx, responses)` (or `client.WithInputResponses`)
+  makes the next `tools/call`, `prompts/get`, or `resources/read` carry them in
+  params. `client.WithCapabilities` declares the client capabilities a server
+  needs to see before it asks for input.
+
 ## [1.29.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.2...v1.29.0) - 2026-10-22
 
 ### Added

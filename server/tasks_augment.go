@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"sort"
 	"sync"
@@ -529,32 +528,14 @@ func TaskNotificationParams(t *AugTask) map[string]any {
 	return m
 }
 
-func inputRequestsWire(reqs []InputRequest) map[string]any {
-	out := make(map[string]any, len(reqs))
+// inputRequestsWire encodes outstanding requests as the spec's InputRequests
+// map: each request ID keys its {"method", "params"} request object.
+func inputRequestsWire(reqs []InputRequest) map[string]InputRequest {
+	out := make(map[string]InputRequest, len(reqs))
 	for _, r := range reqs {
-		entry := map[string]any{"method": inputKindMethod(r.Kind)}
-		if len(r.Payload) > 0 {
-			var params any
-			if err := json.Unmarshal(r.Payload, &params); err == nil {
-				entry["params"] = params
-			}
-		}
-		out[r.ID] = entry
+		out[r.ID] = r
 	}
 	return out
-}
-
-func inputKindMethod(kind string) string {
-	switch kind {
-	case InputKindSampling:
-		return protocol.MethodSamplingCreateMessage
-	case InputKindElicitation:
-		return protocol.MethodElicitationCreate
-	case InputKindRoots:
-		return protocol.MethodRootsList
-	default:
-		return kind
-	}
 }
 
 func taskErrorWire(err error) map[string]any {
