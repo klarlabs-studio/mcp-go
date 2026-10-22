@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -340,6 +341,8 @@ func (t *Tool) Icons() []Icon {
 
 // Execute runs the tool handler with the given JSON input.
 func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (any, error) {
+	input = normalizeArguments(input)
+
 	// Validate input against the generated schema before the handler runs,
 	// so invalid-per-schema input never reaches business logic. Validation is
 	// on by default; SkipValidation opts a tool out. A failure is a
@@ -380,4 +383,19 @@ func (t *Tool) Execute(ctx context.Context, input json.RawMessage) (any, error) 
 	}
 
 	return resultVal, nil
+}
+
+// normalizeArguments maps an absent or JSON-null arguments value to an empty
+// object. The MCP schema (2025-11-25 and 2026-07-28) makes
+// CallToolRequestParams.arguments optional, so a call that omits it means "no
+// arguments", not malformed input. Normalising before validation keeps the
+// schema's required fields enforced (a null would otherwise validate as "any
+// type" and decode to zero values) and lets an all-optional input decode to
+// its zero value.
+func normalizeArguments(input json.RawMessage) json.RawMessage {
+	trimmed := bytes.TrimSpace(input)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return json.RawMessage("{}")
+	}
+	return input
 }

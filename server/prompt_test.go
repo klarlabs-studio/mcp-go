@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"go.klarlabs.de/mcp/protocol"
 )
 
 func TestServer_Prompt(t *testing.T) {
@@ -159,6 +161,15 @@ func TestPrompt_Get(t *testing.T) {
 		_, err := prompt.Get(context.Background(), map[string]string{})
 		if err == nil {
 			t.Error("expected error for missing required argument")
+		}
+		// The spec answers a missing required prompt argument with -32602, and
+		// a protocol error keeps the dispatcher from sanitizing it to -32603.
+		var mcpErr *protocol.Error
+		if !errors.As(err, &mcpErr) || mcpErr.Code != protocol.CodeInvalidParams {
+			t.Errorf("error = %#v, want a -32602 protocol error", err)
+		}
+		if _, err := prompt.Get(context.Background(), nil); err == nil {
+			t.Error("expected error for absent arguments with a required argument")
 		}
 
 		// With required argument

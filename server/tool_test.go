@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -413,4 +416,39 @@ func TestToolBuilder_OutputSchema(t *testing.T) {
 			t.Error("expected OutputSchema to be nil by default")
 		}
 	})
+}
+
+// TestTool_ExecuteAbsentArguments: CallToolRequestParams.arguments is optional
+// in the MCP schema, so an absent or null value is treated as {} before
+// validation and decoding.
+func TestTool_ExecuteAbsentArguments(t *testing.T) {
+	type optionalIn struct {
+		Limit int `json:"limit,omitempty"`
+	}
+	type requiredIn struct {
+		Query string `json:"query" jsonschema:"required"`
+	}
+	srv := New(Info{Name: "test", Version: "1.0.0"})
+	srv.Tool("optional").Handler(func(in optionalIn) (int, error) { return in.Limit, nil })
+	srv.Tool("required").Handler(func(in requiredIn) (string, error) { return in.Query, nil })
+	optional, _ := srv.GetTool("optional")
+	required, _ := srv.GetTool("required")
+
+	for _, input := range []json.RawMessage{nil, json.RawMessage(""), json.RawMessage("null"), json.RawMessage(" null\n"), json.RawMessage("{}")} {
+		t.Run(fmt.Sprintf("%q", input), func(t *testing.T) {
+			got, err := optional.Execute(context.Background(), input)
+			if err != nil || got != 0 {
+				t.Errorf("optional: got (%v, %v), want (0, nil)", got, err)
+			}
+
+			_, err = required.Execute(context.Background(), input)
+			var inputErr *ToolInputError
+			if !errors.As(err, &inputErr) {
+				t.Fatalf("required: err = %v, want a ToolInputError", err)
+			}
+			if !strings.Contains(inputErr.Message, "query: required field is missing") {
+				t.Errorf("required: message = %q, want the missing field named", inputErr.Message)
+			}
+		})
+	}
 }
