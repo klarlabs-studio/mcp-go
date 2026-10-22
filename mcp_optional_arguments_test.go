@@ -41,7 +41,7 @@ type argsForm struct {
 
 var optArgsForms = []argsForm{
 	{"absent", func(map[string]any) {}},
-	{"null", func(p map[string]any) { p["arguments"] = nil }},
+	{"explicit null", func(p map[string]any) { p["arguments"] = nil }},
 	{"empty object", func(p map[string]any) { p["arguments"] = map[string]any{} }},
 }
 
