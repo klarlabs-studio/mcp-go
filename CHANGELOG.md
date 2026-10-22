@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.29.0](https://github.com/klarlabs-studio/mcp-go/compare/v1.28.2...v1.29.0) - 2026-10-22
+
 ### Added
 
 - **Sampling, elicitation, and roots work over stdio.** `transport.Stdio`
